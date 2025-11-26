@@ -12,7 +12,7 @@ from tkinter import filedialog, messagebox
 import threading
 from ..config import VERSION
 from ..core import DLCManager, DLCDownloader, DLCInstaller, PatchManager
-from ..utils import Logger, PathUtils
+from ..utils import Logger, PathUtils, SteamUtils
 
 
 # 设置外观模式和颜色主题 - 清爽现代风格
@@ -36,6 +36,10 @@ class MainWindowCTk:
         
         # 设置清爽现代风格背景
         self.root.configure(fg_color="#F5F7FA")
+        
+        # 绑定窗口事件以改善重绘问题
+        self.root.bind("<Map>", self._on_window_map)
+        self.root.bind("<FocusIn>", self._on_window_focus)
         
         # 状态变量
         self.game_path = ""
@@ -63,6 +67,9 @@ class MainWindowCTk:
         
         # 创建主内容区域
         self._create_content_area()
+        
+        # 自动检测游戏路径并加载DLC列表
+        self.root.after(100, self.auto_detect_and_load)
         
     def _create_header(self):
         """创建标题区域"""
@@ -164,21 +171,6 @@ class MainWindowCTk:
         )
         browse_btn.grid(row=0, column=1)
         
-        # 加载DLC列表按钮
-        load_btn = ctk.CTkButton(
-            input_frame,
-            text="加载DLC列表",
-            command=self.load_dlc_list,
-            width=120,
-            height=40,
-            font=ctk.CTkFont(size=13, weight="bold"),
-            corner_radius=8,
-            fg_color="#1976D2",
-            hover_color="#1565C0",
-            text_color="#FFFFFF"
-        )
-        load_btn.grid(row=0, column=2, padx=(10, 0))
-        
     def _create_dlc_section(self, parent):
         """创建DLC列表区域"""
         dlc_frame = ctk.CTkFrame(
@@ -189,25 +181,68 @@ class MainWindowCTk:
             border_color="#E0E0E0"
         )
         dlc_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
-        dlc_frame.grid_rowconfigure(2, weight=1)
+        dlc_frame.grid_rowconfigure(1, weight=1)
         dlc_frame.grid_columnconfigure(0, weight=1)
         
-        # 标题
+        # 标题行（8列布局：DLC标题 | 下载信息 | 进度条 | 速度 | 全选按钮）
+        header_frame = ctk.CTkFrame(dlc_frame, fg_color="transparent")
+        header_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 10))
+        
+        # 配置列权重：第0列固定，第1-2列下载信息，第3-6列进度条，第7列固定
+        header_frame.grid_columnconfigure(0, weight=0, minsize=100)  # DLC列表标题
+        header_frame.grid_columnconfigure(1, weight=0, minsize=10)   # 间隔
+        header_frame.grid_columnconfigure(2, weight=0, minsize=150)  # 下载信息
+        header_frame.grid_columnconfigure(3, weight=1)               # 进度条（弹性）
+        header_frame.grid_columnconfigure(4, weight=0, minsize=100)  # 速度显示
+        header_frame.grid_columnconfigure(5, weight=0, minsize=10)   # 间隔
+        header_frame.grid_columnconfigure(6, weight=0, minsize=80)   # 全选按钮
+        
+        # 第0列：DLC列表标题
         label = ctk.CTkLabel(
-            dlc_frame,
+            header_frame,
             text="📦 DLC列表",
             font=ctk.CTkFont(size=16, weight="bold"),
-            text_color="#1976D2"  # 主色调蓝色
+            text_color="#1976D2"
         )
-        label.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
+        label.grid(row=0, column=0, sticky="w")
         
-        # 控制按钮区（右对齐）
-        control_header_frame = ctk.CTkFrame(dlc_frame, fg_color="transparent")
-        control_header_frame.grid(row=1, column=0, sticky="e", padx=15, pady=(0, 10))
+        # 第2列：正在下载的DLC名称（默认隐藏）
+        self.downloading_label = ctk.CTkLabel(
+            header_frame,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color="#757575",
+            anchor="w"
+        )
+        self.downloading_label.grid(row=0, column=2, sticky="ew", padx=(10, 0))
+        self.downloading_label.grid_remove()  # 初始隐藏
         
-        # 全选按钮（次要 - 浅蓝）
+        # 第3列：进度条（默认隐藏）
+        self.progress_bar = ctk.CTkProgressBar(
+            header_frame,
+            height=20,
+            corner_radius=10,
+            progress_color="#1976D2",
+            fg_color="#E3F2FD"
+        )
+        self.progress_bar.grid(row=0, column=3, sticky="ew", padx=(10, 10))
+        self.progress_bar.set(0)
+        self.progress_bar.grid_remove()  # 初始隐藏
+        
+        # 第4列：下载速度（默认隐藏）
+        self.speed_label = ctk.CTkLabel(
+            header_frame,
+            text="0.00 MB/s",
+            font=ctk.CTkFont(size=11),
+            text_color="#1976D2",
+            width=80
+        )
+        self.speed_label.grid(row=0, column=4, sticky="e")
+        self.speed_label.grid_remove()  # 初始隐藏
+        
+        # 第6列：全选按钮
         self.select_all_btn = ctk.CTkButton(
-            control_header_frame,
+            header_frame,
             text="全选",
             command=self.toggle_select_all,
             width=80,
@@ -218,22 +253,7 @@ class MainWindowCTk:
             hover_color="#1E88E5",
             text_color="#FFFFFF"
         )
-        self.select_all_btn.pack(side="left", padx=(0, 10))
-        
-        # 反选按钮（次要 - 浅蓝）
-        inverse_btn = ctk.CTkButton(
-            control_header_frame,
-            text="反选",
-            command=self.inverse_selection,
-            width=80,
-            height=32,
-            font=ctk.CTkFont(size=12, weight="bold"),
-            corner_radius=6,
-            fg_color="#42A5F5",
-            hover_color="#1E88E5",
-            text_color="#FFFFFF"
-        )
-        inverse_btn.pack(side="left")
+        self.select_all_btn.grid(row=0, column=6, sticky="e")
         
         # 滚动框架（用于显示DLC列表）
         self.dlc_scrollable_frame = ctk.CTkScrollableFrame(
@@ -241,7 +261,7 @@ class MainWindowCTk:
             corner_radius=8,
             fg_color="#FAFAFA"
         )
-        self.dlc_scrollable_frame.grid(row=2, column=0, sticky="nsew", padx=15, pady=(0, 15))
+        self.dlc_scrollable_frame.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
         self.dlc_scrollable_frame.grid_columnconfigure(0, weight=1)
         
         # 显示初始提示
@@ -266,18 +286,9 @@ class MainWindowCTk:
         button_frame.grid_columnconfigure(0, weight=1)
         button_frame.grid_columnconfigure(1, weight=1)
         
-        # 进度标签
-        self.progress_label = ctk.CTkLabel(
-            button_frame,
-            text="",
-            font=ctk.CTkFont(size=12),
-            text_color="#1976D2"
-        )
-        self.progress_label.grid(row=0, column=0, columnspan=2, pady=(0, 8))
-        
         # 左侧按钮组(危险/撤销区)
         left_btn_container = ctk.CTkFrame(button_frame, fg_color="transparent")
-        left_btn_container.grid(row=1, column=0, sticky="w", padx=(15, 10), pady=(0, 12))
+        left_btn_container.grid(row=0, column=0, sticky="w", padx=(15, 10), pady=(12, 12))
         
         # 还原游戏按钮（次要 - 浅蓝）
         restore_btn = ctk.CTkButton(
@@ -312,7 +323,7 @@ class MainWindowCTk:
         
         # 右侧按钮组(前进/执行区)
         right_btn_container = ctk.CTkFrame(button_frame, fg_color="transparent")
-        right_btn_container.grid(row=1, column=1, sticky="e", padx=(10, 15), pady=(0, 12))
+        right_btn_container.grid(row=0, column=1, sticky="e", padx=(10, 15), pady=(12, 12))
         
         # 应用补丁按钮（重要 - 标准蓝）
         self.patch_btn = ctk.CTkButton(
@@ -387,6 +398,120 @@ class MainWindowCTk:
         
     # ========== 以下是业务逻辑方法，将逐步从旧版本迁移 ==========
     
+    def auto_detect_and_load(self):
+        """自动检测游戏路径并加载DLC列表"""
+        self.logger.info("正在自动检测 Stellaris 游戏路径...")
+        
+        def detect_and_load_thread():
+            try:
+                # 1. 自动检测游戏路径
+                game_path = SteamUtils.auto_detect_stellaris()
+                
+                if game_path:
+                    # 在主线程中更新路径
+                    self.root.after(0, lambda: self._set_game_path(game_path))
+                    self.root.after(0, lambda: self.logger.success(f"已找到游戏: {game_path}"))
+                    
+                    # 2. 自动加载DLC列表
+                    self.root.after(100, lambda: self._auto_load_dlc_list())
+                else:
+                    self.root.after(0, lambda: self.logger.warning(
+                        "未能自动检测到游戏路径\n"
+                        "请点击「浏览」按钮手动选择游戏目录"
+                    ))
+            except Exception as e:
+                self.root.after(0, lambda: self.logger.error(f"自动检测失败: {str(e)}"))
+        
+        threading.Thread(target=detect_and_load_thread, daemon=True).start()
+    
+    def _auto_load_dlc_list(self):
+        """自动加载DLC列表（内部方法，不弹窗提示）"""
+        if not self.game_path:
+            return
+        
+        self.logger.info("正在从服务器获取DLC列表...")
+        
+        # 在DLC列表框中显示加载状态
+        for widget in self.dlc_scrollable_frame.winfo_children():
+            widget.destroy()
+        loading_label = ctk.CTkLabel(
+            self.dlc_scrollable_frame,
+            text="正在从服务器获取DLC列表...",
+            font=ctk.CTkFont(size=13),
+            text_color="#757575"
+        )
+        loading_label.pack(pady=20)
+        
+        def fetch_thread():
+            try:
+                # 获取DLC列表
+                self.dlc_list = self.dlc_manager.fetch_dlc_list()
+                self.root.after(0, self.display_dlc_list)
+            except Exception as e:
+                def show_error():
+                    for widget in self.dlc_scrollable_frame.winfo_children():
+                        widget.destroy()
+                    error_label = ctk.CTkLabel(
+                        self.dlc_scrollable_frame,
+                        text=f"加载失败: {str(e)}",
+                        font=ctk.CTkFont(size=13),
+                        text_color="#D32F2F"
+                    )
+                    error_label.pack(pady=20)
+                self.root.after(0, show_error)
+                self.logger.error(f"无法加载DLC列表 - {str(e)}")
+        
+        threading.Thread(target=fetch_thread, daemon=True).start()
+    
+    def auto_detect_path(self):
+        """自动检测游戏路径"""
+        self.logger.info("正在自动检测 Stellaris 游戏路径...")
+        
+        # 在后台线程中执行检测
+        def detect_thread():
+            try:
+                game_path = SteamUtils.auto_detect_stellaris()
+                
+                if game_path:
+                    # 在主线程中更新UI
+                    self.root.after(0, lambda: self._set_game_path(game_path))
+                    self.root.after(0, lambda: self.logger.success(f"自动检测成功: {game_path}"))
+                else:
+                    self.root.after(0, lambda: self.logger.warning(
+                        "未能自动检测到 Stellaris 游戏路径\n"
+                        "请确保:\n"
+                        "1. 已通过 Steam 安装 Stellaris\n"
+                        "2. Steam 已正确安装\n"
+                        "或者点击「浏览」按钮手动选择游戏目录"
+                    ))
+                    self.root.after(0, lambda: messagebox.showinfo(
+                        "未找到游戏",
+                        "未能自动检测到 Stellaris 游戏路径\n\n"
+                        "请点击「浏览」按钮手动选择游戏目录"
+                    ))
+            except Exception as e:
+                self.root.after(0, lambda: self.logger.error(f"自动检测失败: {str(e)}"))
+                self.root.after(0, lambda: messagebox.showerror(
+                    "检测失败",
+                    f"自动检测时发生错误:\n{str(e)}\n\n请手动选择游戏目录"
+                ))
+        
+        threading.Thread(target=detect_thread, daemon=True).start()
+    
+    def _set_game_path(self, path: str):
+        """设置游戏路径（内部方法）"""
+        self.game_path = path
+        self.path_entry.delete(0, "end")
+        self.path_entry.insert(0, path)
+        
+        # 初始化核心组件
+        self.dlc_manager = DLCManager(path)
+        self.dlc_installer = DLCInstaller(path)
+        self.patch_manager = PatchManager(path, self.logger)
+        
+        # 检查补丁状态
+        self._check_patch_status()
+    
     def browse_game_path(self):
         """浏览选择游戏路径"""
         path = filedialog.askdirectory(title="选择Stellaris游戏根目录")
@@ -398,19 +523,11 @@ class MainWindowCTk:
                     "请确保选择包含 stellaris.exe 的文件夹。")
                 return
             
-            self.game_path = path
-            self.path_entry.delete(0, "end")
-            self.path_entry.insert(0, path)
-            
-            # 初始化核心组件
-            self.dlc_manager = DLCManager(path)
-            self.dlc_installer = DLCInstaller(path)
-            self.patch_manager = PatchManager(path, self.logger)
-            
+            self._set_game_path(path)
             self.logger.info(f"已选择游戏路径: {path}")
             
-            # 检查补丁状态
-            self._check_patch_status()
+            # 自动加载DLC列表
+            self.root.after(100, self._auto_load_dlc_list)
         
     def load_dlc_list(self):
         """加载DLC列表"""
@@ -445,7 +562,7 @@ class MainWindowCTk:
             try:
                 # 获取DLC列表
                 self.dlc_list = self.dlc_manager.fetch_dlc_list()
-                self.after(0, self.display_dlc_list)
+                self.root.after(0, self.display_dlc_list)
                 
             except Exception as e:
                 def show_error():
@@ -458,7 +575,7 @@ class MainWindowCTk:
                         text_color="#D32F2F"
                     )
                     error_label.pack(pady=20)
-                self.after(0, show_error)
+                self.root.after(0, show_error)
                 self.logger.error(f"无法加载DLC列表 - {str(e)}")
         
         threading.Thread(target=fetch_thread, daemon=True).start()
@@ -476,19 +593,21 @@ class MainWindowCTk:
         # 创建DLC复选框
         for dlc in self.dlc_list:
             var = tk.BooleanVar(value=False)
+            
+            # 检查是否已安装
+            is_installed = dlc["key"] in installed_dlcs
+            
             dlc_info = {
                 "var": var,
                 "key": dlc["key"],
                 "name": dlc["name"],
                 "url": dlc["url"],
-                "size": dlc["size"]
+                "size": dlc["size"],
+                "installed": is_installed
             }
             
             frame = ctk.CTkFrame(self.dlc_scrollable_frame, fg_color="transparent")
-            frame.pack(fill="x", pady=2, padx=5)
-            
-            # 检查是否已安装
-            is_installed = dlc["key"] in installed_dlcs
+            frame.pack(fill="x", pady=1, padx=5)
             
             if is_installed:
                 # 已安装的DLC显示为禁用状态
@@ -496,14 +615,16 @@ class MainWindowCTk:
                                      state="disabled", width=20)
                 cb.pack(side="left")
                 label_text = f"{dlc['name']} (已安装)"
-                label = ctk.CTkLabel(frame, text=label_text, 
+                label = ctk.CTkLabel(frame, text=label_text,
+                                    font=ctk.CTkFont(size=11),
                                     text_color="#9E9E9E")  # 浅灰色
             else:
                 cb = ctk.CTkCheckBox(frame, text="", variable=var, width=20,
                                      fg_color="#1976D2", hover_color="#1565C0")
                 cb.pack(side="left")
                 label_text = f"{dlc['name']} ({dlc['size']})"
-                label = ctk.CTkLabel(frame, text=label_text, 
+                label = ctk.CTkLabel(frame, text=label_text,
+                                    font=ctk.CTkFont(size=11),
                                     text_color="#212121")  # 深色文字
             
             label.pack(side="left", padx=5)
@@ -520,16 +641,25 @@ class MainWindowCTk:
         # 启用下载按钮
         self.download_btn.configure(state="normal")
         
-    def toggle_select_all(self):
-        """全选/取消全选"""
-        state = self.select_all_var.get()
-        for dlc in self.dlc_vars:
-            dlc["var"].set(state)
+        # 重置全选按钮文本
+        self.select_all_btn.configure(text="全选")
         
-    def inverse_selection(self):
-        """反选"""
+    def toggle_select_all(self):
+        """全选/取消全选（智能切换）"""
+        # 检查当前是否有选中项
+        has_selected = any(dlc["var"].get() for dlc in self.dlc_vars)
+        
+        # 如果有选中项，则取消全选；否则全选
+        new_state = not has_selected
+        
         for dlc in self.dlc_vars:
-            dlc["var"].set(not dlc["var"].get())
+            # 跳过已安装的DLC（它们是禁用状态）
+            if dlc.get("installed", False):
+                continue
+            dlc["var"].set(new_state)
+        
+        # 更新按钮文本
+        self.select_all_btn.configure(text="取消全选" if new_state else "全选")
         
     def download_dlcs(self):
         """下载并安装选中的DLC"""
@@ -543,12 +673,46 @@ class MainWindowCTk:
         
         def progress_callback(percent, downloaded, total):
             """下载进度回调"""
-            self.after(0, lambda: self.progress_label.configure(
-                text=f"下载进度: {percent:.1f}%"))
+            # 初始化变量
+            if not hasattr(progress_callback, 'last_time'):
+                progress_callback.last_time = None
+                progress_callback.last_downloaded = 0
+                progress_callback.last_speed_update = 0
+            
+            import time
+            current_time = time.time()
+            
+            # 进度条实时更新（不限制频率）
+            self.root.after(0, lambda: self.progress_bar.set(percent / 100))
+            
+            # 速度信息每2秒更新一次
+            if progress_callback.last_time is not None:
+                time_diff = current_time - progress_callback.last_time
+                
+                # 检查是否到达更新时间（2秒）
+                if current_time - progress_callback.last_speed_update >= 2.0:
+                    if time_diff > 0:
+                        bytes_diff = downloaded - progress_callback.last_downloaded
+                        speed_mbps = (bytes_diff / time_diff) / (1024 * 1024)  # MB/s
+                        
+                        # 更新速度显示（只显示速度，不显示百分比）
+                        self.root.after(0, lambda s=speed_mbps: self.speed_label.configure(text=f"{s:.2f} MB/s"))
+                        
+                        progress_callback.last_speed_update = current_time
+            
+            progress_callback.last_time = current_time
+            progress_callback.last_downloaded = downloaded
         
         def download_thread():
             success = 0
             failed = 0
+            
+            # 显示进度组件
+            self.root.after(0, lambda: self.downloading_label.grid())
+            self.root.after(0, lambda: self.progress_bar.grid())
+            self.root.after(0, lambda: self.speed_label.grid())
+            self.root.after(0, lambda: self.progress_bar.set(0))
+            self.root.after(0, lambda: self.speed_label.configure(text="0.00 MB/s"))
             
             # 初始化下载器
             downloader = DLCDownloader(progress_callback)
@@ -558,20 +722,20 @@ class MainWindowCTk:
                     self.logger.info(f"\n{'='*50}")
                     self.logger.info(f"[{idx}/{len(selected)}] {dlc['name']}")
                     
+                    # 更新当前下载DLC名称
+                    self.root.after(0, lambda name=dlc['name']: self.downloading_label.configure(text=f"正在处理: {name}"))
+                    
                     # 检查缓存并下载
                     if downloader.is_cached(dlc['key']):
                         self.logger.info("从本地缓存加载...")
                         cache_path = PathUtils.get_dlc_cache_path(dlc['key'])
                     else:
-                        self.after(0, lambda: self.progress_label.configure(
-                            text=f"下载中 {dlc['name']}..."))
+                        self.logger.info(f"正在下载: {dlc['name']}...")
                         cache_path = downloader.download_dlc(dlc['key'], dlc['url'])
-                        self.logger.info("下载完成")
+                        self.logger.info("\n下载完成")
                     
                     # 安装
-                    self.after(0, lambda: self.progress_label.configure(
-                        text=f"安装中 {dlc['name']}..."))
-                    
+                    self.logger.info(f"正在安装: {dlc['name']}...")
                     self.dlc_installer.install(cache_path, dlc['key'], dlc['name'])
                     self.logger.success("安装成功")
                     success += 1
@@ -580,14 +744,16 @@ class MainWindowCTk:
                     self.logger.error(f"错误: {str(e)}")
                     failed += 1
             
-            # 完成
-            self.after(0, lambda: self.progress_label.configure(text=""))
+            # 完成，隐藏进度组件
+            self.root.after(0, lambda: self.downloading_label.grid_remove())
+            self.root.after(0, lambda: self.progress_bar.grid_remove())
+            self.root.after(0, lambda: self.speed_label.grid_remove())
             self.logger.info(f"\n{'='*50}")
             self.logger.info(f"下载完成！成功: {success}, 失败: {failed}")
             
             # 重新加载DLC列表
-            self.after(100, self.load_dlc_list)
-            self.after(0, lambda: self.download_btn.configure(state="normal"))
+            self.root.after(100, self.load_dlc_list)
+            self.root.after(0, lambda: self.download_btn.configure(state="normal"))
         
         threading.Thread(target=download_thread, daemon=True).start()
         
@@ -670,27 +836,27 @@ class MainWindowCTk:
                 success, failed = self.patch_manager.apply_patch(self.dlc_list)
                 
                 if success > 0 and failed == 0:
-                    self.after(0, lambda: messagebox.showinfo("成功", 
+                    self.root.after(0, lambda: messagebox.showinfo("成功", 
                         f"补丁应用成功！\n"
                         f"已处理 {success} 个文件\n\n"
                         f"请重启游戏生效"))
                 elif success > 0:
-                    self.after(0, lambda: messagebox.showwarning("部分成功", 
+                    self.root.after(0, lambda: messagebox.showwarning("部分成功", 
                         f"补丁应用部分成功\n"
                         f"成功: {success}, 失败: {failed}\n"
                         f"详情请查看日志"))
                 else:
-                    self.after(0, lambda: messagebox.showerror("失败", 
+                    self.root.after(0, lambda: messagebox.showerror("失败", 
                         "补丁应用失败！\n详情请查看日志"))
                 
                 # 更新按钮状态
-                self.after(0, self._check_patch_status)
+                self.root.after(0, self._check_patch_status)
                 
             except Exception as e:
                 self.logger.error(f"应用补丁时发生错误: {str(e)}")
-                self.after(0, lambda: messagebox.showerror("错误", 
+                self.root.after(0, lambda: messagebox.showerror("错误", 
                     f"应用补丁时发生错误:\n{str(e)}"))
-                self.after(0, lambda: self.patch_btn.configure(state="normal"))
+                self.root.after(0, lambda: self.patch_btn.configure(state="normal"))
         
         threading.Thread(target=patch_thread, daemon=True).start()
         
@@ -716,25 +882,34 @@ class MainWindowCTk:
                 success, failed = self.patch_manager.remove_patch()
                 
                 if success > 0 and failed == 0:
-                    self.after(0, lambda: messagebox.showinfo("成功", 
+                    self.root.after(0, lambda: messagebox.showinfo("成功", 
                         f"补丁移除成功！\n"
                         f"已还原 {success} 个文件"))
                 elif success > 0:
-                    self.after(0, lambda: messagebox.showwarning("部分成功", 
+                    self.root.after(0, lambda: messagebox.showwarning("部分成功", 
                         f"补丁移除部分成功\n"
                         f"成功: {success}, 失败: {failed}\n"
                         f"详情请查看日志"))
                 else:
-                    self.after(0, lambda: messagebox.showwarning("提示", 
+                    self.root.after(0, lambda: messagebox.showwarning("提示", 
                         "未找到需要还原的补丁文件"))
                 
                 # 更新按钮状态
-                self.after(0, self._check_patch_status)
+                self.root.after(0, self._check_patch_status)
                 
             except Exception as e:
                 self.logger.error(f"移除补丁时发生错误: {str(e)}")
-                self.after(0, lambda: messagebox.showerror("错误", 
+                self.root.after(0, lambda: messagebox.showerror("错误", 
                     f"移除补丁时发生错误:\n{str(e)}"))
-                self.after(0, lambda: self.remove_patch_btn.configure(state="normal"))
+                self.root.after(0, lambda: self.remove_patch_btn.configure(state="normal"))
         
         threading.Thread(target=remove_thread, daemon=True).start()
+    
+    def _on_window_map(self, event=None):
+        """窗口映射事件处理 - 改善最小化恢复时的重绘"""
+        if event.widget == self.root:
+            self.root.update_idletasks()
+    
+    def _on_window_focus(self, event=None):
+        """窗口获得焦点事件处理 - 强制重绘"""
+        self.root.update_idletasks()
