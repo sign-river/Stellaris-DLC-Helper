@@ -100,8 +100,8 @@ class MainWindowCTk:
         # 主容器
         content_frame = ctk.CTkFrame(self.root, corner_radius=0, fg_color="transparent")
         content_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=20)
-        content_frame.grid_rowconfigure(1, weight=5)  # DLC列表占更多空间
-        content_frame.grid_rowconfigure(2, weight=1)  # 操作日志占少量空间
+        content_frame.grid_rowconfigure(1, weight=3)  # DLC列表 - 降低权重
+        content_frame.grid_rowconfigure(2, weight=2)  # 操作日志 - 提高权重
         content_frame.grid_columnconfigure(0, weight=1)
         
         # 游戏路径选择
@@ -259,7 +259,8 @@ class MainWindowCTk:
         self.dlc_scrollable_frame = ctk.CTkScrollableFrame(
             dlc_frame,
             corner_radius=8,
-            fg_color="#FAFAFA"
+            fg_color="#FAFAFA",
+            height=220  # 设置固定高度，降低DLC区域高度
         )
         self.dlc_scrollable_frame.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
         self.dlc_scrollable_frame.grid_columnconfigure(0, weight=1)
@@ -382,7 +383,7 @@ class MainWindowCTk:
         # 日志文本框
         self.log_text = ctk.CTkTextbox(
             log_frame,
-            height=60,
+            height=120,  # 从60提高到180，增加日志显示空间
             font=ctk.CTkFont(family="Consolas", size=11),
             wrap="word",
             corner_radius=8,
@@ -581,7 +582,7 @@ class MainWindowCTk:
         threading.Thread(target=fetch_thread, daemon=True).start()
         
     def display_dlc_list(self):
-        """显示DLC列表"""
+        """显示DLC列表 - 两列布局"""
         # 清空现有列表
         for widget in self.dlc_scrollable_frame.winfo_children():
             widget.destroy()
@@ -590,8 +591,9 @@ class MainWindowCTk:
         # 检查已安装的DLC
         installed_dlcs = self.dlc_manager.get_installed_dlcs()
         
-        # 创建DLC复选框
-        for dlc in self.dlc_list:
+        # 创建DLC复选框 - 两列布局
+        row_frame = None
+        for idx, dlc in enumerate(self.dlc_list):
             var = tk.BooleanVar(value=False)
             
             # 检查是否已安装
@@ -606,28 +608,44 @@ class MainWindowCTk:
                 "installed": is_installed
             }
             
-            frame = ctk.CTkFrame(self.dlc_scrollable_frame, fg_color="transparent")
-            frame.pack(fill="x", pady=1, padx=5)
+            # 每三个创建一个新行
+            if idx % 3 == 0:
+                row_frame = ctk.CTkFrame(self.dlc_scrollable_frame, fg_color="transparent", height=22)
+                row_frame.pack(fill="x", pady=0, padx=5)
+                row_frame.grid_columnconfigure(0, weight=1, uniform="dlc_col")
+                row_frame.grid_columnconfigure(1, weight=1, uniform="dlc_col")
+                row_frame.grid_columnconfigure(2, weight=1, uniform="dlc_col")
+            
+            # 确定列位置
+            col = idx % 3
+            
+            # 创建DLC项容器
+            item_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
+            item_frame.grid(row=0, column=col, sticky="w", padx=(0, 8) if col < 2 else 0)
             
             if is_installed:
                 # 已安装的DLC显示为禁用状态
-                cb = ctk.CTkCheckBox(frame, text="", variable=var, 
-                                     state="disabled", width=20)
-                cb.pack(side="left")
+                cb = ctk.CTkCheckBox(item_frame, text="", variable=var, 
+                                     state="disabled", width=16, height=16,
+                                     checkbox_width=16, checkbox_height=16)
+                cb.pack(side="left", pady=2)
                 label_text = f"{dlc['name']} (已安装)"
-                label = ctk.CTkLabel(frame, text=label_text,
+                label = ctk.CTkLabel(item_frame, text=label_text,
                                     font=ctk.CTkFont(size=11),
-                                    text_color="#9E9E9E")  # 浅灰色
+                                    text_color="#9E9E9E",
+                                    height=20)  # 浅灰色
             else:
-                cb = ctk.CTkCheckBox(frame, text="", variable=var, width=20,
+                cb = ctk.CTkCheckBox(item_frame, text="", variable=var, width=16, height=16,
+                                     checkbox_width=16, checkbox_height=16,
                                      fg_color="#1976D2", hover_color="#1565C0")
-                cb.pack(side="left")
+                cb.pack(side="left", pady=2)
                 label_text = f"{dlc['name']} ({dlc['size']})"
-                label = ctk.CTkLabel(frame, text=label_text,
+                label = ctk.CTkLabel(item_frame, text=label_text,
                                     font=ctk.CTkFont(size=11),
-                                    text_color="#212121")  # 深色文字
+                                    text_color="#212121",
+                                    height=20)  # 深色文字
             
-            label.pack(side="left", padx=5)
+            label.pack(side="left", padx=5, pady=2)
             
             self.dlc_vars.append(dlc_info)
         
