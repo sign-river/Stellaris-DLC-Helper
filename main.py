@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Stellaris DLC Helper - 群星DLC一键解锁工具
+Stellaris DLC Helper - CustomTkinter 版本
 主入口文件
 
 作者: sign-river
@@ -9,14 +9,14 @@ Stellaris DLC Helper - 群星DLC一键解锁工具
 项目地址: https://github.com/sign-river/Stellaris-DLC-Helper
 """
 
-import tkinter as tk
-from src.gui import MainWindow
+import customtkinter as ctk
+from src.gui.main_window import MainWindowCTk
 
 
 def main():
     """主函数"""
-    root = tk.Tk()
-    app = MainWindow(root)
+    root = ctk.CTk()
+    app = MainWindowCTk(root)
     root.mainloop()
 
 

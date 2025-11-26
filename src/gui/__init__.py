@@ -1,7 +1,7 @@
 """
-GUI模块
+GUI模块 - CustomTkinter版本
 """
 
-from .main_window import MainWindow
+from .main_window import MainWindowCTk
 
-__all__ = ['MainWindow']
+__all__ = ['MainWindowCTk']
