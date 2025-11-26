@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import threading
 from ..config import VERSION, FONT1, FONT2, FONT3, FONT4
-from ..core import DLCManager, DLCDownloader, DLCInstaller
+from ..core import DLCManager, DLCDownloader, DLCInstaller, PatchManager
 from ..utils import Logger, PathUtils
 
 
@@ -25,7 +25,7 @@ class MainWindow:
         """
         self.root = root
         self.root.title(f"Stellaris DLC Helper v{VERSION}")
-        self.root.geometry("800x600")
+        self.root.geometry("900x700")  # 增大窗口尺寸
         self.root.resizable(True, True)
         
         # 状态变量
@@ -37,6 +37,7 @@ class MainWindow:
         self.dlc_manager = None
         self.dlc_downloader = None
         self.dlc_installer = None
+        self.patch_manager = None
         self.logger = Logger()
         
         # 初始化UI
@@ -144,13 +145,26 @@ class MainWindow:
         
     def _create_button_area(self):
         """创建按钮区域"""
+        # 添加分隔线
+        ttk.Separator(self.root, orient='horizontal').pack(fill='x', padx=20, pady=10)
+        
         button_frame = ttk.Frame(self.root)
-        button_frame.pack(pady=10)
+        button_frame.pack(pady=15)  # 增加上下间距
         
         self.download_btn = ttk.Button(button_frame, text="下载并安装选中的DLC", 
                                        command=self.download_dlcs,
                                        state=tk.DISABLED)
         self.download_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.patch_btn = ttk.Button(button_frame, text="应用补丁", 
+                                    command=self.apply_patch,
+                                    state=tk.DISABLED)
+        self.patch_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.remove_patch_btn = ttk.Button(button_frame, text="移除补丁", 
+                                           command=self.remove_patch,
+                                           state=tk.DISABLED)
+        self.remove_patch_btn.pack(side=tk.LEFT, padx=5)
         
         restore_btn = ttk.Button(button_frame, text="还原游戏", 
                                 command=self.restore_game)
@@ -187,8 +201,12 @@ class MainWindow:
             # 初始化核心组件
             self.dlc_manager = DLCManager(path)
             self.dlc_installer = DLCInstaller(path)
+            self.patch_manager = PatchManager(path, self.logger)
             
             self.logger.info(f"已选择游戏路径: {path}")
+            
+            # 检查补丁状态
+            self._check_patch_status()
             
     def load_dlc_list(self):
         """从服务器加载DLC列表"""
@@ -369,3 +387,123 @@ class MainWindow:
         
         # 重新加载DLC列表
         self.load_dlc_list()
+    
+    def _check_patch_status(self):
+        """检查并更新补丁按钮状态"""
+        if not self.patch_manager:
+            return
+        
+        try:
+            status = self.patch_manager.check_patch_status()
+            
+            if status['patched']:
+                self.patch_btn.config(state=tk.DISABLED)
+                self.remove_patch_btn.config(state=tk.NORMAL)
+                self.logger.info("检测到已应用补丁")
+            else:
+                self.patch_btn.config(state=tk.NORMAL)
+                self.remove_patch_btn.config(state=tk.DISABLED)
+        except Exception as e:
+            # 如果检查失败，默认启用应用补丁按钮
+            self.patch_btn.config(state=tk.NORMAL)
+            self.remove_patch_btn.config(state=tk.DISABLED)
+    
+    def apply_patch(self):
+        """应用CreamAPI补丁"""
+        if not self.game_path:
+            messagebox.showwarning("警告", "请先选择游戏路径！")
+            return
+        
+        # 如果没有加载DLC列表，先加载
+        if not self.dlc_list:
+            messagebox.showinfo("提示", "正在加载DLC列表，请稍候...")
+            self.load_dlc_list()
+            # 等待DLC列表加载完成后再应用补丁
+            messagebox.showinfo("提示", "请在DLC列表加载完成后，再次点击应用补丁")
+            return
+        
+        result = messagebox.askyesno("确认", 
+            "即将应用 CreamAPI 补丁\n"
+            "这将修改游戏的 steam_api.dll 文件\n"
+            "原始文件会自动备份\n\n"
+            "是否继续？")
+        
+        if not result:
+            return
+        
+        self.patch_btn.config(state=tk.DISABLED)
+        self.remove_patch_btn.config(state=tk.DISABLED)
+        
+        def patch_thread():
+            try:
+                success, failed = self.patch_manager.apply_patch(self.dlc_list)
+                
+                if success > 0 and failed == 0:
+                    self.root.after(0, lambda: messagebox.showinfo("成功", 
+                        f"补丁应用成功！\n"
+                        f"已处理 {success} 个文件\n\n"
+                        f"请重启游戏生效"))
+                elif success > 0:
+                    self.root.after(0, lambda: messagebox.showwarning("部分成功", 
+                        f"补丁应用部分成功\n"
+                        f"成功: {success}, 失败: {failed}\n"
+                        f"详情请查看日志"))
+                else:
+                    self.root.after(0, lambda: messagebox.showerror("失败", 
+                        "补丁应用失败！\n详情请查看日志"))
+                
+                # 更新按钮状态
+                self.root.after(0, self._check_patch_status)
+                
+            except Exception as e:
+                self.logger.error(f"应用补丁时发生错误: {str(e)}")
+                self.root.after(0, lambda: messagebox.showerror("错误", 
+                    f"应用补丁时发生错误:\n{str(e)}"))
+                self.root.after(0, lambda: self.patch_btn.config(state=tk.NORMAL))
+        
+        threading.Thread(target=patch_thread, daemon=True).start()
+    
+    def remove_patch(self):
+        """移除CreamAPI补丁"""
+        if not self.game_path:
+            messagebox.showwarning("警告", "请先选择游戏路径！")
+            return
+        
+        result = messagebox.askyesno("确认", 
+            "即将移除 CreamAPI 补丁\n"
+            "这将还原游戏的原始文件\n\n"
+            "是否继续？")
+        
+        if not result:
+            return
+        
+        self.patch_btn.config(state=tk.DISABLED)
+        self.remove_patch_btn.config(state=tk.DISABLED)
+        
+        def remove_thread():
+            try:
+                success, failed = self.patch_manager.remove_patch()
+                
+                if success > 0 and failed == 0:
+                    self.root.after(0, lambda: messagebox.showinfo("成功", 
+                        f"补丁移除成功！\n"
+                        f"已还原 {success} 个文件"))
+                elif success > 0:
+                    self.root.after(0, lambda: messagebox.showwarning("部分成功", 
+                        f"补丁移除部分成功\n"
+                        f"成功: {success}, 失败: {failed}\n"
+                        f"详情请查看日志"))
+                else:
+                    self.root.after(0, lambda: messagebox.showwarning("提示", 
+                        "未找到需要还原的补丁文件"))
+                
+                # 更新按钮状态
+                self.root.after(0, self._check_patch_status)
+                
+            except Exception as e:
+                self.logger.error(f"移除补丁时发生错误: {str(e)}")
+                self.root.after(0, lambda: messagebox.showerror("错误", 
+                    f"移除补丁时发生错误:\n{str(e)}"))
+                self.root.after(0, lambda: self.remove_patch_btn.config(state=tk.NORMAL))
+        
+        threading.Thread(target=remove_thread, daemon=True).start()
