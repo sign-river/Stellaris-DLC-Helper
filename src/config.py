@@ -2,30 +2,33 @@
 # -*- coding: utf-8 -*-
 """
 配置文件
-包含全局常量和配置项
+提供全局配置常量的访问接口
+所有配置值从 config.json 加载
 """
 
-# 版本号
-VERSION = "1.0.0"
+from .config_loader import get_config
 
-# Stellaris AppID (固定)
-STELLARIS_APP_ID = "281990"
+# 版本号
+VERSION = get_config("version", default="1.0.0")
+
+# Stellaris AppID
+STELLARIS_APP_ID = get_config("stellaris_app_id", default="281990")
 
 # DLC 服务器配置
-DLC_SERVER_URL = "http://47.100.2.190/dlc/"
+DLC_SERVER_URL = get_config("server", "url", default="http://47.100.2.190/dlc/")
 DLC_INDEX_URL = f"{DLC_SERVER_URL}index.json"
 
-# 字体配置
-FONT1 = ("Microsoft YaHei UI", 20, "bold")
-FONT2 = ("Microsoft YaHei UI", 16, "bold")
-FONT3 = ("Microsoft YaHei UI", 12)
-FONT4 = ("Microsoft YaHei UI", 10)
-
 # 网络配置
-REQUEST_TIMEOUT = 30
-CHUNK_SIZE = 8192
+REQUEST_TIMEOUT = get_config("server", "timeout", default=30)
+CHUNK_SIZE = get_config("network", "chunk_size", default=8192)
 
 # 缓存配置
-CACHE_DIR_NAME = "Stellaris_DLC_Cache"
-DLC_CACHE_SUBDIR = "dlc"
-LOG_CACHE_SUBDIR = "operation_logs"
+CACHE_DIR_NAME = get_config("cache", "dir_name", default="Stellaris_DLC_Cache")
+DLC_CACHE_SUBDIR = get_config("cache", "dlc_subdir", default="dlc")
+LOG_CACHE_SUBDIR = get_config("cache", "log_subdir", default="operation_logs")
+
+# 字体配置
+FONT1 = tuple(get_config("fonts", "font1", default=["Microsoft YaHei UI", 20, "bold"]))
+FONT2 = tuple(get_config("fonts", "font2", default=["Microsoft YaHei UI", 16, "bold"]))
+FONT3 = tuple(get_config("fonts", "font3", default=["Microsoft YaHei UI", 12]))
+FONT4 = tuple(get_config("fonts", "font4", default=["Microsoft YaHei UI", 10]))

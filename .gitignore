@@ -49,6 +49,9 @@ Stellaris_DLC_Cache/
 
 # 临时文件
 *.tmp
+
+# 配置文件（包含敏感信息）
+config.json
 *.bak
 *.backup
 

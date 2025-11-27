@@ -1,0 +1,23 @@
+{
+  "version": "1.0.0",
+  "stellaris_app_id": "281990",
+  "server": {
+    "url": "http://your-server-ip/dlc/",
+    "timeout": 30
+  },
+  "network": {
+    "chunk_size": 8192,
+    "retry_times": 3
+  },
+  "cache": {
+    "dir_name": "Stellaris_DLC_Cache",
+    "dlc_subdir": "dlc",
+    "log_subdir": "operation_logs"
+  },
+  "fonts": {
+    "font1": ["Microsoft YaHei UI", 20, "bold"],
+    "font2": ["Microsoft YaHei UI", 16, "bold"],
+    "font3": ["Microsoft YaHei UI", 12],
+    "font4": ["Microsoft YaHei UI", 10]
+  }
+}
