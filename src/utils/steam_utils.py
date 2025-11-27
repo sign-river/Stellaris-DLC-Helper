@@ -115,7 +115,8 @@ class SteamUtils:
                     libraries.append(lib_path)
         
         except Exception as e:
-            print(f"解析 libraryfolders.vdf 失败: {e}")
+            import logging
+            logging.warning(f"解析 libraryfolders.vdf 失败: {e}")
         
         return libraries
     
@@ -156,7 +157,8 @@ class SteamUtils:
                     return game_path
         
         except Exception as e:
-            print(f"读取 manifest 文件失败: {e}")
+            import logging
+            logging.warning(f"读取 manifest 文件失败: {e}")
         
         return None
     
@@ -187,22 +189,23 @@ class SteamUtils:
 
 def test():
     """测试函数"""
-    print("测试 Steam 路径检测...")
+    import logging
+    logging.info("测试 Steam 路径检测...")
     
     steam_path = SteamUtils.get_steam_path()
-    print(f"Steam 安装路径: {steam_path}")
+    logging.info(f"Steam 安装路径: {steam_path}")
     
     if steam_path:
         libraries = SteamUtils.get_library_folders(steam_path)
-        print(f"\n找到 {len(libraries)} 个游戏库:")
+        logging.info(f"\n找到 {len(libraries)} 个游戏库:")
         for lib in libraries:
-            print(f"  - {lib}")
+            logging.info(f"  - {lib}")
     
     stellaris_path = SteamUtils.auto_detect_stellaris()
     if stellaris_path:
-        print(f"\n✓ 找到 Stellaris: {stellaris_path}")
+        logging.info(f"\n✓ 找到 Stellaris: {stellaris_path}")
     else:
-        print("\n✗ 未找到 Stellaris")
+        logging.warning("\n✗ 未找到 Stellaris")
 
 
 if __name__ == "__main__":

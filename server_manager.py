@@ -10,6 +10,13 @@ import sys
 import json
 import paramiko
 import requests
+import logging
+try:
+    from src.utils.logging_setup import configure_basic_logging, get_default_log_file_path
+    configure_basic_logging(log_to_file=True)
+    logging.getLogger().info(f"日志文件路径: {get_default_log_file_path()}")
+except Exception:
+    pass
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from tkinter import Tk, filedialog
@@ -39,8 +46,8 @@ class ServerConfig:
         
         # 如果IP为空，提示输入
         if not ip:
-            print("\n请输入服务器IP地址")
-            print("格式示例: 192.168.1.100 或 example.com")
+            logging.info("\n请输入服务器IP地址")
+            logging.info("格式示例: 192.168.1.100 或 example.com")
             ip = input("服务器IP: ").strip()
         
         # 如果密码为空，提示输入
@@ -82,10 +89,10 @@ class ServerConfig:
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             
-            print(f"配置已保存到 {config_file}")
+            logging.info(f"配置已保存到 {config_file}")
             
         except Exception as e:
-            print(f"配置保存失败: {e}")
+            logging.error(f"配置保存失败: {e}")
 
 
 class ServerManager:
@@ -109,15 +116,15 @@ class ServerManager:
         try:
             self.ip, self.username, self.password = ServerConfig.get_server_info()
             
-            print(f"\n正在连接服务器 {self.ip}...")
+            logging.info(f"\n正在连接服务器 {self.ip}...")
             self.ssh = paramiko.SSHClient()
             self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             self.ssh.connect(self.ip, username=self.username, password=self.password, timeout=10)
             self.sftp = self.ssh.open_sftp()
-            print("✓ 连接成功！")
+            logging.info("✓ 连接成功！")
             return True
         except Exception as e:
-            print(f"✗ 连接失败: {e}")
+            logging.error(f"✗ 连接失败: {e}")
             return False
     
     def disconnect(self):
@@ -126,16 +133,16 @@ class ServerManager:
             self.sftp.close()
         if self.ssh:
             self.ssh.close()
-        print("已断开服务器连接")
+        logging.info("已断开服务器连接")
     
     def upload_dlcs(self):
         """上传DLC文件"""
         if not self.sftp:
-            print("✗ 未连接到服务器")
+            logging.error("✗ 未连接到服务器")
             return
         
         # 使用tkinter文件选择对话框
-        print("\n正在打开文件选择对话框...")
+        logging.info("\n正在打开文件选择对话框...")
         root = Tk()
         root.withdraw()
         root.attributes('-topmost', True)
@@ -150,16 +157,16 @@ class ServerManager:
         root.destroy()
         
         if not files:
-            print("未选择文件")
+            logging.info("未选择文件")
             return
         
-        print(f"\n已选择 {len(files)} 个文件")
+        logging.info(f"\n已选择 {len(files)} 个文件")
         
         # 确保服务器目录存在
         try:
             self.sftp.stat(self.server_files_path)
         except FileNotFoundError:
-            print(f"创建服务器目录: {self.server_files_path}")
+            logging.info(f"创建服务器目录: {self.server_files_path}")
             self._exec_command(f"mkdir -p {self.server_files_path}")
         
         # 上传文件
@@ -169,19 +176,19 @@ class ServerManager:
                 filename = os.path.basename(local_file)
                 remote_file = f"{self.server_files_path}/{filename}"
                 
-                print(f"上传: {filename}...", end=' ')
+                logging.info(f"上传: {filename}...")
                 
                 # 获取文件大小用于进度显示
                 file_size = os.path.getsize(local_file)
                 
                 self.sftp.put(local_file, remote_file)
-                print(f"✓ ({self._format_size(file_size)})")
+                logging.info(f"✓ ({self._format_size(file_size)})")
                 success_count += 1
                 
             except Exception as e:
-                print(f"✗ 失败: {e}")
+                logging.error(f"✗ 失败: {e}")
         
-        print(f"\n上传完成！成功: {success_count}/{len(files)}")
+        logging.info(f"\n上传完成！成功: {success_count}/{len(files)}")
     
     def list_dlcs(self) -> List[Dict]:
         """
@@ -191,7 +198,7 @@ class ServerManager:
             DLC列表，格式: [{"name": "文件名", "size": 大小, "time": 时间}, ...]
         """
         if not self.sftp:
-            print("✗ 未连接到服务器")
+            logging.error("✗ 未连接到服务器")
             return []
         
         try:
@@ -212,7 +219,7 @@ class ServerManager:
             return dlc_list
             
         except Exception as e:
-            print(f"✗ 获取DLC列表失败: {e}")
+            logging.error(f"✗ 获取DLC列表失败: {e}")
             return []
     
     def delete_dlcs(self):
@@ -220,20 +227,20 @@ class ServerManager:
         dlc_list = self.list_dlcs()
         
         if not dlc_list:
-            print("\n服务器上没有DLC文件")
+            logging.info("\n服务器上没有DLC文件")
             return
         
         # 显示DLC列表
-        print("\n" + "="*80)
-        print("服务器DLC列表:")
-        print("="*80)
+        logging.info("\n" + "="*80)
+        logging.info("服务器DLC列表:")
+        logging.info("="*80)
         for idx, dlc in enumerate(dlc_list, 1):
-            print(f"{idx:3d}. {dlc['name']:50s} {self._format_size(dlc['size']):>10s}  {dlc['time']}")
-        print("="*80)
+            logging.info(f"{idx:3d}. {dlc['name']:50s} {self._format_size(dlc['size']):>10s}  {dlc['time']}")
+        logging.info("="*80)
         
         # 获取用户输入
-        print("\n输入要删除的DLC序号（支持格式：5 或 5-15 或 1,3,5 或 组合 1,3,5-10）")
-        print("输入 'q' 取消")
+        logging.info("\n输入要删除的DLC序号（支持格式：5 或 5-15 或 1,3,5 或 组合 1,3,5-10）")
+        logging.info("输入 'q' 取消")
         user_input = input("请输入: ").strip()
         
         if user_input.lower() == 'q':
@@ -242,17 +249,17 @@ class ServerManager:
         # 解析序号
         indices = self._parse_indices(user_input, len(dlc_list))
         if not indices:
-            print("✗ 无效的序号")
+            logging.error("✗ 无效的序号")
             return
         
         # 确认删除
-        print(f"\n将删除 {len(indices)} 个DLC:")
+        logging.info(f"\n将删除 {len(indices)} 个DLC:")
         for idx in sorted(indices):
-            print(f"  - {dlc_list[idx-1]['name']}")
+            logging.info(f"  - {dlc_list[idx-1]['name']}")
         
         confirm = input("\n确认删除? (y/n): ").strip().lower()
         if confirm != 'y':
-            print("已取消")
+            logging.info("已取消")
             return
         
         # 执行删除
@@ -262,20 +269,20 @@ class ServerManager:
             try:
                 remote_file = f"{self.server_files_path}/{dlc['name']}"
                 self.sftp.remove(remote_file)
-                print(f"✓ 已删除: {dlc['name']}")
+                logging.info(f"✓ 已删除: {dlc['name']}")
                 success_count += 1
             except Exception as e:
-                print(f"✗ 删除失败 {dlc['name']}: {e}")
+                logging.error(f"✗ 删除失败 {dlc['name']}: {e}")
         
-        print(f"\n删除完成！成功: {success_count}/{len(indices)}")
+        logging.info(f"\n删除完成！成功: {success_count}/{len(indices)}")
     
     def generate_index(self):
         """生成index.json文件"""
-        print("\n正在生成 index.json...")
+        logging.info("\n正在生成 index.json...")
         
         dlc_list = self.list_dlcs()
         if not dlc_list:
-            print("✗ 服务器上没有DLC文件")
+            logging.error("✗ 服务器上没有DLC文件")
             return
         
         # 构建符合程序期望的index结构
@@ -323,38 +330,38 @@ class ServerManager:
             self.sftp.put(temp_file, self.server_index_path)
             os.remove(temp_file)
             
-            print(f"✓ index.json 已生成并上传到服务器")
-            print(f"  - 文件路径: {self.server_index_path}")
-            print(f"  - DLC数量: {len(dlcs_dict)}")
-            print(f"  - 格式: 已转换为程序兼容格式")
+            logging.info(f"✓ index.json 已生成并上传到服务器")
+            logging.info(f"  - 文件路径: {self.server_index_path}")
+            logging.info(f"  - DLC数量: {len(dlcs_dict)}")
+            logging.info(f"  - 格式: 已转换为程序兼容格式")
             
         except Exception as e:
-            print(f"✗ 生成失败: {e}")
+            logging.error(f"✗ 生成失败: {e}")
     
     def download_index(self):
         """下载index.json到本地"""
         if not self.sftp:
-            print("✗ 未连接到服务器")
+            logging.error("✗ 未连接到服务器")
             return
         
         try:
             local_file = "server_index.json"
             self.sftp.get(self.server_index_path, local_file)
-            print(f"\n✓ index.json 已下载到本地: {local_file}")
+            logging.info(f"\n✓ index.json 已下载到本地: {local_file}")
             
             # 显示内容
             with open(local_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                print(f"\n版本: {data.get('version')}")
-                print(f"更新时间: {data.get('update_time')}")
-                print(f"DLC总数: {data.get('total')}")
+                logging.info(f"\n版本: {data.get('version')}")
+                logging.info(f"更新时间: {data.get('update_time')}")
+                logging.info(f"DLC总数: {data.get('total')}")
                 
         except Exception as e:
-            print(f"✗ 下载失败: {e}")
+            logging.error(f"✗ 下载失败: {e}")
     
     def update_appinfo(self):
         """更新游戏AppID和DLC列表信息"""
-        print("\n正在获取 Stellaris (281990) 的信息...")
+        logging.info("\n正在获取 Stellaris (281990) 的信息...")
         
         try:
             # 从Steam API获取主游戏信息
@@ -364,7 +371,7 @@ class ServerManager:
             data = response.json()
             
             if not data.get('281990', {}).get('success'):
-                print("✗ 无法获取游戏信息")
+                logging.error("✗ 无法获取游戏信息")
                 return
             
             game_data = data['281990']['data']
@@ -379,7 +386,7 @@ class ServerManager:
             
             # 获取每个DLC的详细信息
             if 'dlc' in game_data:
-                print(f"找到 {len(game_data['dlc'])} 个DLC，正在获取详细信息...")
+                logging.info(f"找到 {len(game_data['dlc'])} 个DLC，正在获取详细信息...")
                 for idx, dlc_id in enumerate(game_data['dlc'], 1):
                     try:
                         # 获取单个DLC的详细信息
@@ -397,7 +404,7 @@ class ServerManager:
                             "name": dlc_name
                         })
                         
-                        print(f"  [{idx}/{len(game_data['dlc'])}] {dlc_id}: {dlc_name}")
+                        logging.info(f"  [{idx}/{len(game_data['dlc'])}] {dlc_id}: {dlc_name}")
                         
                         # 避免请求过快
                         if idx < len(game_data['dlc']):
@@ -405,7 +412,7 @@ class ServerManager:
                             time.sleep(0.5)
                             
                     except Exception as e:
-                        print(f"  ⚠ 获取DLC {dlc_id} 信息失败: {e}")
+                        logging.warning(f"  ⚠ 获取DLC {dlc_id} 信息失败: {e}")
                         appinfo['dlcs'].append({
                             "id": str(dlc_id),
                             "name": f"DLC_{dlc_id}"
@@ -415,16 +422,16 @@ class ServerManager:
             try:
                 appinfo['dlcs'].sort(key=lambda x: int(x['id']))
             except Exception as e:
-                print(f"⚠ DLC排序失败: {e}")
+                logging.warning(f"⚠ DLC排序失败: {e}")
 
             # 保存到本地
             local_file = "stellaris_appinfo.json"
             with open(local_file, 'w', encoding='utf-8') as f:
                 json.dump(appinfo, f, indent=2, ensure_ascii=False)
 
-            print(f"✓ 游戏信息已保存到: {local_file}")
-            print(f"  - 游戏名称: {appinfo['name']}")
-            print(f"  - DLC数量: {len(appinfo['dlcs'])}")
+            logging.info(f"✓ 游戏信息已保存到: {local_file}")
+            logging.info(f"  - 游戏名称: {appinfo['name']}")
+            logging.info(f"  - DLC数量: {len(appinfo['dlcs'])}")
 
             # 上传到服务器
             try:
@@ -433,56 +440,54 @@ class ServerManager:
 
                 remote_file = f"{self.server_appinfo_path}/stellaris_appinfo.json"
                 self.sftp.put(local_file, remote_file)
-                print(f"✓ 已上传到服务器: {remote_file}")
-
+                logging.info(f"✓ 已上传到服务器: {remote_file}")
             except Exception as e:
-                print(f"✗ 上传到服务器失败: {e}")
+                logging.error(f"✗ 上传到服务器失败: {e}")
             
         except Exception as e:
-            print(f"✗ 获取游戏信息失败: {e}")
+            logging.error(f"✗ 获取游戏信息失败: {e}")
     
     def download_appinfo(self):
         """从服务器下载游戏AppID和DLC信息"""
         if not self.sftp:
-            print("✗ 未连接到服务器")
+            logging.error("✗ 未连接到服务器")
             return
         
         try:
             remote_file = f"{self.server_appinfo_path}/stellaris_appinfo.json"
             local_file = "server_stellaris_appinfo.json"
             
-            print(f"\n正在从服务器下载 AppID 信息...")
+            logging.info(f"\n正在从服务器下载 AppID 信息...")
             self.sftp.get(remote_file, local_file)
-            print(f"✓ 已下载到本地: {local_file}")
+            logging.info(f"✓ 已下载到本地: {local_file}")
             
             # 显示内容
             with open(local_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                print(f"\n{'='*80}")
-                print(f"游戏信息:")
-                print(f"{'='*80}")
-                print(f"AppID: {data.get('app_id')}")
-                print(f"名称: {data.get('name')}")
-                print(f"更新时间: {data.get('update_time')}")
-                print(f"DLC总数: {len(data.get('dlcs', []))}")
-                print(f"\n{'='*80}")
-                print(f"DLC列表:")
-                print(f"{'='*80}")
+                logging.info(f"\n{'='*80}")
+                logging.info(f"游戏信息:")
+                logging.info(f"{'='*80}")
+                logging.info(f"AppID: {data.get('app_id')}")
+                logging.info(f"名称: {data.get('name')}")
+                logging.info(f"更新时间: {data.get('update_time')}")
+                logging.info(f"DLC总数: {len(data.get('dlcs', []))}")
+                logging.info(f"\n{'='*80}")
+                logging.info(f"DLC列表:")
+                logging.info(f"{'='*80}")
                 
                 # 显示前10个DLC作为示例
                 dlcs = data.get('dlcs', [])
                 for idx, dlc in enumerate(dlcs[:10], 1):
-                    print(f"{idx:3d}. ID: {dlc['id']:10s} | {dlc['name']}")
+                    logging.info(f"{idx:3d}. ID: {dlc['id']:10s} | {dlc['name']}")
                 
                 if len(dlcs) > 10:
-                    print(f"... (还有 {len(dlcs) - 10} 个DLC，详见文件)")
-                print(f"{'='*80}")
-                
+                    logging.info(f"... (还有 {len(dlcs) - 10} 个DLC，详见文件)")
+                logging.info(f"{'='*80}")
         except FileNotFoundError:
-            print(f"✗ 服务器上没有找到 AppID 信息文件")
-            print(f"  请先使用功能5更新游戏信息")
+            logging.error(f"✗ 服务器上没有找到 AppID 信息文件")
+            logging.info(f"  请先使用功能5更新游戏信息")
         except Exception as e:
-            print(f"✗ 下载失败: {e}")
+            logging.error(f"✗ 下载失败: {e}")
     
     def _exec_command(self, command: str) -> Tuple[str, str]:
         """
@@ -548,29 +553,29 @@ class ServerManager:
 
 def show_menu():
     """显示主菜单"""
-    print("\n" + "="*60)
-    print(" " * 15 + "Stellaris DLC 服务器管理工具")
-    print("="*60)
-    print("1. 上传DLC文件")
-    print("2. 删除服务器DLC")
-    print("3. 生成 index.json")
-    print("4. 下载 index.json")
-    print("5. 更新游戏AppID和DLC信息")
-    print("6. 下载服务器AppID和DLC信息")
-    print("7. 查看服务器DLC列表")
-    print("0. 退出")
-    print("="*60)
+    logging.info("\n" + "="*60)
+    logging.info(" " * 15 + "Stellaris DLC 服务器管理工具")
+    logging.info("="*60)
+    logging.info("1. 上传DLC文件")
+    logging.info("2. 删除服务器DLC")
+    logging.info("3. 生成 index.json")
+    logging.info("4. 下载 index.json")
+    logging.info("5. 更新游戏AppID和DLC信息")
+    logging.info("6. 下载服务器AppID和DLC信息")
+    logging.info("7. 查看服务器DLC列表")
+    logging.info("0. 退出")
+    logging.info("="*60)
 
 
 def main():
     """主程序"""
-    print("\n欢迎使用 Stellaris DLC 服务器管理工具！")
+    logging.info("\n欢迎使用 Stellaris DLC 服务器管理工具！")
     
     manager = ServerManager()
     
     # 连接服务器
     if not manager.connect():
-        print("\n无法连接到服务器，程序退出")
+        logging.error("\n无法连接到服务器，程序退出")
         return
     
     try:
@@ -593,20 +598,20 @@ def main():
             elif choice == '7':
                 dlc_list = manager.list_dlcs()
                 if dlc_list:
-                    print("\n" + "="*80)
-                    print("服务器DLC列表:")
-                    print("="*80)
+                    logging.info("\n" + "="*80)
+                    logging.info("服务器DLC列表:")
+                    logging.info("="*80)
                     for idx, dlc in enumerate(dlc_list, 1):
-                        print(f"{idx:3d}. {dlc['name']:50s} {manager._format_size(dlc['size']):>10s}  {dlc['time']}")
-                    print("="*80)
-                    print(f"共 {len(dlc_list)} 个DLC")
+                        logging.info(f"{idx:3d}. {dlc['name']:50s} {manager._format_size(dlc['size']):>10s}  {dlc['time']}")
+                    logging.info("="*80)
+                    logging.info(f"共 {len(dlc_list)} 个DLC")
                 else:
-                    print("\n服务器上没有DLC文件")
+                    logging.info("\n服务器上没有DLC文件")
             elif choice == '0':
-                print("\n感谢使用，再见！")
+                logging.info("\n感谢使用，再见！")
                 break
             else:
-                print("\n✗ 无效的选项，请重新选择")
+                logging.error("\n✗ 无效的选项，请重新选择")
     
     finally:
         manager.disconnect()
@@ -616,8 +621,8 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\n程序已中断")
+        logging.info("\n\n程序已中断")
     except Exception as e:
-        print(f"\n发生错误: {e}")
+        logging.exception(f"\n发生错误: {e}")
         import traceback
         traceback.print_exc()

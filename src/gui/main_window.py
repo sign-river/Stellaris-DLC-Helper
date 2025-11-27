@@ -42,7 +42,8 @@ class MainWindowCTk:
             if icon_path.exists():
                 self.root.iconbitmap(str(icon_path))
         except Exception as e:
-            print(f"设置窗口图标失败: {e}")
+            import logging
+            logging.warning(f"设置窗口图标失败: {e}")
         
         # 设置清爽现代风格背景
         self.root.configure(fg_color="#F5F7FA")
@@ -84,6 +85,14 @@ class MainWindowCTk:
         
         # 自动检测游戏路径并加载DLC列表
         self.root.after(100, self.auto_detect_and_load)
+        
+        # Attach GUI logging handler to root logger so standard logging gets forwarded to GUI
+        try:
+            import logging
+            handler = self.logger.get_logging_handler()
+            logging.getLogger().addHandler(handler)
+        except Exception:
+            pass
         
     def _create_header(self):
         """创建标题区域"""
@@ -182,7 +191,8 @@ class MainWindowCTk:
                 )
                 github_btn.pack(side="left", padx=(0, 5))
         except Exception as e:
-            print(f"加载GitHub图标失败: {e}")
+            import logging
+            logging.warning(f"加载GitHub图标失败: {e}")
             # 降级为文字按钮
             github_btn = ctk.CTkButton(
                 info_container,
@@ -217,7 +227,8 @@ class MainWindowCTk:
                 )
                 bilibili_btn.pack(side="left")
         except Exception as e:
-            print(f"加载B站图标失败: {e}")
+            import logging
+            logging.warning(f"加载B站图标失败: {e}")
     
     def _open_github(self):
         """打开 GitHub 链接"""

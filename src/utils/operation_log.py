@@ -50,7 +50,8 @@ class OperationLog:
             with open(self.log_path, 'w', encoding='utf-8') as f:
                 json.dump(log_data, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"保存日志失败: {str(e)}")
+            import logging
+            logging.error(f"保存日志失败: {str(e)}")
     
     def add_operation(self, op_type, details):
         """

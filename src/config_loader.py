@@ -8,6 +8,7 @@
 import json
 import shutil
 from pathlib import Path
+import logging
 
 
 class ConfigLoader:
@@ -52,22 +53,22 @@ class ConfigLoader:
             try:
                 with open(self.config_path, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                    print(f"✓ 已加载配置文件: {self.config_path}")
+                    logging.info(f"✓ 已加载配置文件: {self.config_path}")
                     return config
             except Exception as e:
-                print(f"⚠ 警告: 加载配置文件失败，使用默认配置: {e}")
+                logging.warning(f"⚠ 警告: 加载配置文件失败，使用默认配置: {e}")
                 return self._get_default_config()
         else:
             # 如果不存在，从 config.json.example 复制
             if self.example_path.exists():
                 try:
                     shutil.copy(self.example_path, self.config_path)
-                    print(f"✓ 已从示例配置创建 config.json")
-                    print(f"  请根据需要修改: {self.config_path}")
+                    logging.info(f"✓ 已从示例配置创建 config.json")
+                    logging.info(f"  请根据需要修改: {self.config_path}")
                     with open(self.config_path, 'r', encoding='utf-8') as f:
                         return json.load(f)
                 except Exception as e:
-                    print(f"⚠ 警告: 无法创建配置文件: {e}")
+                    logging.warning(f"⚠ 警告: 无法创建配置文件: {e}")
             
             return self._get_default_config()
     

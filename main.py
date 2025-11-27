@@ -10,11 +10,17 @@ Stellaris DLC Helper - CustomTkinter 版本
 """
 
 import customtkinter as ctk
+import logging
+from src.utils.logging_setup import configure_basic_logging, get_default_log_file_path
 from src.gui.main_window import MainWindowCTk
 
 
 def main():
     """主函数"""
+    # Configure basic logging for console and file (before creating UI)
+    configure_basic_logging(log_to_file=True)
+    logging.getLogger().info(f"日志文件路径: {get_default_log_file_path()}")
+
     root = ctk.CTk()
     app = MainWindowCTk(root)
     root.mainloop()

@@ -5,6 +5,8 @@
 """
 
 from datetime import datetime
+import logging
+from logging import Handler
 
 
 class Logger:
@@ -51,3 +53,36 @@ class Logger:
     def success(self, message):
         """成功日志"""
         self.log(f"✓ {message}", "SUCCESS")
+
+    def get_logging_handler(self) -> Handler:
+        """Create a logging.Handler that forwards logging records to this GUI Logger.
+
+        The returned handler can be attached to the Python logging system, so
+        that logging.info / warning / error messages are shown in the GUI log widget.
+        """
+        class GUIHandler(Handler):
+            def __init__(self, gui_logger: Logger):
+                super().__init__()
+                self.gui_logger = gui_logger
+
+            def emit(self, record):
+                try:
+                    msg = self.format(record)
+                    level = record.levelno
+                    if level >= logging.ERROR:
+                        self.gui_logger.error(msg)
+                    elif level >= logging.WARNING:
+                        self.gui_logger.warning(msg)
+                    elif level >= logging.INFO:
+                        self.gui_logger.info(msg)
+                    else:
+                        self.gui_logger.log(msg, "DEBUG")
+                except Exception:
+                    # Safely ignore GUI logging errors to prevent application crashes
+                    pass
+
+        handler = GUIHandler(self)
+        handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s", datefmt="%H:%M:%S")
+        handler.setFormatter(formatter)
+        return handler
