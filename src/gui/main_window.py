@@ -503,13 +503,13 @@ class MainWindowCTk:
         right_btn_container = ctk.CTkFrame(button_frame, fg_color="transparent")
         right_btn_container.grid(row=0, column=1, sticky="e", padx=(10, 15), pady=(12, 12))
         
-        # 应用补丁按钮（重要 - 标准蓝）
-        self.patch_btn = ctk.CTkButton(
+        # 执行按钮（合并补丁 & 下载功能）
+        self.execute_btn = ctk.CTkButton(
             right_btn_container,
-            text="🛠️ 应用补丁",
-            command=self.apply_patch,
+            text="🛠️/📥 应用补丁并下载安装选中的DLC",
+            command=self.toggle_execute,
             state="disabled",
-            width=130,
+            width=280,
             height=45,
             font=ctk.CTkFont(size=14, weight="bold"),
             corner_radius=8,
@@ -517,23 +517,9 @@ class MainWindowCTk:
             hover_color="#1565C0",
             text_color="#FFFFFF"
         )
-        self.patch_btn.pack(side="left", padx=(0, 10))
+        self.execute_btn.pack(side="left", padx=(0, 10))
         
-        # 下载安装按钮（最重要 - 深蓝）
-        self.download_btn = ctk.CTkButton(
-            right_btn_container,
-            text="📥 下载并安装选中的DLC",
-            command=self.toggle_download,
-            state="disabled",
-            width=220,
-            height=45,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            corner_radius=8,
-            fg_color="#0D47A1",
-            hover_color="#1565C0",
-            text_color="#FFFFFF"
-        )
-        self.download_btn.pack(side="left")
+        # 下载安装按钮的行为已合并到 execute_btn 中，此按钮移除
         
     def _create_log_section(self, parent):
         """创建日志区域"""
@@ -834,8 +820,11 @@ class MainWindowCTk:
         
         self.logger.info(f"DLC列表加载完成: 共{total}个，已安装{installed_count}个，可下载{available_count}个")
         
-        # 启用下载按钮
-        self.download_btn.configure(state="normal")
+        # 启用执行按钮（执行补丁/下载）
+        self.execute_btn.configure(state="normal")
+
+        # 更新补丁按钮状态显示（自动检测）
+        self._check_patch_status()
         
         # 如果有未安装的DLC被默认选中，更新全选按钮文本
         if available_count > 0:
@@ -875,6 +864,78 @@ class MainWindowCTk:
         else:
             # 暂停下载
             self.pause_download()
+
+    def toggle_execute(self):
+        """切换执行状态：开始/暂停/继续
+
+        当未下载时，先检查是否需要应用补丁（若未应用），然后开始下载。
+        当正在下载时，则切换为暂停/继续行为。
+        """
+        if not self.is_downloading:
+            # 开始执行（补丁 + 下载）
+            self.start_execute()
+        elif self.download_paused:
+            # 继续下载
+            self.resume_download()
+        else:
+            # 暂停下载
+            self.pause_download()
+
+    def start_execute(self):
+        """开始执行：先应用补丁（如有需要），再下载选中的DLC"""
+        # Ensure game path is set
+        if not self.game_path:
+            messagebox.showwarning("警告", "请先选择游戏路径！")
+            return
+
+        # Ensure DLC list loaded
+        if not self.dlc_list:
+            messagebox.showinfo("提示", "正在加载DLC列表，请稍候...")
+            self.load_dlc_list()
+            messagebox.showinfo("提示", "请在DLC列表加载完成后，再次点击执行按钮")
+            return
+
+        selected = [d for d in self.dlc_vars if d["var"].get()]
+        if not selected:
+            messagebox.showinfo("提示", "请至少选择一个DLC！")
+            return
+
+        # Check patch status
+        try:
+            patched_status = self.patch_manager.check_patch_status()
+        except Exception:
+            patched_status = {'patched': False}
+
+        # Ask user for patch application if needed BEFORE starting worker thread
+        should_patch = False
+        if not patched_status.get('patched', False):
+            ask = messagebox.askyesno("确认", 
+                "补丁未应用，是否先应用 CreamAPI 补丁？\n\n(此操作会修改游戏的 steam_api.dll 并自动备份原始文件)")
+            should_patch = ask
+
+        def execute_thread():
+            # If not patched, ask user whether to apply patch
+            try:
+                if should_patch:
+                    # disable execute button while patching
+                    self.root.after(0, lambda: self.execute_btn.configure(state="disabled"))
+                    success, failed = self.patch_manager.apply_patch(self.dlc_list)
+                    # Show notification
+                    if success > 0 and failed == 0:
+                        self.root.after(0, lambda: messagebox.showinfo("成功", f"补丁应用成功！已处理 {success} 个文件"))
+                    elif success > 0:
+                        self.root.after(0, lambda: messagebox.showwarning("部分成功", f"补丁应用部分成功，成功: {success}, 失败: {failed}"))
+                    else:
+                        self.root.after(0, lambda: messagebox.showwarning("提示", "补丁应用失败或无变更，请查看日志"))
+                    # Re-check patch status
+                    self.root.after(0, self._check_patch_status)
+                # Start downloads after patching or if already patched
+                self.root.after(0, lambda: self.start_download())
+            finally:
+                # Ensure execute button enabled
+                self.root.after(0, lambda: self.execute_btn.configure(state="normal"))
+
+        threading.Thread(target=execute_thread, daemon=True).start()
     
     def start_download(self):
         """开始下载"""
@@ -885,7 +946,7 @@ class MainWindowCTk:
         
         self.is_downloading = True
         self.download_paused = False
-        self.download_btn.configure(text="⏸️ 暂停下载")
+        self.execute_btn.configure(text="⏸️ 暂停下载")
         self.logger.info(f"\n开始下载 {len(selected)} 个DLC...")
         
         def progress_callback(percent, downloaded, total):
@@ -976,7 +1037,7 @@ class MainWindowCTk:
             
             # 重新加载DLC列表
             self.root.after(100, self.load_dlc_list)
-            self.root.after(0, lambda: self.download_btn.configure(
+            self.root.after(0, lambda: self.execute_btn.configure(
                 text="📥 下载并安装选中的DLC", 
                 state="normal"
             ))
@@ -988,7 +1049,7 @@ class MainWindowCTk:
         if self.current_downloader:
             self.current_downloader.pause()
             self.download_paused = True
-            self.download_btn.configure(text="▶️ 继续下载")
+            self.execute_btn.configure(text="▶️ 继续下载")
             self.logger.info("下载已暂停")
     
     def resume_download(self):
@@ -996,7 +1057,7 @@ class MainWindowCTk:
         if self.current_downloader:
             self.current_downloader.resume()
             self.download_paused = False
-            self.download_btn.configure(text="⏸️ 暂停下载")
+            self.execute_btn.configure(text="⏸️ 暂停下载")
             self.logger.info("继续下载...")
         
     def restore_game(self):
@@ -1036,15 +1097,16 @@ class MainWindowCTk:
             status = self.patch_manager.check_patch_status()
             
             if status['patched']:
-                self.patch_btn.configure(state="disabled")
+                # If patched, execute_btn should allow downloads (no patch action)
+                self.execute_btn.configure(text="📥 下载并安装选中的DLC", state="normal")
                 self.remove_patch_btn.configure(state="normal")
                 self.logger.info("检测到已应用补丁")
             else:
-                self.patch_btn.configure(state="normal")
+                self.execute_btn.configure(text="🛠️ 应用补丁并下载安装选中的DLC", state="normal")
                 self.remove_patch_btn.configure(state="disabled")
         except Exception as e:
             # 如果检查失败，默认启用应用补丁按钮
-            self.patch_btn.configure(state="normal")
+            self.execute_btn.configure(state="normal")
             self.remove_patch_btn.configure(state="disabled")
         
     def apply_patch(self):
@@ -1069,8 +1131,8 @@ class MainWindowCTk:
         
         if not result:
             return
-        
-        self.patch_btn.configure(state="disabled")
+
+        self.execute_btn.configure(state="disabled")
         self.remove_patch_btn.configure(state="disabled")
         
         def patch_thread():
@@ -1098,7 +1160,7 @@ class MainWindowCTk:
                 self.logger.error(f"应用补丁时发生错误: {str(e)}")
                 self.root.after(0, lambda: messagebox.showerror("错误", 
                     f"应用补丁时发生错误:\n{str(e)}"))
-                self.root.after(0, lambda: self.patch_btn.configure(state="normal"))
+                self.root.after(0, lambda: self.execute_btn.configure(state="normal"))
         
         threading.Thread(target=patch_thread, daemon=True).start()
         
@@ -1116,7 +1178,7 @@ class MainWindowCTk:
         if not result:
             return
         
-        self.patch_btn.configure(state="disabled")
+        self.execute_btn.configure(state="disabled")
         self.remove_patch_btn.configure(state="disabled")
         
         def remove_thread():
