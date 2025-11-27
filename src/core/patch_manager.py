@@ -314,7 +314,7 @@ class PatchManager:
             tuple: (成功数量, 失败数量)
         """
         self.logger.info("\n" + "="*50)
-        self.logger.info("开始还原游戏...")
+        self.logger.info("开始移除补丁...")
         
         success = 0
         failed = 0
@@ -347,7 +347,7 @@ class PatchManager:
                     self.logger.error(f"删除配置文件失败: {str(e)}")
             
             self.logger.info("="*50)
-            self.logger.success(f"还原完成！成功: {success}, 失败: {failed}")
+            self.logger.success(f"移除补丁完成！成功: {success}, 失败: {failed}")
             
             return success, failed
             

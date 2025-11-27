@@ -468,10 +468,10 @@ class MainWindowCTk:
         left_btn_container = ctk.CTkFrame(button_frame, fg_color="transparent")
         left_btn_container.grid(row=0, column=0, sticky="w", padx=(15, 10), pady=(12, 12))
         
-        # 还原游戏按钮（次要 - 浅蓝）
+        # 卸载DLC按钮（次要 - 浅蓝）
         restore_btn = ctk.CTkButton(
             left_btn_container,
-            text="🔄 还原游戏",
+            text="🔄 卸载DLC",
             command=self.restore_game,
             width=130,
             height=45,
@@ -506,7 +506,7 @@ class MainWindowCTk:
         # 执行按钮（合并补丁 & 下载功能）
         self.execute_btn = ctk.CTkButton(
             right_btn_container,
-            text="🛠️/📥 应用补丁并下载安装选中的DLC",
+            text="🔓 一键解锁",
             command=self.toggle_execute,
             state="disabled",
             width=280,
@@ -895,10 +895,9 @@ class MainWindowCTk:
             messagebox.showinfo("提示", "请在DLC列表加载完成后，再次点击执行按钮")
             return
 
+        # Do not prematurely require selection: if patch isn't applied we should allow patching even
+        # when no DLC are selected (user intent is to only apply patch).
         selected = [d for d in self.dlc_vars if d["var"].get()]
-        if not selected:
-            messagebox.showinfo("提示", "请至少选择一个DLC！")
-            return
 
         # Check patch status
         try:
@@ -913,6 +912,16 @@ class MainWindowCTk:
                 "补丁未应用，是否先应用 CreamAPI 补丁？\n\n(此操作会修改游戏的 steam_api.dll 并自动备份原始文件)")
             should_patch = ask
 
+        # If no patch will be applied and no DLC is selected, then nothing to do
+        if not should_patch and not selected:
+            # 如果补丁已应用且所有DLC已安装，告诉用户已全部解锁
+            all_installed = all(d.get("installed", False) for d in self.dlc_vars) if self.dlc_vars else False
+            if patched_status.get('patched', False) and all_installed:
+                messagebox.showinfo("提示", "已全部解锁！所有 DLC 均已安装")
+            else:
+                messagebox.showinfo("提示", "请至少选择一个DLC！")
+            return
+
         def execute_thread():
             # If not patched, ask user whether to apply patch
             try:
@@ -920,17 +929,29 @@ class MainWindowCTk:
                     # disable execute button while patching
                     self.root.after(0, lambda: self.execute_btn.configure(state="disabled"))
                     success, failed = self.patch_manager.apply_patch(self.dlc_list)
-                    # Show notification
+                    # Compose notification and avoid duplicate messages when no DLC selected
                     if success > 0 and failed == 0:
-                        self.root.after(0, lambda: messagebox.showinfo("成功", f"补丁应用成功！已处理 {success} 个文件"))
+                        msg = f"补丁应用成功！已处理 {success} 个文件"
+                        if not selected:
+                            msg += "\n\n已应用补丁，没有选中 DLC，下载流程已跳过"
+                        self.root.after(0, lambda m=msg: messagebox.showinfo("成功", m))
                     elif success > 0:
-                        self.root.after(0, lambda: messagebox.showwarning("部分成功", f"补丁应用部分成功，成功: {success}, 失败: {failed}"))
+                        msg = f"补丁应用部分成功，成功: {success}, 失败: {failed}"
+                        if not selected:
+                            msg += "\n\n已应用补丁，没有选中 DLC，下载流程已跳过"
+                        self.root.after(0, lambda m=msg: messagebox.showwarning("部分成功", m))
                     else:
                         self.root.after(0, lambda: messagebox.showwarning("提示", "补丁应用失败或无变更，请查看日志"))
                     # Re-check patch status
                     self.root.after(0, self._check_patch_status)
                 # Start downloads after patching or if already patched
-                self.root.after(0, lambda: self.start_download())
+                if selected:
+                    self.root.after(0, lambda: self.start_download())
+                else:
+                    # If no DLC selected:
+                    # If we just applied the patch and it succeeded we already informed the user
+                    # (we append the "下载流程已跳过" note to the success message). Otherwise do nothing.
+                    pass
             finally:
                 # Ensure execute button enabled
                 self.root.after(0, lambda: self.execute_btn.configure(state="normal"))
@@ -1038,7 +1059,7 @@ class MainWindowCTk:
             # 重新加载DLC列表
             self.root.after(100, self.load_dlc_list)
             self.root.after(0, lambda: self.execute_btn.configure(
-                text="📥 下载并安装选中的DLC", 
+                text="🔓 一键解锁", 
                 state="normal"
             ))
         
@@ -1061,7 +1082,7 @@ class MainWindowCTk:
             self.logger.info("继续下载...")
         
     def restore_game(self):
-        """还原游戏（删除所有通过本工具安装的DLC）"""
+        """卸载DLC（删除所有通过本工具安装的DLC）"""
         if not self.game_path:
             messagebox.showwarning("警告", "请先选择游戏路径！")
             return
@@ -1070,7 +1091,7 @@ class MainWindowCTk:
         operations = self.dlc_installer.operation_log.get_operations()
         
         if not operations:
-            messagebox.showinfo("提示", "没有需要还原的操作")
+            messagebox.showinfo("提示", "没有需要卸载的DLC")
             return
         
         result = messagebox.askyesno("确认", 
@@ -1079,11 +1100,11 @@ class MainWindowCTk:
         if not result:
             return
         
-        self.logger.info("\n开始还原游戏...")
+        self.logger.info("\n开始卸载DLC...")
         success, total = self.dlc_installer.restore_game()
         
-        self.logger.info(f"\n还原完成！已删除 {success}/{total} 个DLC")
-        messagebox.showinfo("完成", f"还原完成！已删除 {success}/{total} 个DLC")
+        self.logger.info(f"\n卸载完成！已删除 {success}/{total} 个DLC")
+        messagebox.showinfo("完成", f"卸载完成！已删除 {success}/{total} 个DLC")
         
         # 重新加载DLC列表
         self.load_dlc_list()
@@ -1098,11 +1119,11 @@ class MainWindowCTk:
             
             if status['patched']:
                 # If patched, execute_btn should allow downloads (no patch action)
-                self.execute_btn.configure(text="📥 下载并安装选中的DLC", state="normal")
+                self.execute_btn.configure(text="🔓 一键解锁", state="normal")
                 self.remove_patch_btn.configure(state="normal")
                 self.logger.info("检测到已应用补丁")
             else:
-                self.execute_btn.configure(text="🛠️ 应用补丁并下载安装选中的DLC", state="normal")
+                self.execute_btn.configure(text="🔓 一键解锁", state="normal")
                 self.remove_patch_btn.configure(state="disabled")
         except Exception as e:
             # 如果检查失败，默认启用应用补丁按钮
@@ -1172,7 +1193,7 @@ class MainWindowCTk:
         
         result = messagebox.askyesno("确认", 
             "即将移除 CreamAPI 补丁\n"
-            "这将还原游戏的原始文件\n\n"
+            "这将恢复游戏的原始文件\n\n"
             "是否继续？")
         
         if not result:

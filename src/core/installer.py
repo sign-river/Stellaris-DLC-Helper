@@ -89,7 +89,7 @@ class DLCInstaller:
     
     def restore_game(self):
         """
-        还原游戏（删除所有通过本工具安装的DLC）
+        卸载DLC（删除所有通过本工具安装的DLC）
         
         Returns:
             tuple: (成功数量, 总数量)
