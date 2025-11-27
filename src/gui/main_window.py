@@ -10,6 +10,8 @@ import tkinter as tk
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import threading
+from pathlib import Path
+from PIL import Image
 from ..config import VERSION
 from ..core import DLCManager, DLCDownloader, DLCInstaller, PatchManager
 from ..utils import Logger, PathUtils, SteamUtils
@@ -34,6 +36,14 @@ class MainWindowCTk:
         self.root.title(f"Stellaris DLC Helper v{VERSION}")
         self.root.geometry("1000x750")
         
+        # 设置窗口图标
+        try:
+            icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "ico.ico"
+            if icon_path.exists():
+                self.root.iconbitmap(str(icon_path))
+        except Exception as e:
+            print(f"设置窗口图标失败: {e}")
+        
         # 设置清爽现代风格背景
         self.root.configure(fg_color="#F5F7FA")
         
@@ -45,6 +55,9 @@ class MainWindowCTk:
         self.game_path = ""
         self.dlc_list = []
         self.dlc_checkboxes = []  # 存储复选框对象
+        self.is_downloading = False  # 下载状态
+        self.download_paused = False  # 暂停状态
+        self.current_downloader = None  # 当前下载器实例
         
         # 核心组件
         self.dlc_manager = None
@@ -73,27 +86,180 @@ class MainWindowCTk:
         
     def _create_header(self):
         """创建标题区域"""
-        header_frame = ctk.CTkFrame(self.root, corner_radius=0, height=100, fg_color=["#3a7ebf", "#1f538d"])
+        header_frame = ctk.CTkFrame(self.root, corner_radius=0, height=130, fg_color=["#3a7ebf", "#1f538d"])
         header_frame.grid(row=0, column=0, sticky="ew")
         header_frame.grid_propagate(False)
         
-        # 标题
+        # 主标题 - 放大字号，纯白色
         title_label = ctk.CTkLabel(
             header_frame,
-            text="🌟 Stellaris DLC Helper",
-            font=ctk.CTkFont(size=32, weight="bold"),
-            text_color="white"
+            text="S T E L L A R I S   D L C   H E L P E R",
+            font=ctk.CTkFont(size=36, weight="bold"),
+            text_color="#FFFFFF"
         )
-        title_label.pack(pady=(25, 5))
+        title_label.pack(pady=(18, 8))
         
-        # 副标题
+        # 副标题 - 纯白色
         subtitle_label = ctk.CTkLabel(
             header_frame,
-            text="群星DLC一键解锁工具",
+            text="群星 DLC 一键解锁工具  |  该程序为免费开源项目，如付费获得请立即要求商家退款",
             font=ctk.CTkFont(size=14),
-            text_color="#B0BEC5"  # 浅灰蓝色
+            text_color="#FFFFFF"
         )
-        subtitle_label.pack()
+        subtitle_label.pack(pady=(0, 4))
+        
+        # 作者和QQ群信息容器 - 水平布局
+        info_container = ctk.CTkFrame(header_frame, fg_color="transparent")
+        info_container.pack(pady=(0, 6))
+        
+        # 作者和QQ群信息 - 纯白色
+        author_label = ctk.CTkLabel(
+            info_container,
+            text="by 唏嘘南溪",
+            font=ctk.CTkFont(size=12),
+            text_color="#FFFFFF"
+        )
+        author_label.pack(side="left", padx=(0, 20))
+        
+        # QQ群信息 - 分为文字和可复制的号码
+        qq_text_label = ctk.CTkLabel(
+            info_container,
+            text="QQ群: ",
+            font=ctk.CTkFont(size=12),
+            text_color="#FFFFFF"
+        )
+        qq_text_label.pack(side="left")
+        
+        # QQ群号 - 使用Entry实现可选中复制
+        self.qq_entry = ctk.CTkEntry(
+            info_container,
+            width=100,
+            height=24,
+            fg_color="transparent",
+            border_width=0,
+            text_color="#FFFFFF",
+            font=ctk.CTkFont(size=12)
+        )
+        self.qq_entry.insert(0, "1051774780")
+        self.qq_entry.configure(state="readonly")  # 只读但可选中
+        self.qq_entry.pack(side="left", padx=(0, 20))
+        
+        # 绑定双击和右键事件
+        self.qq_entry.bind("<Double-Button-1>", lambda e: self._copy_qq_to_clipboard())
+        self.qq_entry.bind("<Button-3>", lambda e: self._copy_qq_to_clipboard())
+        
+        # GitHub图标按钮
+        try:
+            github_icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "github.png"
+            if github_icon_path.exists():
+                github_image = Image.open(github_icon_path)
+                github_photo = ctk.CTkImage(light_image=github_image, dark_image=github_image, size=(20, 20))
+                github_btn = ctk.CTkButton(
+                    info_container,
+                    image=github_photo,
+                    text="",
+                    fg_color="transparent",
+                    hover_color="#2563A8",
+                    width=28,
+                    height=28,
+                    corner_radius=4,
+                    command=self._open_github
+                )
+                github_btn.pack(side="left", padx=(0, 5))
+            else:
+                # 降级为文字按钮
+                github_btn = ctk.CTkButton(
+                    info_container,
+                    text="⚙ GitHub",
+                    font=ctk.CTkFont(size=11),
+                    text_color="#FFFFFF",
+                    fg_color="transparent",
+                    hover_color="#2563A8",
+                    width=80,
+                    height=24,
+                    corner_radius=4,
+                    command=self._open_github
+                )
+                github_btn.pack(side="left", padx=(0, 5))
+        except Exception as e:
+            print(f"加载GitHub图标失败: {e}")
+            # 降级为文字按钮
+            github_btn = ctk.CTkButton(
+                info_container,
+                text="⚙ GitHub",
+                font=ctk.CTkFont(size=11),
+                text_color="#FFFFFF",
+                fg_color="transparent",
+                hover_color="#2563A8",
+                width=80,
+                height=24,
+                corner_radius=4,
+                command=self._open_github
+            )
+            github_btn.pack(side="left", padx=(0, 5))
+        
+        # B站图标按钮
+        try:
+            bilibili_icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "bilibili.png"
+            if bilibili_icon_path.exists():
+                bilibili_image = Image.open(bilibili_icon_path)
+                bilibili_photo = ctk.CTkImage(light_image=bilibili_image, dark_image=bilibili_image, size=(20, 20))
+                bilibili_btn = ctk.CTkButton(
+                    info_container,
+                    image=bilibili_photo,
+                    text="",
+                    fg_color="transparent",
+                    hover_color="#2563A8",
+                    width=28,
+                    height=28,
+                    corner_radius=4,
+                    command=self._open_bilibili
+                )
+                bilibili_btn.pack(side="left")
+        except Exception as e:
+            print(f"加载B站图标失败: {e}")
+    
+    def _open_github(self):
+        """打开 GitHub 链接"""
+        import webbrowser
+        webbrowser.open("https://github.com/sign-river/Stellaris-DLC-Helper")
+    
+    def _open_bilibili(self):
+        """打开 B站视频链接"""
+        import webbrowser
+        webbrowser.open("https://www.bilibili.com/video/BV12pbrzSEQY/?spm_id_from=333.1387.homepage.video_card.click&vd_source=19dcf32d8641182f1f159b50887e0cf8")
+    
+    def _copy_qq_to_clipboard(self):
+        """复制QQ群号到剪贴板"""
+        qq_number = "1051774780"
+        self.root.clipboard_clear()
+        self.root.clipboard_append(qq_number)
+        self.root.update()  # 确保剪贴板更新
+        self.logger.info(f"已复制QQ群号: {qq_number}")
+        messagebox.showinfo("提示", f"QQ群号已复制: {qq_number}")
+    
+    def _rgba_color(self, hex_color, opacity):
+        """
+        将十六进制颜色转换为带透明度的格式
+        CustomTkinter 使用 hex 颜色，这里通过调整亮度模拟透明度效果
+        
+        Args:
+            hex_color: 十六进制颜色 (如 "#FFFFFF")
+            opacity: 不透明度 0.0-1.0
+            
+        Returns:
+            调整后的颜色字符串
+        """
+        # 对于白色文字在深色背景上，通过降低亮度模拟透明度
+        # 简化处理：直接返回对应灰度的白色
+        if opacity >= 1.0:
+            return "#FFFFFF"
+        elif opacity >= 0.85:
+            return "#D9D9D9"  # 约 85% 白色
+        elif opacity >= 0.6:
+            return "#999999"  # 约 60% 白色
+        else:
+            return "#808080"  # 50% 灰色
         
     def _create_content_area(self):
         """创建主内容区域"""
@@ -346,7 +512,7 @@ class MainWindowCTk:
         self.download_btn = ctk.CTkButton(
             right_btn_container,
             text="📥 下载并安装选中的DLC",
-            command=self.download_dlcs,
+            command=self.toggle_download,
             state="disabled",
             width=220,
             height=45,
@@ -594,10 +760,11 @@ class MainWindowCTk:
         # 创建DLC复选框 - 两列布局
         row_frame = None
         for idx, dlc in enumerate(self.dlc_list):
-            var = tk.BooleanVar(value=False)
-            
             # 检查是否已安装
             is_installed = dlc["key"] in installed_dlcs
+            
+            # 默认选中未安装的DLC
+            var = tk.BooleanVar(value=not is_installed)
             
             dlc_info = {
                 "var": var,
@@ -659,8 +826,11 @@ class MainWindowCTk:
         # 启用下载按钮
         self.download_btn.configure(state="normal")
         
-        # 重置全选按钮文本
-        self.select_all_btn.configure(text="全选")
+        # 如果有未安装的DLC被默认选中，更新全选按钮文本
+        if available_count > 0:
+            self.select_all_btn.configure(text="取消全选")
+        else:
+            self.select_all_btn.configure(text="全选")
         
     def toggle_select_all(self):
         """全选/取消全选（智能切换）"""
@@ -678,15 +848,29 @@ class MainWindowCTk:
         
         # 更新按钮文本
         self.select_all_btn.configure(text="取消全选" if new_state else "全选")
-        
-    def download_dlcs(self):
-        """下载并安装选中的DLC"""
+    
+    def toggle_download(self):
+        """切换下载状态：开始/暂停/继续"""
+        if not self.is_downloading:
+            # 开始下载
+            self.start_download()
+        elif self.download_paused:
+            # 继续下载
+            self.resume_download()
+        else:
+            # 暂停下载
+            self.pause_download()
+    
+    def start_download(self):
+        """开始下载"""
         selected = [d for d in self.dlc_vars if d["var"].get()]
         if not selected:
             messagebox.showinfo("提示", "请至少选择一个DLC！")
             return
         
-        self.download_btn.configure(state="disabled")
+        self.is_downloading = True
+        self.download_paused = False
+        self.download_btn.configure(text="⏸️ 暂停下载")
         self.logger.info(f"\n开始下载 {len(selected)} 个DLC...")
         
         def progress_callback(percent, downloaded, total):
@@ -734,6 +918,7 @@ class MainWindowCTk:
             
             # 初始化下载器
             downloader = DLCDownloader(progress_callback)
+            self.current_downloader = downloader  # 保存下载器实例
             
             for idx, dlc in enumerate(selected, 1):
                 try:
@@ -769,11 +954,35 @@ class MainWindowCTk:
             self.logger.info(f"\n{'='*50}")
             self.logger.info(f"下载完成！成功: {success}, 失败: {failed}")
             
+            # 重置下载状态
+            self.is_downloading = False
+            self.download_paused = False
+            self.current_downloader = None
+            
             # 重新加载DLC列表
             self.root.after(100, self.load_dlc_list)
-            self.root.after(0, lambda: self.download_btn.configure(state="normal"))
+            self.root.after(0, lambda: self.download_btn.configure(
+                text="📥 下载并安装选中的DLC", 
+                state="normal"
+            ))
         
         threading.Thread(target=download_thread, daemon=True).start()
+    
+    def pause_download(self):
+        """暂停下载"""
+        if self.current_downloader:
+            self.current_downloader.pause()
+            self.download_paused = True
+            self.download_btn.configure(text="▶️ 继续下载")
+            self.logger.info("下载已暂停")
+    
+    def resume_download(self):
+        """继续下载"""
+        if self.current_downloader:
+            self.current_downloader.resume()
+            self.download_paused = False
+            self.download_btn.configure(text="⏸️ 暂停下载")
+            self.logger.info("继续下载...")
         
     def restore_game(self):
         """还原游戏（删除所有通过本工具安装的DLC）"""
