@@ -60,6 +60,9 @@ class MainWindowCTk:
         self.is_downloading = False  # 下载状态
         self.download_paused = False  # 暂停状态
         self.current_downloader = None  # 当前下载器实例
+        # 一键解锁流程标记（用于统一完成后弹窗）
+        self._one_click_flow = False
+        self._one_click_patch_applied = False
         
         # 核心组件
         self.dlc_manager = None
@@ -909,14 +912,17 @@ class MainWindowCTk:
         should_patch = False
         if not patched_status.get('patched', False):
             ask = messagebox.askyesno("确认", 
-                "补丁未应用，是否先应用 CreamAPI 补丁？\n\n(此操作会修改游戏的 steam_api64.dll 并自动备份原始文件。若游戏目录未检测到 steam_api64.dll，程序将从补丁目录创建一个目标文件并进行处理。)")
+                "补丁未应用，是否先应用 CreamAPI 补丁？")
             should_patch = ask
+
+        # Determine DLCs that actually need download (not already installed)
+        selected_to_download = [d for d in selected if not d.get('installed', False)]
 
         # If no patch will be applied and no DLC is selected, then nothing to do
         if not should_patch and not selected:
             # 如果补丁已应用且所有DLC已安装，告诉用户已全部解锁
             all_installed = all(d.get("installed", False) for d in self.dlc_vars) if self.dlc_vars else False
-            if patched_status.get('patched', False) and all_installed:
+            if patched_status.get('patched', False) and not selected_to_download and all_installed:
                 messagebox.showinfo("提示", "已全部解锁！所有 DLC 均已安装")
             else:
                 messagebox.showinfo("提示", "请至少选择一个DLC！")
@@ -925,17 +931,25 @@ class MainWindowCTk:
         def execute_thread():
             # If not patched, ask user whether to apply patch
             try:
+                # mark one-click flow
+                self._one_click_flow = True
+                self._one_click_patch_applied = False
                 if should_patch:
                     # disable execute button while patching
                     self.root.after(0, lambda: self.execute_btn.configure(state="disabled"))
                     success, failed = self.patch_manager.apply_patch(self.dlc_list)
+                    if success > 0:
+                        self._one_click_patch_applied = True
                     # Compose notification and avoid duplicate messages when no DLC selected
                     if success > 0 and failed == 0:
-                        msg = f"补丁应用成功！已处理 {success} 个文件"
-                        if not selected:
-                            msg += "\n\n已应用补丁，没有选中 DLC，下载流程已跳过"
-                        self.root.after(0, lambda m=msg: messagebox.showinfo("成功", m))
+                        # If we're in one-click flow, defer success notification to unified success modal.
+                        if not self._one_click_flow:
+                            msg = f"补丁应用成功！已处理 {success} 个文件"
+                            if not selected:
+                                msg += "\n\n已应用补丁，没有选中 DLC，下载流程已跳过"
+                            self.root.after(0, lambda m=msg: messagebox.showinfo("成功", m))
                     elif success > 0:
+                        # Partial success: still show the warning even in one-click flow.
                         msg = f"补丁应用部分成功，成功: {success}, 失败: {failed}"
                         if not selected:
                             msg += "\n\n已应用补丁，没有选中 DLC，下载流程已跳过"
@@ -945,13 +959,18 @@ class MainWindowCTk:
                     # Re-check patch status
                     self.root.after(0, self._check_patch_status)
                 # Start downloads after patching or if already patched
-                if selected:
+                if selected_to_download:
+                    # use one-click flag so download completion shows unified success
+                    self._one_click_flow = True
                     self.root.after(0, lambda: self.start_download())
                 else:
                     # If no DLC selected:
-                    # If we just applied the patch and it succeeded we already informed the user
-                    # (we append the "下载流程已跳过" note to the success message). Otherwise do nothing.
-                    pass
+                    # If we just applied the patch and it succeeded then show unified success modal
+                    if self._one_click_patch_applied:
+                        self.root.after(0, lambda: messagebox.showinfo("成功", "解锁成功！"))
+                        # reset flags
+                        self._one_click_patch_applied = False
+                        self._one_click_flow = False
             finally:
                 # Ensure execute button enabled
                 self.root.after(0, lambda: self.execute_btn.configure(state="normal"))
@@ -1051,10 +1070,16 @@ class MainWindowCTk:
             self.logger.info(f"\n{'='*50}")
             self.logger.info(f"下载完成！成功: {success}, 失败: {failed}")
             
+            # 当这是从一键解锁流发起，并且有成功项，显示统一成功弹窗
+            if (self._one_click_flow) and success > 0:
+                self.root.after(0, lambda: messagebox.showinfo("成功", "解锁成功！"))
             # 重置下载状态
             self.is_downloading = False
             self.download_paused = False
             self.current_downloader = None
+            # Clear one-click flow flag after showing any final modal
+            if self._one_click_flow:
+                self._one_click_flow = False
             
             # 重新加载DLC列表
             self.root.after(100, self.load_dlc_list)
@@ -1191,10 +1216,8 @@ class MainWindowCTk:
             messagebox.showwarning("警告", "请先选择游戏路径！")
             return
         
-        result = messagebox.askyesno("确认", 
-            "即将移除 CreamAPI 补丁\n"
-            "这将恢复游戏的原始文件\n\n"
-            "是否继续？")
+        result = messagebox.askyesno("确认",
+            "即将移除 CreamAPI 补丁，是否继续？")
         
         if not result:
             return
@@ -1207,9 +1230,7 @@ class MainWindowCTk:
                 success, failed = self.patch_manager.remove_patch()
                 
                 if success > 0 and failed == 0:
-                    self.root.after(0, lambda: messagebox.showinfo("成功", 
-                        f"补丁移除成功！\n"
-                        f"已还原 {success} 个文件"))
+                    self.root.after(0, lambda: messagebox.showinfo("成功", "补丁移除成功！"))
                 elif success > 0:
                     self.root.after(0, lambda: messagebox.showwarning("部分成功", 
                         f"补丁移除部分成功\n"
