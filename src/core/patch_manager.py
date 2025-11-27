@@ -163,6 +163,11 @@ class PatchManager:
         Returns:
             str: 配置文件内容
         """
+        import requests
+        import json
+        from pathlib import Path
+        from ..config import REQUEST_TIMEOUT
+        
         # 读取模板
         template_path = os.path.join(self.patch_dir, 'cream_api.ini')
         
@@ -172,13 +177,60 @@ class PatchManager:
         with open(template_path, 'r', encoding='utf-8') as f:
             template = f.read()
         
-        # 生成DLC列表文本
+        # 尝试从本地缓存或服务器获取 Steam DLC ID 映射
         dlc_lines = []
-        for dlc in dlc_list:
-            # 从 dlc key 中提取数字ID（如果有的话）
-            # 例如: dlc001_plantoids -> 使用 name
-            # 实际的 Steam DLC ID 需要另外维护，这里先用名称
-            dlc_lines.append(f"; {dlc['name']}")
+        
+        # 1. 优先尝试从服务器HTTP获取 appinfo 文件
+        appinfo = None
+        try:
+            appinfo_url = "http://47.100.2.190/appinfo/stellaris_appinfo.json"
+            self.logger.info(f"正在从服务器获取 Steam DLC ID 映射...")
+            response = requests.get(appinfo_url, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
+            appinfo = response.json()
+            # 保存到本地缓存
+            cache_path = Path(__file__).parent.parent.parent / 'stellaris_appinfo.json'
+            with open(cache_path, 'w', encoding='utf-8') as f:
+                json.dump(appinfo, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            self.logger.warning(f"从服务器获取失败: {e}")
+            # 2. 如果HTTP失败，尝试读取本地缓存的 appinfo 文件
+            local_appinfo_files = [
+                'server_stellaris_appinfo.json',
+                'stellaris_appinfo.json'
+            ]
+            for filename in local_appinfo_files:
+                local_path = Path(__file__).parent.parent.parent / filename
+                if local_path.exists():
+                    try:
+                        with open(local_path, 'r', encoding='utf-8') as f:
+                            appinfo = json.load(f)
+                            self.logger.info(f"使用本地缓存的 AppInfo: {filename}")
+                            break
+                    except Exception as e2:
+                        self.logger.warning(f"读取本地 {filename} 失败: {e2}")
+        
+        # 3. 生成 DLC 配置
+        try:
+            if appinfo and 'dlcs' in appinfo:
+                for dlc in appinfo['dlcs']:
+                    dlc_id = dlc.get('id', '')
+                    dlc_name = dlc.get('name', '')
+                    if dlc_id and dlc_name:
+                        dlc_lines.append(f"{dlc_id} = {dlc_name}")
+                
+                self.logger.success(f"已加载 {len(dlc_lines)} 个DLC的Steam ID映射")
+            else:
+                raise Exception("未找到有效的 AppInfo 数据")
+                
+        except Exception as e:
+            # 如果所有方式都失败，使用注释模式
+            self.logger.warning(f"无法获取Steam DLC ID映射: {e}")
+            self.logger.warning("将使用注释模式生成配置文件")
+            self.logger.warning("请使用服务器管理工具的功能6下载 AppInfo 到本地")
+            
+            for dlc in dlc_list:
+                dlc_lines.append(f"; {dlc['name']}")
         
         dlc_text = '\n'.join(dlc_lines)
         

@@ -3,5 +3,8 @@
 # HTTP请求库（用于下载DLC和访问服务器API）
 requests>=2.28.0
 
+# SSH连接库（用于服务器管理）
+paramiko>=3.0.0
+
 # 现代化UI框架
 customtkinter>=5.2.0

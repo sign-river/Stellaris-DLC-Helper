@@ -54,6 +54,7 @@ class MainWindowCTk:
         # 状态变量
         self.game_path = ""
         self.dlc_list = []
+        self.dlc_vars = []  # 存储DLC变量
         self.dlc_checkboxes = []  # 存储复选框对象
         self.is_downloading = False  # 下载状态
         self.download_paused = False  # 暂停状态
@@ -548,7 +549,7 @@ class MainWindowCTk:
         # 日志文本框
         self.log_text = ctk.CTkTextbox(
             log_frame,
-            height=120,  # 从60提高到180，增加日志显示空间
+            height=150,  # 从60提高到180，增加日志显示空间
             font=ctk.CTkFont(family="Consolas", size=11),
             wrap="word",
             corner_radius=8,

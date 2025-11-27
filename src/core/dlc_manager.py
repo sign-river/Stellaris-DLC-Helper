@@ -82,7 +82,12 @@ class DLCManager:
             for item in os.listdir(dlc_folder):
                 item_path = os.path.join(dlc_folder, item)
                 if os.path.isdir(item_path):
-                    installed.add(item)
+                    # 提取DLC键名（如 dlc001_xxx -> dlc001）
+                    # 支持格式：dlc001, dlc001_name, dlc001_name_xxx
+                    if item.startswith('dlc'):
+                        # 取下划线前的部分作为键名
+                        key = item.split('_')[0]
+                        installed.add(key)
             
             return installed
         except Exception:
