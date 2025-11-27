@@ -144,9 +144,8 @@ class MainWindowCTk:
         self.qq_entry.configure(state="readonly")  # 只读但可选中
         self.qq_entry.pack(side="left", padx=(0, 20))
         
-        # 绑定双击和右键事件
-        self.qq_entry.bind("<Double-Button-1>", lambda e: self._copy_qq_to_clipboard())
-        self.qq_entry.bind("<Button-3>", lambda e: self._copy_qq_to_clipboard())
+        # 绑定单击事件
+        self.qq_entry.bind("<Button-1>", lambda e: self._copy_qq_to_clipboard())
         
         # GitHub图标按钮
         try:
@@ -834,16 +833,20 @@ class MainWindowCTk:
         
     def toggle_select_all(self):
         """全选/取消全选（智能切换）"""
+        # 检查是否有可选的DLC（未安装的）
+        available_dlcs = [dlc for dlc in self.dlc_vars if not dlc.get("installed", False)]
+        
+        # 如果没有可选项，直接返回
+        if not available_dlcs:
+            return
+        
         # 检查当前是否有选中项
-        has_selected = any(dlc["var"].get() for dlc in self.dlc_vars)
+        has_selected = any(dlc["var"].get() for dlc in available_dlcs)
         
         # 如果有选中项，则取消全选；否则全选
         new_state = not has_selected
         
-        for dlc in self.dlc_vars:
-            # 跳过已安装的DLC（它们是禁用状态）
-            if dlc.get("installed", False):
-                continue
+        for dlc in available_dlcs:
             dlc["var"].set(new_state)
         
         # 更新按钮文本
