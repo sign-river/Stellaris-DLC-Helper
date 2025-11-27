@@ -9,6 +9,10 @@ import os
 import shutil
 from ..utils import PathUtils, Logger
 
+# 常量定义（仅 64 位）
+STEAM_API64_DLL = 'steam_api64.dll'
+STEAM_API64_O_DLL = 'steam_api64_o.dll'
+
 
 class PatchManager:
     """补丁管理器类"""
@@ -31,18 +35,16 @@ class PatchManager:
         base_dir = PathUtils.get_base_dir()
         return os.path.join(base_dir, "patches")
     
-    def scan_steam_api_locations(self):
+    def scan_steam_api64_locations(self):
         """
-        递归扫描游戏目录，查找所有 steam_api.dll 位置
+        递归扫描游戏目录，查找所有 steam_api64.dll 位置（仅 64 位）
         
         Returns:
             dict: {
-                'steam_api': [路径列表],
                 'steam_api64': [路径列表]
             }
         """
         locations = {
-            'steam_api': [],
             'steam_api64': []
         }
         
@@ -50,18 +52,13 @@ class PatchManager:
         
         try:
             for root, dirs, files in os.walk(self.game_path):
-                if 'steam_api.dll' in files:
-                    dll_path = os.path.join(root, 'steam_api.dll')
-                    locations['steam_api'].append(dll_path)
-                    self.logger.info(f"找到 steam_api.dll: {dll_path}")
-                
-                if 'steam_api64.dll' in files:
-                    dll_path = os.path.join(root, 'steam_api64.dll')
+                if STEAM_API64_DLL in files:
+                    dll_path = os.path.join(root, STEAM_API64_DLL)
                     locations['steam_api64'].append(dll_path)
-                    self.logger.info(f"找到 steam_api64.dll: {dll_path}")
+                    self.logger.info(f"找到 {STEAM_API64_DLL}: {dll_path}")
             
-            total = len(locations['steam_api']) + len(locations['steam_api64'])
-            self.logger.info(f"扫描完成，共找到 {total} 个DLL文件")
+            total = len(locations['steam_api64'])
+            self.logger.info(f"扫描完成，共找到 {total} 个 DLL 文件（仅 64 位）")
             
             return locations
             
@@ -69,17 +66,17 @@ class PatchManager:
             self.logger.error(f"扫描目录失败: {str(e)}")
             raise
     
-    def backup_dll(self, dll_path):
+    def backup_steam_api64_dll(self, dll_path):
         """
-        备份原始DLL文件
+        备份原始 steam_api64.dll 文件
         
         Args:
-            dll_path: DLL文件路径
+            dll_path: steam_api64.dll 文件路径
             
         Returns:
-            str: 备份文件路径
+            str: 备份文件路径 (steam_api64_o.dll)
         """
-        # 生成备份文件名 (steam_api.dll -> steam_api_o.dll)
+        # 生成备份文件名 (steam_api64.dll -> steam_api64_o.dll)
         dir_name = os.path.dirname(dll_path)
         file_name = os.path.basename(dll_path)
         backup_name = file_name.replace('.dll', '_o.dll')
@@ -99,12 +96,12 @@ class PatchManager:
             self.logger.error(f"备份失败: {str(e)}")
             raise
     
-    def restore_dll(self, dll_path):
+    def restore_steam_api64_dll(self, dll_path):
         """
-        还原DLL文件
+        还原 steam_api64.dll 文件（从 local backup 移动 back）
         
         Args:
-            dll_path: DLL文件路径
+            dll_path: steam_api64.dll 文件路径
             
         Returns:
             bool: 是否成功
@@ -133,13 +130,13 @@ class PatchManager:
             self.logger.error(f"还原失败: {str(e)}")
             return False
     
-    def copy_patch_dll(self, dll_name, target_path):
+    def copy_patch_steam_api64_dll(self, dll_name, target_path):
         """
-        复制补丁DLL到目标位置
+        复制补丁 steam_api64.dll 到目标位置
         
         Args:
-            dll_name: DLL文件名 (steam_api.dll 或 steam_api64.dll)
-            target_path: 目标路径
+            dll_name: 补丁 DLL 文件名（应为 steam_api64.dll）
+            target_path: 目标覆盖路径
         """
         source_path = os.path.join(self.patch_dir, dll_name)
         
@@ -257,27 +254,32 @@ class PatchManager:
         
         try:
             # 1. 扫描DLL位置
-            locations = self.scan_steam_api_locations()
+            locations = self.scan_steam_api64_locations()
+
+            # 如果没有找到任何目标 DLL，尝试使用 patches 目录下的 steam_api64_o.dll
+            if not locations['steam_api64']:
+                fallback_o = os.path.join(self.patch_dir, STEAM_API64_O_DLL)
+                if os.path.exists(fallback_o):
+                    # 将其复制到游戏根目录作为 steam_api64.dll
+                    target_path = os.path.join(self.game_path, STEAM_API64_DLL)
+                    try:
+                        shutil.copy2(fallback_o, target_path)
+                        locations['steam_api64'].append(target_path)
+                        self.logger.info(f"未在游戏目录发现 steam_api64.dll，已从补丁目录复制: {target_path}")
+                    except Exception as e:
+                        self.logger.error(f"尝试使用补丁目录中的 steam_api64_o.dll 创建目标文件失败: {e}")
+                        return 0, 1
+                else:
+                    self.logger.error("未找到任何 steam_api64.dll 文件！且补丁目录中不存在 steam_api64_o.dll")
+                    return 0, 1
             
-            if not locations['steam_api'] and not locations['steam_api64']:
-                self.logger.error("未找到任何 steam_api.dll 文件！")
-                return 0, 1
-            
-            # 2. 备份并替换 steam_api.dll
-            for dll_path in locations['steam_api']:
-                try:
-                    self.backup_dll(dll_path)
-                    self.copy_patch_dll('steam_api.dll', dll_path)
-                    success += 1
-                except Exception as e:
-                    self.logger.error(f"处理 steam_api.dll 失败: {str(e)}")
-                    failed += 1
+            # 2. 备份并替换 64 位 DLL
             
             # 3. 备份并替换 steam_api64.dll
             for dll_path in locations['steam_api64']:
                 try:
-                    self.backup_dll(dll_path)
-                    self.copy_patch_dll('steam_api64.dll', dll_path)
+                    self.backup_steam_api64_dll(dll_path)
+                    self.copy_patch_steam_api64_dll(STEAM_API64_DLL, dll_path)
                     success += 1
                 except Exception as e:
                     self.logger.error(f"处理 steam_api64.dll 失败: {str(e)}")
@@ -321,21 +323,38 @@ class PatchManager:
         
         try:
             # 1. 扫描DLL位置
-            locations = self.scan_steam_api_locations()
+            locations = self.scan_steam_api64_locations()
             
-            # 2. 还原 steam_api.dll
-            for dll_path in locations['steam_api']:
-                if self.restore_dll(dll_path):
-                    success += 1
-                else:
-                    failed += 1
-            
-            # 3. 还原 steam_api64.dll
+            # 2. 还原 steam_api64.dll
             for dll_path in locations['steam_api64']:
-                if self.restore_dll(dll_path):
-                    success += 1
+                dir_name = os.path.dirname(dll_path)
+                file_name = os.path.basename(dll_path)
+                backup_name = file_name.replace('.dll', '_o.dll')
+                backup_path = os.path.join(dir_name, backup_name)
+
+                # 优先还原本地备份
+                if os.path.exists(backup_path):
+                    if self.restore_steam_api64_dll(dll_path):
+                        success += 1
+                    else:
+                        failed += 1
                 else:
-                    failed += 1
+                    # 如果本地备份不存在，尝试使用补丁目录下的 steam_api64_o.dll 恢复
+                    fallback_o = os.path.join(self.patch_dir, 'steam_api64_o.dll')
+                    if os.path.exists(fallback_o):
+                        try:
+                            # 删除当下的补丁文件（如果存在）
+                            if os.path.exists(dll_path):
+                                os.remove(dll_path)
+                            shutil.copy2(fallback_o, dll_path)
+                            self.logger.success(f"使用补丁目录中的 steam_api64_o.dll 恢复: {dll_path}")
+                            success += 1
+                        except Exception as e:
+                            self.logger.error(f"使用补丁目录中的 steam_api64_o.dll 恢复失败: {str(e)}")
+                            failed += 1
+                    else:
+                        self.logger.warning(f"未找到备份文件 {backup_name}，且补丁目录中没有 steam_api64_o.dll，跳过: {dll_path}")
+                        failed += 1
             
             # 4. 删除配置文件
             config_path = os.path.join(self.game_path, 'cream_api.ini')
@@ -366,10 +385,10 @@ class PatchManager:
                 'config_exists': bool  # 配置文件是否存在
             }
         """
-        # 检查备份文件
+        # 检查备份文件（仅 64 位）
         backup_exists = False
         for root, dirs, files in os.walk(self.game_path):
-            if 'steam_api_o.dll' in files or 'steam_api64_o.dll' in files:
+            if STEAM_API64_O_DLL in files:
                 backup_exists = True
                 break
         

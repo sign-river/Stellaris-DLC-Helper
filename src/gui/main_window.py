@@ -909,7 +909,7 @@ class MainWindowCTk:
         should_patch = False
         if not patched_status.get('patched', False):
             ask = messagebox.askyesno("确认", 
-                "补丁未应用，是否先应用 CreamAPI 补丁？\n\n(此操作会修改游戏的 steam_api.dll 并自动备份原始文件)")
+                "补丁未应用，是否先应用 CreamAPI 补丁？\n\n(此操作会修改游戏的 steam_api64.dll 并自动备份原始文件。若游戏目录未检测到 steam_api64.dll，程序将从补丁目录创建一个目标文件并进行处理。)")
             should_patch = ask
 
         # If no patch will be applied and no DLC is selected, then nothing to do
@@ -1146,8 +1146,8 @@ class MainWindowCTk:
         
         result = messagebox.askyesno("确认", 
             "即将应用 CreamAPI 补丁\n"
-            "这将修改游戏的 steam_api.dll 文件\n"
-            "原始文件会自动备份\n\n"
+            "这将修改游戏的 steam_api64.dll 文件\n"
+            "原始文件会自动备份。若游戏目录中缺失该文件，程序将尝试从补丁目录中创建一个目标文件以便处理。\n\n"
             "是否继续？")
         
         if not result:

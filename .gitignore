@@ -62,3 +62,4 @@ server_stellaris_appinfo.json
 
 # 测试文件
 test_*.py
+test_game*/
