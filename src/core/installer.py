@@ -19,7 +19,7 @@ class DLCInstaller:
         """
         初始化安装器
         
-        Args:
+        参数:
             game_path: 游戏路径
         """
         self.game_path = game_path
@@ -29,15 +29,15 @@ class DLCInstaller:
         """
         安装DLC
         
-        Args:
+        参数:
             zip_path: DLC压缩包路径
             dlc_key: DLC键名
             dlc_name: DLC名称
             
-        Returns:
+            返回:
             bool: 是否成功
             
-        Raises:
+        抛出:
             Exception: 安装失败
         """
         try:
@@ -70,10 +70,10 @@ class DLCInstaller:
         """
         卸载DLC
         
-        Args:
+        参数:
             dlc_key: DLC键名
             
-        Returns:
+        返回:
             bool: 是否成功
         """
         try:

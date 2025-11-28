@@ -22,7 +22,7 @@ class SteamUtils:
         """
         从注册表获取 Steam 安装路径
         
-        Returns:
+        返回:
             Steam 安装路径，如果未找到返回 None
         """
         try:
@@ -60,10 +60,10 @@ class SteamUtils:
         """
         简单解析 VDF 文件（Valve Data Format）
         
-        Args:
+        参数:
             content: VDF 文件内容
             
-        Returns:
+        返回:
             解析后的字典
         """
         result = {}
@@ -88,10 +88,10 @@ class SteamUtils:
         """
         获取所有 Steam 游戏库文件夹
         
-        Args:
+        参数:
             steam_path: Steam 安装路径
             
-        Returns:
+        返回:
             游戏库路径列表
         """
         libraries = [steam_path]  # 默认库就是 Steam 安装目录
@@ -125,11 +125,11 @@ class SteamUtils:
         """
         在指定游戏库中查找游戏
         
-        Args:
+        参数:
             library_path: 游戏库路径
             appid: 游戏 AppID
             
-        Returns:
+        返回:
             游戏安装路径，如果未找到返回 None
         """
         steamapps_path = os.path.join(library_path, "steamapps")
@@ -167,7 +167,7 @@ class SteamUtils:
         """
         自动检测 Stellaris 游戏路径
         
-        Returns:
+        返回:
             Stellaris 游戏路径，如果未找到返回 None
         """
         # 1. 获取 Steam 路径

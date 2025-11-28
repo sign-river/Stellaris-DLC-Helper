@@ -42,10 +42,10 @@ class PathUtils:
         """
         获取DLC缓存文件路径
         
-        Args:
+        参数:
             dlc_key: DLC键名
             
-        Returns:
+        返回:
             str: 缓存文件完整路径
         """
         return os.path.join(PathUtils.get_dlc_cache_dir(), f"{dlc_key}.zip")
@@ -62,10 +62,10 @@ class PathUtils:
         """
         获取操作日志文件路径
         
-        Args:
+        参数:
             game_path: 游戏路径
             
-        Returns:
+        返回:
             str: 日志文件路径
         """
         path_hash = hashlib.md5(game_path.encode()).hexdigest()[:12]
@@ -76,10 +76,10 @@ class PathUtils:
         """
         验证是否是有效的Stellaris游戏目录
         
-        Args:
+        参数:
             path: 游戏路径
             
-        Returns:
+        返回:
             bool: 是否有效
         """
         return os.path.exists(os.path.join(path, "stellaris.exe"))
@@ -89,10 +89,10 @@ class PathUtils:
         """
         获取游戏DLC文件夹路径
         
-        Args:
+        参数:
             game_path: 游戏路径
             
-        Returns:
+        返回:
             str: DLC文件夹路径
         """
         return os.path.join(game_path, "dlc")

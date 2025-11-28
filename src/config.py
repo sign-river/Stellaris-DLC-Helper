@@ -11,7 +11,7 @@ from .config_loader import get_config
 # 版本号
 VERSION = get_config("version", default="1.0.0")
 
-# Stellaris AppID
+# Stellaris 游戏 AppID
 STELLARIS_APP_ID = get_config("stellaris_app_id", default="281990")
 
 # DLC 服务器配置

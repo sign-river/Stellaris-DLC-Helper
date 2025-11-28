@@ -36,7 +36,7 @@ class ServerConfig:
         获取服务器信息（IP、用户名、密码）
         从 config.json 的 server_management 配置中读取
         
-        Returns:
+        返回:
             (ip, username, password)
         """
         # 获取配置
@@ -194,7 +194,7 @@ class ServerManager:
         """
         列出服务器上的所有DLC
         
-        Returns:
+        返回:
             DLC列表，格式: [{"name": "文件名", "size": 大小, "time": 时间}, ...]
         """
         if not self.sftp:
@@ -512,7 +512,7 @@ class ServerManager:
         - 多个: 1,3,5
         - 组合: 1,3,5-10,12
         
-        Args:
+        参数:
             input_str: 用户输入
             max_index: 最大序号
             

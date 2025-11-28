@@ -12,8 +12,6 @@ from ..utils import PathUtils, Logger
 # 常量定义（仅 64 位）
 STEAM_API64_DLL = 'steam_api64.dll'
 STEAM_API64_O_DLL = 'steam_api64_o.dll'
-# NOTE: This module is intentionally 64-bit only. Re-introducing 32-bit support requires
-# verifying all scan/backup/restore behaviour and testing on x86 installations.
 
 
 class PatchManager:
@@ -23,7 +21,7 @@ class PatchManager:
         """
         初始化补丁管理器
         
-        Args:
+        参数:
             game_path: 游戏路径
             logger: 日志记录器
         """
@@ -41,13 +39,13 @@ class PatchManager:
         """
         递归扫描游戏目录，查找所有 steam_api64.dll 位置（仅 64 位）
         
-        Returns:
+        返回:
             dict: {
                 'steam_api64': [路径列表]
             }
         """
-        # locations stores discovered paths to steam_api64.dll under the game root.
-        # It's a mapping keyed by 'steam_api64' with a list of absolute file paths.
+        # locations 存储在游戏根目录下发现的 steam_api64.dll 的路径列表。
+        # 它是一个以 'steam_api64' 为键、值为绝对路径列表的映射。
         locations = {
             'steam_api64': []
         }
@@ -74,10 +72,10 @@ class PatchManager:
         """
         备份原始 steam_api64.dll 文件
         
-        Args:
+        参数:
             dll_path: steam_api64.dll 文件路径
             
-        Returns:
+        返回:
             str: 备份文件路径 (steam_api64_o.dll)
         """
         # 生成备份文件名 (steam_api64.dll -> steam_api64_o.dll)
@@ -107,10 +105,10 @@ class PatchManager:
         """
         还原 steam_api64.dll 文件（从 local backup 移动 back）
         
-        Args:
+        参数:
             dll_path: steam_api64.dll 文件路径
             
-        Returns:
+        返回:
             bool: 是否成功
         """
         dir_name = os.path.dirname(dll_path)
@@ -141,7 +139,7 @@ class PatchManager:
         """
         复制补丁 steam_api64.dll 到目标位置
         
-        Args:
+        参数:
             dll_name: 补丁 DLL 文件名（应为 steam_api64.dll）
             target_path: 目标覆盖路径
         """
@@ -163,10 +161,10 @@ class PatchManager:
         """
         生成 cream_api.ini 配置文件
         
-        Args:
+        参数:
             dlc_list: DLC列表，每项包含 key 和 name
             
-        Returns:
+        返回:
             str: 配置文件内容
         """
         import requests
@@ -249,10 +247,10 @@ class PatchManager:
         """
         应用补丁
         
-        Args:
+        参数:
             dlc_list: DLC列表
             
-        Returns:
+        返回:
             tuple: (成功数量, 失败数量)
         """
         self.logger.info("\n" + "="*50)
@@ -320,7 +318,7 @@ class PatchManager:
         """
         还原补丁（移除补丁并恢复原始文件）
         
-        Returns:
+        返回:
             tuple: (成功数量, 失败数量)
         """
         self.logger.info("\n" + "="*50)
@@ -387,7 +385,7 @@ class PatchManager:
         """
         检查补丁状态
         
-        Returns:
+        返回:
             dict: {
                 'patched': bool,  # 是否已打补丁
                 'backup_exists': bool,  # 备份是否存在

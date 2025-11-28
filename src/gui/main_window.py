@@ -29,7 +29,7 @@ class MainWindowCTk:
         """
         初始化主窗口
         
-        Args:
+        参数:
             root: CustomTkinter根窗口
         """
         self.root = root
@@ -91,7 +91,7 @@ class MainWindowCTk:
         # 自动检测游戏路径并加载DLC列表
         self.root.after(100, self.auto_detect_and_load)
         
-        # Attach GUI logging handler to root logger so standard logging gets forwarded to GUI
+        # 将 GUI 日志处理器附加到根日志记录器，以便标准日志转发到 GUI
         try:
             import logging
             handler = self.logger.get_logging_handler()
@@ -100,15 +100,15 @@ class MainWindowCTk:
             pass
 
     def _open_error_docs(self, event=None):
-        """Open the online error/debugging doc in the user's default browser.
+        """在用户默认浏览器中打开在线错误/调试文档。
 
-        This is used by the header link '遇到报错？' and should not block the UI thread.
+        此函数由标题栏的 “遇到报错？” 链接调用，不应阻塞 UI 线程。
         """
         try:
             import webbrowser
             webbrowser.open("https://www.kdocs.cn/l/cdVvg4OgHMzj", new=2)
         except Exception:
-            # If we cannot open a browser, log and ignore (UI should not crash)
+            # 如果无法打开浏览器，记录日志并忽略（避免 UI 崩溃）
             self.logger.error("无法打开帮助文档链接")
         
     def _create_header(self):
@@ -306,11 +306,11 @@ class MainWindowCTk:
         将十六进制颜色转换为带透明度的格式
         CustomTkinter 使用 hex 颜色，这里通过调整亮度模拟透明度效果
         
-        Args:
+        参数:
             hex_color: 十六进制颜色 (如 "#FFFFFF")
             opacity: 不透明度 0.0-1.0
             
-        Returns:
+        返回:
             调整后的颜色字符串
         """
         # 对于白色文字在深色背景上，通过降低亮度模拟透明度
@@ -935,36 +935,36 @@ class MainWindowCTk:
 
     def start_execute(self):
         """开始执行：先应用补丁（如有需要），再下载选中的DLC"""
-        # Ensure game path is set
+        # 确保游戏路径已设置
         if not self.game_path:
             messagebox.showwarning("警告", "请先选择游戏路径！")
             return
 
-        # Ensure DLC list loaded
+        # 确保 DLC 列表已加载
         if not self.dlc_list:
             messagebox.showinfo("提示", "正在加载DLC列表，请稍候...")
             self.load_dlc_list()
             messagebox.showinfo("提示", "请在DLC列表加载完成后，再次点击执行按钮")
             return
 
-        # Do not prematurely require selection: if patch isn't applied we should allow patching even
-        # when no DLC are selected (user intent is to only apply patch).
+        # 不要过早要求选择：如果补丁尚未应用，应允许只执行补丁操作
+        # 当未选择任何 DLC 时（用户意图仅应用补丁）
         selected = [d for d in self.dlc_vars if d["var"].get()]
 
-        # Check patch status
+        # 检查补丁状态
         try:
             patched_status = self.patch_manager.check_patch_status()
         except Exception:
             patched_status = {'patched': False}
 
-        # Decide to apply patch automatically if not patched (no confirmation dialog)
+        # 如果未打补丁则决定自动应用补丁（不弹确认对话）
         should_patch = not patched_status.get('patched', False)
 
-        # Determine which selected DLC actually require downloading (i.e. not already installed).
-        # This filters out already-installed DLC so we only attempt to download missing items.
+        # 确定被选中且实际需要下载的 DLC（即尚未安装）
+        # 过滤掉已安装的 DLC，只尝试下载缺失项
         selected_to_download = [d for d in selected if not d.get('installed', False)]
 
-        # If no patch will be applied and no DLC is selected, then nothing to do
+        # 如果既不应用补丁且未选择任何 DLC，则无需执行任何操作
         if not should_patch and not selected:
             # 如果补丁已应用且所有DLC已安装，告诉用户已全部解锁
             all_installed = all(d.get("installed", False) for d in self.dlc_vars) if self.dlc_vars else False
@@ -975,52 +975,52 @@ class MainWindowCTk:
             return
 
         def execute_thread():
-            # If not patched, ask user whether to apply patch
+            # 如果未打补丁，询问用户是否应用补丁
             try:
                 # 使用标识指示该执行由“一键解锁”触发，
                 # 以便在流程结束时统一显示成功弹窗（和避免重复通知）
                 self._one_click_flow = True
                 self._one_click_patch_applied = False
                 if should_patch:
-                    # disable execute button while patching
+                    # 在打补丁时禁用执行按钮
                     self.root.after(0, lambda: self.execute_btn.configure(state="disabled"))
                     success, failed = self.patch_manager.apply_patch(self.dlc_list)
                     if success > 0:
                         # 记录补丁是否在本次一键解锁流程内被成功应用（用于最终统一弹窗的判断）
                         self._one_click_patch_applied = True
-                    # Compose notification and avoid duplicate messages when no DLC selected
+                    # 组合通知并在未选择 DLC 时避免重复消息
                     if success > 0 and failed == 0:
-                        # If we're in one-click flow, defer success notification to unified success modal.
+                        # 如果处于一键流程，延迟成功通知并在统一成功模态中展示
                         if not self._one_click_flow:
                             msg = f"补丁应用成功！已处理 {success} 个文件"
                             if not selected:
                                 msg += "\n\n已应用补丁，没有选中 DLC，下载流程已跳过"
                             self.root.after(0, lambda m=msg: messagebox.showinfo("成功", m))
                     elif success > 0:
-                        # Partial success: still show the warning even in one-click flow.
+                        # 部分成功：即使在一键流程中也显示警告
                         msg = f"补丁应用部分成功，成功: {success}, 失败: {failed}"
                         if not selected:
                             msg += "\n\n已应用补丁，没有选中 DLC，下载流程已跳过"
                         self.root.after(0, lambda m=msg: messagebox.showwarning("部分成功", m))
                     else:
                         self.root.after(0, lambda: messagebox.showwarning("提示", "补丁应用失败或无变更，请查看日志"))
-                    # Re-check patch status
+                    # 重新检查补丁状态
                     self.root.after(0, self._check_patch_status)
-                # Start downloads after patching or if already patched
+                # 在打补丁后或已打补丁情况下开始下载
                 if selected_to_download:
-                    # use one-click flag so download completion shows unified success
+                    # 使用一键标志以便在下载完成时显示统一成功弹窗
                     self._one_click_flow = True
                     self.root.after(0, lambda: self.start_download())
                 else:
-                    # If no DLC selected:
-                    # If we just applied the patch and it succeeded then show unified success modal
+                    # 如果未选择 DLC：
+                    # 如果我们刚刚应用了补丁且成功，则显示统一成功模态
                     if self._one_click_patch_applied:
                         self.root.after(0, lambda: messagebox.showinfo("成功", "解锁成功！"))
-                        # reset flags
+                        # 重置标志
                         self._one_click_patch_applied = False
                         self._one_click_flow = False
             finally:
-                # Ensure execute button enabled
+                # 确保执行按钮启用
                 self.root.after(0, lambda: self.execute_btn.configure(state="normal"))
 
         threading.Thread(target=execute_thread, daemon=True).start()
@@ -1059,7 +1059,7 @@ class MainWindowCTk:
                 if current_time - progress_callback.last_speed_update >= 2.0:
                     if time_diff > 0:
                         bytes_diff = downloaded - progress_callback.last_downloaded
-                        speed_mbps = (bytes_diff / time_diff) / (1024 * 1024)  # MB/s
+                        speed_mbps = (bytes_diff / time_diff) / (1024 * 1024)  # MB/秒
                         
                         # 更新速度显示（只显示速度，不显示百分比）
                         self.root.after(0, lambda s=speed_mbps: self.speed_label.configure(text=f"{s:.2f} MB/s"))
@@ -1118,17 +1118,17 @@ class MainWindowCTk:
             self.logger.info(f"\n{'='*50}")
             self.logger.info(f"下载完成！成功: {success}, 失败: {failed}")
             
-            # Unified final modal for one-click flow:
+            # 一键流程的统一最终模态：
             # - If downloads succeeded (success>0) during one-click flow, show a unified success message.
             # - This complements the patch-success path which, if patch was applied but no download occurred,
-            #   will have already triggered a unified success message earlier in start_execute().
+            #   已在 start_execute() 中触发过统一成功消息。
             if (self._one_click_flow) and success > 0:
                 self.root.after(0, lambda: messagebox.showinfo("成功", "解锁成功！"))
             # 重置下载状态
             self.is_downloading = False
             self.download_paused = False
             self.current_downloader = None
-            # Clear one-click flow flag after showing any final modal
+            # 在展示最终模态后清除一键流程标志
             if self._one_click_flow:
                 self._one_click_flow = False
             
@@ -1194,7 +1194,7 @@ class MainWindowCTk:
             status = self.patch_manager.check_patch_status()
             
             if status['patched']:
-                # If patched, execute_btn should allow downloads (no patch action)
+                # 若已打补丁，execute_btn 应允许下载（无补丁操作）
                 self.execute_btn.configure(text="🔓 一键解锁", state="normal")
                 self.remove_patch_btn.configure(state="normal")
                 self.logger.info("检测到已应用补丁")

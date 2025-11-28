@@ -16,7 +16,7 @@ class Logger:
         """
         初始化日志管理器
         
-        Args:
+            参数:
             log_widget: Tkinter ScrolledText 组件
         """
         self.log_widget = log_widget
@@ -29,7 +29,7 @@ class Logger:
         """
         写入日志
         
-        Args:
+            参数:
             message: 日志消息
             level: 日志级别 (INFO, WARNING, ERROR)
         """
@@ -55,10 +55,10 @@ class Logger:
         self.log(f"✓ {message}", "SUCCESS")
 
     def get_logging_handler(self) -> Handler:
-        """Create a logging.Handler that forwards logging records to this GUI Logger.
+        """创建一个将日志记录转发到 GUI Logger 的 logging.Handler。
 
-        The returned handler can be attached to the Python logging system, so
-        that logging.info / warning / error messages are shown in the GUI log widget.
+        返回的处理器可以附加到 Python 的日志系统，使得 logging.info/warning/error
+        等日志消息会显示在 GUI 日志组件中。
         """
         class GUIHandler(Handler):
             def __init__(self, gui_logger: Logger):
@@ -78,7 +78,7 @@ class Logger:
                     else:
                         self.gui_logger.log(msg, "DEBUG")
                 except Exception:
-                    # Safely ignore GUI logging errors to prevent application crashes
+                    # 安全地忽略 GUI 日志处理错误，防止应用程序崩溃
                     pass
 
         handler = GUIHandler(self)

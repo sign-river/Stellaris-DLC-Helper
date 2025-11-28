@@ -17,7 +17,7 @@ class OperationLog:
         """
         初始化操作记录管理器
         
-        Args:
+        参数:
             game_path: 游戏路径
         """
         self.game_path = game_path
@@ -27,7 +27,7 @@ class OperationLog:
         """
         加载操作日志
         
-        Returns:
+        返回:
             dict: 日志数据
         """
         if os.path.exists(self.log_path):
@@ -42,7 +42,7 @@ class OperationLog:
         """
         保存操作日志
         
-        Args:
+        参数:
             log_data: 日志数据
         """
         log_data["game_path"] = self.game_path
@@ -57,7 +57,7 @@ class OperationLog:
         """
         添加操作记录
         
-        Args:
+        参数:
             op_type: 操作类型
             details: 操作详情
         """
@@ -81,7 +81,7 @@ class OperationLog:
         """
         获取所有操作记录
         
-        Returns:
+        返回:
             list: 操作列表
         """
         log_data = self.load()

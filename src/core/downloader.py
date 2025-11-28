@@ -18,7 +18,7 @@ class DLCDownloader:
         """
         初始化下载器
         
-        Args:
+        参数:
             progress_callback: 进度回调函数 callback(percent, downloaded, total)
         """
         self.progress_callback = progress_callback
@@ -42,14 +42,14 @@ class DLCDownloader:
         """
         下载文件（支持断点续传）
         
-        Args:
+        参数:
             url: 下载URL
             dest_path: 目标文件路径
             
-        Returns:
+        返回:
             bool: 是否成功
             
-        Raises:
+        抛出:
             Exception: 下载失败
         """
         try:
@@ -123,14 +123,14 @@ class DLCDownloader:
         """
         下载DLC到缓存
         
-        Args:
+        参数:
             dlc_key: DLC键名
             url: 下载URL
             
-        Returns:
+        返回:
             str: 缓存文件路径
             
-        Raises:
+        抛出:
             Exception: 下载失败
         """
         cache_path = PathUtils.get_dlc_cache_path(dlc_key)
@@ -147,10 +147,10 @@ class DLCDownloader:
         """
         检查DLC是否已缓存
         
-        Args:
+        参数:
             dlc_key: DLC键名
             
-        Returns:
+        返回:
             bool: 是否已缓存
         """
         cache_path = PathUtils.get_dlc_cache_path(dlc_key)

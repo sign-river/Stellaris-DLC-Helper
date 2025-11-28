@@ -76,11 +76,11 @@ class ConfigLoader:
         """
         获取配置项
         
-        Args:
+        参数:
             *keys: 配置键路径，例如 get("server", "url")
             default: 默认值
             
-        Returns:
+        返回:
             配置值，如果不存在则返回默认值
         """
         value = self._config
@@ -104,11 +104,11 @@ def get_config(*keys, default=None):
     """
     获取配置项的便捷函数
     
-    Args:
+    参数:
         *keys: 配置键路径
         default: 默认值
         
-    Returns:
+    返回:
         配置值
     """
     return _loader.get(*keys, default=default)

@@ -18,7 +18,7 @@ class DLCManager:
         """
         初始化DLC管理器
         
-        Args:
+        参数:
             game_path: 游戏路径
         """
         self.game_path = game_path
@@ -27,10 +27,10 @@ class DLCManager:
         """
         从服务器获取DLC列表
         
-        Returns:
+        返回:
             list: DLC列表，每项包含 key, name, url, size
             
-        Raises:
+        抛出:
             Exception: 网络错误或数据格式错误
         """
         response = requests.get(DLC_INDEX_URL, timeout=REQUEST_TIMEOUT)
@@ -70,7 +70,7 @@ class DLCManager:
         """
         获取已安装的DLC列表
         
-        Returns:
+        返回:
             set: 已安装的DLC键名集合
         """
         try:
@@ -97,10 +97,10 @@ class DLCManager:
         """
         检查指定DLC是否已安装
         
-        Args:
+        参数:
             dlc_key: DLC键名
             
-        Returns:
+        返回:
             bool: 是否已安装
         """
         dlc_folder = PathUtils.get_dlc_folder(self.game_path)
