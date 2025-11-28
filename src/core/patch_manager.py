@@ -193,7 +193,7 @@ class PatchManager:
             response.raise_for_status()
             appinfo = response.json()
             # 保存到本地缓存
-            cache_path = Path(__file__).parent.parent.parent / 'stellaris_appinfo.json'
+            cache_path = PathUtils.get_appinfo_path('stellaris_appinfo.json')
             with open(cache_path, 'w', encoding='utf-8') as f:
                 json.dump(appinfo, f, indent=2, ensure_ascii=False)
         except Exception as e:
@@ -204,8 +204,17 @@ class PatchManager:
                 'stellaris_appinfo.json'
             ]
             for filename in local_appinfo_files:
-                local_path = Path(__file__).parent.parent.parent / filename
-                if local_path.exists():
+                local_path = PathUtils.get_appinfo_path(filename)
+                # 如果旧版文件位于项目根目录，则迁移到缓存目录
+                legacy_path = Path(__file__).parent.parent.parent / filename
+                try:
+                    if legacy_path.exists() and not os.path.exists(local_path):
+                        # 进行一次迁移复制，保留旧文件
+                        shutil.copy2(str(legacy_path), str(local_path))
+                        self.logger.info(f"已从旧位置迁移AppInfo: {filename} -> {local_path}")
+                except Exception:
+                    pass
+                if os.path.exists(local_path):
                     try:
                         with open(local_path, 'r', encoding='utf-8') as f:
                             appinfo = json.load(f)

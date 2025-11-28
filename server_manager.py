@@ -25,6 +25,7 @@ from datetime import datetime
 # 添加父目录到路径以导入config_loader
 sys.path.insert(0, str(Path(__file__).parent))
 from src.config_loader import get_config
+from src.utils import PathUtils
 
 
 class ServerConfig:
@@ -425,7 +426,7 @@ class ServerManager:
                 logging.warning(f"⚠ DLC排序失败: {e}")
 
             # 保存到本地
-            local_file = "stellaris_appinfo.json"
+            local_file = PathUtils.get_appinfo_path('stellaris_appinfo.json')
             with open(local_file, 'w', encoding='utf-8') as f:
                 json.dump(appinfo, f, indent=2, ensure_ascii=False)
 
@@ -455,7 +456,7 @@ class ServerManager:
         
         try:
             remote_file = f"{self.server_appinfo_path}/stellaris_appinfo.json"
-            local_file = "server_stellaris_appinfo.json"
+            local_file = PathUtils.get_appinfo_path('server_stellaris_appinfo.json')
             
             logging.info(f"\n正在从服务器下载 AppID 信息...")
             self.sftp.get(remote_file, local_file)

@@ -60,9 +60,17 @@ python server_manager.py
 
 ### 5. 更新游戏AppID和DLC信息
 - 从 Steam API 获取 Stellaris (281990) 的最新信息
-- 生成 `stellaris_appinfo.json` 文件
+- 生成并缓存 `stellaris_appinfo.json` 文件（保存在 `Stellaris_DLC_Cache/appinfo/`）
 - 上传到服务器：`<server_appinfo_path>/stellaris_appinfo.json`
 - 用于生成 cream_api.ini 所需的DLC列表
+
+## 本地缓存目录（客户端）
+```
+Stellaris_DLC_Cache/
+└── appinfo/
+   ├── stellaris_appinfo.json  # 本地缓存的游戏信息（从 Steam API 获取）
+   └── server_stellaris_appinfo.json  # 从服务器下载的游戏信息副本
+```
 
 ### 6. 查看服务器DLC列表
 - 显示服务器上所有DLC

@@ -96,3 +96,23 @@ class PathUtils:
             str: DLC文件夹路径
         """
         return os.path.join(game_path, "dlc")
+
+    @staticmethod
+    def get_appinfo_dir():
+        """
+        获取 AppInfo 缓存目录（用于保存 stellaris_appinfo.json 等缓存文件）
+        返回: str: 目录路径
+        """
+        appinfo_dir = os.path.join(PathUtils.get_cache_dir(), 'appinfo')
+        os.makedirs(appinfo_dir, exist_ok=True)
+        return appinfo_dir
+
+    @staticmethod
+    def get_appinfo_path(filename: str = 'stellaris_appinfo.json'):
+        """
+        获取 AppInfo 缓存文件的完整路径
+        参数:
+            filename: 应用配置文件名
+        返回: str: 文件完整路径
+        """
+        return os.path.join(PathUtils.get_appinfo_dir(), filename)
