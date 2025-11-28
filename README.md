@@ -46,11 +46,6 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### 命令行模式
-```bash
-python server_manager.py
-```
-
 首次运行时会自动从 `config.json.example` 生成配置文件。
 
 ## 🤝 贡献

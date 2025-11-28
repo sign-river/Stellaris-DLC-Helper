@@ -5,12 +5,6 @@
     "url": "http://47.100.2.190/dlc/",
     "timeout": 30
   },
-  "server_management": {
-    "ssh_ip": "47.100.2.190",
-    "ssh_username": "root",
-    "ssh_password": "",
-    "comment": "服务器管理工具使用，首次运行会要求输入"
-  },
   "network": {
     "chunk_size": 8192,
     "retry_times": 3
