@@ -65,7 +65,7 @@ class PatchManager:
             return locations
             
         except Exception as e:
-            self.logger.error(f"扫描目录失败: {str(e)}")
+            self.logger.log_exception(f"扫描目录失败", e)
             raise
     
     def backup_steam_api64_dll(self, dll_path):
@@ -98,7 +98,7 @@ class PatchManager:
             self.logger.info(f"已备份: {file_name} -> {backup_name}")
             return backup_path
         except Exception as e:
-            self.logger.error(f"备份失败: {str(e)}")
+            self.logger.log_exception(f"备份失败", e)
             raise
     
     def restore_steam_api64_dll(self, dll_path):
@@ -132,7 +132,7 @@ class PatchManager:
             return True
             
         except Exception as e:
-            self.logger.error(f"还原失败: {str(e)}")
+            self.logger.log_exception(f"还原失败", e)
             return False
     
     def copy_patch_steam_api64_dll(self, dll_name, target_path):
@@ -154,7 +154,7 @@ class PatchManager:
             shutil.copy2(source_path, target_path)
             self.logger.info(f"已复制补丁: {dll_name}")
         except Exception as e:
-            self.logger.error(f"复制补丁失败: {str(e)}")
+            self.logger.log_exception(f"复制补丁失败", e)
             raise
     
     def generate_cream_config(self, dlc_list):
@@ -275,10 +275,10 @@ class PatchManager:
                         locations['steam_api64'].append(target_path)
                         self.logger.info(f"未在游戏目录发现 steam_api64.dll，已从补丁目录复制: {target_path}")
                     except Exception as e:
-                        self.logger.error(f"尝试使用补丁目录中的 steam_api64_o.dll 创建目标文件失败: {e}")
+                        self.logger.log_exception(f"尝试使用补丁目录中的 steam_api64_o.dll 创建目标文件失败", e)
                         return 0, 1
                 else:
-                    self.logger.error("未找到任何 steam_api64.dll 文件！且补丁目录中不存在 steam_api64_o.dll")
+                    self.logger.log_exception("未找到任何 steam_api64.dll 文件！且补丁目录中不存在 steam_api64_o.dll", Exception("missing_dll"))
                     return 0, 1
             
             # 2/3. 对每个定位到的文件执行备份与补丁替换流程（备份 -> 覆盖）
@@ -288,7 +288,7 @@ class PatchManager:
                     self.copy_patch_steam_api64_dll(STEAM_API64_DLL, dll_path)
                     success += 1
                 except Exception as e:
-                    self.logger.error(f"处理 steam_api64.dll 失败: {str(e)}")
+                    self.logger.log_exception(f"处理 steam_api64.dll 失败", e)
                     failed += 1
             
             # 4. 生成并复制配置文件（只在游戏根目录）
@@ -302,7 +302,7 @@ class PatchManager:
                 self.logger.success("已生成配置文件: cream_api.ini")
                 
             except Exception as e:
-                self.logger.error(f"生成配置文件失败: {str(e)}")
+                self.logger.log_exception(f"生成配置文件失败", e)
                 failed += 1
             
             self.logger.info("="*50)
@@ -311,7 +311,7 @@ class PatchManager:
             return success, failed
             
         except Exception as e:
-            self.logger.error(f"应用补丁失败: {str(e)}")
+            self.logger.log_exception(f"应用补丁失败", e)
             return success, failed + 1
     
     def remove_patch(self):
@@ -357,7 +357,7 @@ class PatchManager:
                             self.logger.success(f"使用补丁目录中的 steam_api64_o.dll 恢复: {dll_path}")
                             success += 1
                         except Exception as e:
-                            self.logger.error(f"使用补丁目录中的 steam_api64_o.dll 恢复失败: {str(e)}")
+                            self.logger.log_exception(f"使用补丁目录中的 steam_api64_o.dll 恢复失败", e)
                             failed += 1
                     else:
                         self.logger.warning(f"未找到备份文件 {backup_name}，且补丁目录中没有 steam_api64_o.dll，跳过: {dll_path}")
@@ -370,7 +370,7 @@ class PatchManager:
                     os.remove(config_path)
                     self.logger.success("已删除配置文件: cream_api.ini")
                 except Exception as e:
-                    self.logger.error(f"删除配置文件失败: {str(e)}")
+                    self.logger.log_exception(f"删除配置文件失败", e)
             
             self.logger.info("="*50)
             self.logger.success(f"移除补丁完成！成功: {success}, 失败: {failed}")
@@ -378,7 +378,7 @@ class PatchManager:
             return success, failed
             
         except Exception as e:
-            self.logger.error(f"还原失败: {str(e)}")
+            self.logger.log_exception(f"还原失败", e)
             return success, failed + 1
     
     def check_patch_status(self):

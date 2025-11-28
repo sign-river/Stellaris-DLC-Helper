@@ -45,6 +45,12 @@ def configure_basic_logging(
         file_handler.setFormatter(logging.Formatter(fmt))
         file_handler.setLevel(logging.DEBUG)
         root.addHandler(file_handler)
+        # 额外的专用错误日志文件，记录 ERROR 及以上级别（单独文件方便排查）
+        error_log_path = Path(log_dir) / (filename or "stellaris_dlc_helper.log")
+        error_file_handler = RotatingFileHandler(str(Path(log_dir) / "errors.log"), maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8")
+        error_file_handler.setFormatter(logging.Formatter(fmt))
+        error_file_handler.setLevel(logging.ERROR)
+        root.addHandler(error_file_handler)
 
 
 def get_root_logger(name: Optional[str] = None):

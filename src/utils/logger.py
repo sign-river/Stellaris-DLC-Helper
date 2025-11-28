@@ -7,6 +7,9 @@
 from datetime import datetime
 import logging
 from logging import Handler
+import traceback
+from .path_utils import PathUtils
+from pathlib import Path
 
 
 class Logger:
@@ -86,3 +89,36 @@ class Logger:
         formatter = logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s", datefmt="%H:%M:%S")
         handler.setFormatter(formatter)
         return handler
+
+    def log_exception(self, message: str, exc: Exception = None):
+        """记录异常到 GUI 日志并写入错误日志文件。
+
+        Args:
+            message: 要记录的上下文消息（简短）
+            exc: 可选异常对象；如果为 None，将使用当前异常信息
+        """
+        try:
+            # 在 GUI 日志中记录简短提示 (包含前缀)
+            self.error(message)
+
+            # 使用标准 logging 将异常写入已配置的文件处理器（包含堆栈跟踪）
+            import logging
+            logging.getLogger().exception(message)
+
+            # 写入专门的错误日志文件（errors.log）以保存完整堆栈信息
+            log_dir = Path(PathUtils.get_log_dir())
+            log_dir.mkdir(parents=True, exist_ok=True)
+            error_log_path = log_dir / 'errors.log'
+            tb = None
+            if exc is None:
+                tb = traceback.format_exc()
+            else:
+                tb = ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(error_log_path, 'a', encoding='utf-8') as ef:
+                ef.write(f"[{timestamp}] {message}\n")
+                ef.write(tb + "\n")
+        except Exception:
+            # 如果日志写入本身失败，则安全忽略，避免崩溃
+            pass

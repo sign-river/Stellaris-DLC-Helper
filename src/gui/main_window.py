@@ -107,9 +107,9 @@ class MainWindowCTk:
         try:
             import webbrowser
             webbrowser.open("https://www.kdocs.cn/l/cdVvg4OgHMzj", new=2)
-        except Exception:
-            # 如果无法打开浏览器，记录日志并忽略（避免 UI 崩溃）
-            self.logger.error("无法打开帮助文档链接")
+        except Exception as e:
+            # 如果无法打开浏览器，记录异常并忽略（避免 UI 崩溃）
+            self.logger.log_exception("无法打开帮助文档链接", e)
         
     def _create_header(self):
         """创建标题区域"""
@@ -636,7 +636,8 @@ class MainWindowCTk:
                         "请点击「浏览」按钮手动选择游戏目录"
                     ))
             except Exception as e:
-                self.root.after(0, lambda: self.logger.error(f"自动检测失败: {str(e)}"))
+                # 在主线程中记录异常并写入错误日志
+                self.root.after(0, lambda e=e: self.logger.log_exception("自动检测失败", e))
         
         threading.Thread(target=detect_and_load_thread, daemon=True).start()
     
@@ -675,7 +676,8 @@ class MainWindowCTk:
                     )
                     error_label.pack(pady=20)
                 self.root.after(0, show_error)
-                self.logger.error(f"无法加载DLC列表 - {str(e)}")
+                # 记录并写入异常日志
+                self.logger.log_exception("无法加载DLC列表", e)
         
         threading.Thread(target=fetch_thread, daemon=True).start()
     
@@ -706,7 +708,8 @@ class MainWindowCTk:
                         "请点击「浏览」按钮手动选择游戏目录"
                     ))
             except Exception as e:
-                self.root.after(0, lambda: self.logger.error(f"自动检测失败: {str(e)}"))
+                # 在主线程中记录异常并写入错误日志
+                self.root.after(0, lambda e=e: self.logger.log_exception("自动检测失败", e))
                 self.root.after(0, lambda: messagebox.showerror(
                     "检测失败",
                     f"自动检测时发生错误:\n{str(e)}\n\n请手动选择游戏目录"
@@ -792,7 +795,8 @@ class MainWindowCTk:
                     )
                     error_label.pack(pady=20)
                 self.root.after(0, show_error)
-                self.logger.error(f"无法加载DLC列表 - {str(e)}")
+                # 在主线程中记录异常并写入错误日志
+                self.root.after(0, lambda e=e: self.logger.log_exception("无法加载DLC列表", e))
         
         threading.Thread(target=fetch_thread, daemon=True).start()
         
@@ -1108,7 +1112,8 @@ class MainWindowCTk:
                     success += 1
                     
                 except Exception as e:
-                    self.logger.error(f"错误: {str(e)}")
+                    # 记录完整异常堆栈到错误日志，并在 GUI 日志中显示
+                    self.root.after(0, lambda e=e: self.logger.log_exception("错误", e))
                     failed += 1
             
             # 完成，隐藏进度组件
@@ -1257,7 +1262,8 @@ class MainWindowCTk:
                 self.root.after(0, self._check_patch_status)
                 
             except Exception as e:
-                self.logger.error(f"应用补丁时发生错误: {str(e)}")
+                # 在主线程中记录完整异常信息并写入错误日志
+                self.root.after(0, lambda e=e: self.logger.log_exception("应用补丁时发生错误", e))
                 self.root.after(0, lambda: messagebox.showerror("错误", 
                     f"应用补丁时发生错误:\n{str(e)}"))
                 self.root.after(0, lambda: self.execute_btn.configure(state="normal"))
@@ -1300,7 +1306,8 @@ class MainWindowCTk:
                 self.root.after(0, self._check_patch_status)
                 
             except Exception as e:
-                self.logger.error(f"移除补丁时发生错误: {str(e)}")
+                # 在主线程中记录完整异常信息并写入错误日志
+                self.root.after(0, lambda e=e: self.logger.log_exception("移除补丁时发生错误", e))
                 self.root.after(0, lambda: messagebox.showerror("错误", 
                     f"移除补丁时发生错误:\n{str(e)}"))
                 self.root.after(0, lambda: self.remove_patch_btn.configure(state="normal"))
