@@ -113,14 +113,14 @@ Stellaris_DLC_Cache/
 **操作日志示例：**
 ```json
 {
-  "game_path": "E:\\Games\\Stellaris",
+   "game_path": "<your game directory>",
   "operations": [
     {
       "type": "install_dlc",
       "details": {
         "dlc_key": "dlc001_symbols_of_domination",
         "dlc_name": "Stellaris: Symbols of Domination",
-        "install_path": "E:\\Games\\Stellaris\\dlc\\dlc001_xxx"
+      "install_path": "<your game directory>/dlc/dlc001_xxx"
       },
       "timestamp": "2025-01-27 14:30:00"
     }
@@ -192,19 +192,20 @@ Stellaris_DLC_Cache/
 
 ---
 
-## 📦 打包为可执行文件
+# 📦 打包为可执行文件
 
-使用 PyInstaller 打包：
+使用 PyInstaller 打包（目录模式，适合包含补丁/资源文件）：
 
-```bash
+```powershell
 # 安装PyInstaller
 pip install pyinstaller
 
-# 打包命令
-pyinstaller --onefile --windowed --icon=icon.ico stellaris_dlc_helper.py
+# 建议使用脚本: .\scripts\build_exe.ps1
+# 或直接运行下面命令（Windows PowerShell）
+pyinstaller --onedir --windowed --icon=assets\icon.ico --add-data "assets;assets" --add-data "patches;patches" --add-data "Stellaris_DLC_Cache;Stellaris_DLC_Cache" -n stellaris_dlc_helper main.py
 ```
 
-生成的exe文件位于 `dist/` 目录。
+生成的目录在 `dist\stellaris_dlc_helper\`。
 
 ---
 
@@ -247,6 +248,12 @@ pyinstaller --onefile --windowed --icon=icon.ico stellaris_dlc_helper.py
 - 可在 [VirusTotal](https://www.virustotal.com/) 验证
 
 ---
+
+## 📦 仓库与打包说明
+
+- 仓库仅包含代码和示例配置（`config.json.example`），`config.json`（存放真实配置）被 `.gitignore` 忽略，切勿提交带有敏感信息的配置到版本控制中。
+- 运行时日志与缓存（`Stellaris_DLC_Cache/`）已从仓库中清理并列入 `.gitignore`，请确保发布或打包时不包含用户本地的运行时数据或日志文件。
+
 
 ## 🤝 贡献
 

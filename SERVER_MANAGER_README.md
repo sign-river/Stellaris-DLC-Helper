@@ -36,7 +36,7 @@ python server_manager.py
 - 自动弹出文件选择对话框
 - 支持一次选择多个文件批量上传
 - 显示上传进度和结果
-- 上传到服务器路径：`/var/www/dlc/files/`
+- 上传到服务器路径：`<server_base_path>/files/`
 
 ### 2. 删除服务器DLC
 - 显示服务器上所有DLC的有序列表
@@ -50,7 +50,7 @@ python server_manager.py
 ### 3. 生成 index.json
 - 自动扫描服务器DLC文件
 - 生成标准格式的 index.json
-- 自动上传到服务器：`/var/www/dlc/index.json`
+- 自动上传到服务器：`<server_base_path>/index.json`
 - 保持DLC列表有序
 
 ### 4. 下载 index.json
@@ -61,7 +61,7 @@ python server_manager.py
 ### 5. 更新游戏AppID和DLC信息
 - 从 Steam API 获取 Stellaris (281990) 的最新信息
 - 生成 `stellaris_appinfo.json` 文件
-- 上传到服务器：`/var/www/appinfo/stellaris_appinfo.json`
+- 上传到服务器：`<server_appinfo_path>/stellaris_appinfo.json`
 - 用于生成 cream_api.ini 所需的DLC列表
 
 ### 6. 查看服务器DLC列表
@@ -72,7 +72,7 @@ python server_manager.py
 ## 服务器路径结构
 
 ```
-/var/www/
+<server_base_path>/
 ├── dlc/
 │   ├── files/              # DLC文件存储目录
 │   │   ├── dlc001_xxx.zip
@@ -91,7 +91,7 @@ python server_manager.py
    - 请勿将此文件提交到版本控制
 
 2. **权限要求**：
-   - 确保服务器用户有权限访问 `/var/www/dlc` 目录
+   - 确保服务器用户有权限访问 `<server_base_path>` 目录
    - 如果目录不存在，工具会自动创建
 
 3. **网络要求**：
