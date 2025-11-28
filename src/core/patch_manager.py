@@ -12,6 +12,8 @@ from ..utils import PathUtils, Logger
 # 常量定义（仅 64 位）
 STEAM_API64_DLL = 'steam_api64.dll'
 STEAM_API64_O_DLL = 'steam_api64_o.dll'
+# NOTE: This module is intentionally 64-bit only. Re-introducing 32-bit support requires
+# verifying all scan/backup/restore behaviour and testing on x86 installations.
 
 
 class PatchManager:
@@ -44,6 +46,8 @@ class PatchManager:
                 'steam_api64': [路径列表]
             }
         """
+        # locations stores discovered paths to steam_api64.dll under the game root.
+        # It's a mapping keyed by 'steam_api64' with a list of absolute file paths.
         locations = {
             'steam_api64': []
         }
@@ -77,6 +81,9 @@ class PatchManager:
             str: 备份文件路径 (steam_api64_o.dll)
         """
         # 生成备份文件名 (steam_api64.dll -> steam_api64_o.dll)
+        # 采用 '_o' 后缀保持与原始文件在同一目录：
+        #  - 优点：可直接移动还原，不需要额外的全局索引
+        #  - 风险：若有同名文件存在，需确保不会覆盖重要文件
         dir_name = os.path.dirname(dll_path)
         file_name = os.path.basename(dll_path)
         backup_name = file_name.replace('.dll', '_o.dll')
@@ -87,7 +94,7 @@ class PatchManager:
             self.logger.info(f"备份已存在，跳过: {backup_name}")
             return backup_path
         
-        # 创建备份
+        # 创建备份（原子拷贝行为，若失败则抛出异常供上层处理）
         try:
             shutil.copy2(dll_path, backup_path)
             self.logger.info(f"已备份: {file_name} -> {backup_name}")
@@ -111,13 +118,13 @@ class PatchManager:
         backup_name = file_name.replace('.dll', '_o.dll')
         backup_path = os.path.join(dir_name, backup_name)
         
-        # 检查备份是否存在
+        # 检查备份是否存在（如果没有备份，说明没有在该路径上打过补丁/备份）
         if not os.path.exists(backup_path):
             self.logger.warning(f"备份不存在，跳过还原: {backup_name}")
             return False
         
         try:
-            # 删除补丁DLL
+            # 删除补丁 DLL：删除当前文件以便后续用备份替换回原始文件
             if os.path.exists(dll_path):
                 os.remove(dll_path)
             
@@ -139,6 +146,8 @@ class PatchManager:
             target_path: 目标覆盖路径
         """
         source_path = os.path.join(self.patch_dir, dll_name)
+        # source_path 应指向有效补丁文件（位于 patches/ 下）。
+        # 上层调用者应当保证 patches 已经包含所需的 DLL 文件。
         
         if not os.path.exists(source_path):
             raise FileNotFoundError(f"补丁文件不存在: {dll_name}")
@@ -253,10 +262,11 @@ class PatchManager:
         failed = 0
         
         try:
-            # 1. 扫描DLL位置
+            # 1. 扫描DLL位置：定位所有需替换/备份的 steam_api64.dll 文件
             locations = self.scan_steam_api64_locations()
 
             # 如果没有找到任何目标 DLL，尝试使用 patches 目录下的 steam_api64_o.dll
+            # 这用于那些未安装原始 steam_api64.dll 的特殊情况（例如用户的安装路径不标准或被清理）
             if not locations['steam_api64']:
                 fallback_o = os.path.join(self.patch_dir, STEAM_API64_O_DLL)
                 if os.path.exists(fallback_o):
@@ -273,9 +283,7 @@ class PatchManager:
                     self.logger.error("未找到任何 steam_api64.dll 文件！且补丁目录中不存在 steam_api64_o.dll")
                     return 0, 1
             
-            # 2. 备份并替换 64 位 DLL
-            
-            # 3. 备份并替换 steam_api64.dll
+            # 2/3. 对每个定位到的文件执行备份与补丁替换流程（备份 -> 覆盖）
             for dll_path in locations['steam_api64']:
                 try:
                     self.backup_steam_api64_dll(dll_path)
@@ -325,7 +333,8 @@ class PatchManager:
             # 1. 扫描DLL位置
             locations = self.scan_steam_api64_locations()
             
-            # 2. 还原 steam_api64.dll
+            # 2. 还原 steam_api64.dll：优先使用本地备份还原（更接近实际原始文件），
+            #    若本地备份缺失，则使用 patches/ 下的 steam_api64_o.dll 作为最后手段还原。
             for dll_path in locations['steam_api64']:
                 dir_name = os.path.dirname(dll_path)
                 file_name = os.path.basename(dll_path)
@@ -386,6 +395,7 @@ class PatchManager:
             }
         """
         # 检查备份文件（仅 64 位）
+        # 如果找到备份或存在 cream_api.ini，则视为已打补丁（patched=True）
         backup_exists = False
         for root, dirs, files in os.walk(self.game_path):
             if STEAM_API64_O_DLL in files:

@@ -60,7 +60,9 @@ class MainWindowCTk:
         self.is_downloading = False  # 下载状态
         self.download_paused = False  # 暂停状态
         self.current_downloader = None  # 当前下载器实例
-        # 一键解锁流程标记（用于统一完成后弹窗）
+        # 一键解锁流程状态：
+        # - _one_click_flow:  标记当前操作由“一键解锁”触发，用于在流程结束时统一展示成功弹窗（避免重复弹窗）
+        # - _one_click_patch_applied: 标记在本次一键流程里是否实际应用了补丁（用于决定最终弹窗内容）
         self._one_click_flow = False
         self._one_click_patch_applied = False
         
@@ -96,6 +98,18 @@ class MainWindowCTk:
             logging.getLogger().addHandler(handler)
         except Exception:
             pass
+
+    def _open_error_docs(self, event=None):
+        """Open the online error/debugging doc in the user's default browser.
+
+        This is used by the header link '遇到报错？' and should not block the UI thread.
+        """
+        try:
+            import webbrowser
+            webbrowser.open("https://www.kdocs.cn/l/cdVvg4OgHMzj", new=2)
+        except Exception:
+            # If we cannot open a browser, log and ignore (UI should not crash)
+            self.logger.error("无法打开帮助文档链接")
         
     def _create_header(self):
         """创建标题区域"""
@@ -120,15 +134,33 @@ class MainWindowCTk:
             text_color="#FFFFFF"
         )
         subtitle_label.pack(pady=(0, 4))
-        
-        # 作者和QQ群信息容器 - 水平布局
-        info_container = ctk.CTkFrame(header_frame, fg_color="transparent")
-        info_container.pack(pady=(0, 6))
-        
-        # 作者和QQ群信息 - 纯白色
+
+        # 信息行容器：中间居中显示作者/QQ群/图标，右侧显示“遇到报错？”帮助链接
+        info_row_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        info_row_frame.pack(fill="x", pady=(0, 6))
+
+        # 使用 grid 布局对 info_row_frame 做 5 列布局（索引0..4）:
+        # - 0,1: 左侧占位（0 为可扩展占位）
+        # - 2: 中间（文本组：作者, QQ）
+        # - 3: 中间（图标组：GitHub, B站）
+        # - 4: 最右侧（遇到报错？ 链接）
+        info_row_frame.grid_columnconfigure(0, weight=1)
+        info_row_frame.grid_columnconfigure(1, weight=1)
+        info_row_frame.grid_columnconfigure(2, weight=0)
+        info_row_frame.grid_columnconfigure(3, weight=0)
+        info_row_frame.grid_columnconfigure(4, weight=1)
+
+        # 中间文本容器放在第3列（index=2）
+        center_container = ctk.CTkFrame(info_row_frame, fg_color="transparent")
+        center_container.grid(row=0, column=2)
+
+        # 中部内层容器：用来组合作者/QQ群/图标并使其整体居中
+        center_inner = ctk.CTkFrame(center_container, fg_color="transparent")
+        center_inner.pack(anchor="center")
+
         author_label = ctk.CTkLabel(
-            info_container,
-            text="by 唏嘘南溪",
+            center_inner,
+            text="唏嘘南溪",
             font=ctk.CTkFont(size=12),
             text_color="#FFFFFF"
         )
@@ -136,7 +168,7 @@ class MainWindowCTk:
         
         # QQ群信息 - 分为文字和可复制的号码
         qq_text_label = ctk.CTkLabel(
-            info_container,
+            center_inner,
             text="QQ群: ",
             font=ctk.CTkFont(size=12),
             text_color="#FFFFFF"
@@ -145,7 +177,7 @@ class MainWindowCTk:
         
         # QQ群号 - 使用Entry实现可选中复制
         self.qq_entry = ctk.CTkEntry(
-            info_container,
+            center_inner,
             width=100,
             height=24,
             fg_color="transparent",
@@ -160,6 +192,10 @@ class MainWindowCTk:
         # 绑定单击事件
         self.qq_entry.bind("<Button-1>", lambda e: self._copy_qq_to_clipboard())
         
+        # 图标容器放在第4列（index=3） - 提前创建以便后续 icon 元素使用
+        icons_container = ctk.CTkFrame(info_row_frame, fg_color="transparent")
+        icons_container.grid(row=0, column=3)
+
         # GitHub图标按钮
         try:
             github_icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "github.png"
@@ -167,7 +203,7 @@ class MainWindowCTk:
                 github_image = Image.open(github_icon_path)
                 github_photo = ctk.CTkImage(light_image=github_image, dark_image=github_image, size=(20, 20))
                 github_btn = ctk.CTkButton(
-                    info_container,
+                    icons_container,
                     image=github_photo,
                     text="",
                     fg_color="transparent",
@@ -181,7 +217,7 @@ class MainWindowCTk:
             else:
                 # 降级为文字按钮
                 github_btn = ctk.CTkButton(
-                    info_container,
+                    icons_container,
                     text="⚙ GitHub",
                     font=ctk.CTkFont(size=11),
                     text_color="#FFFFFF",
@@ -198,7 +234,7 @@ class MainWindowCTk:
             logging.warning(f"加载GitHub图标失败: {e}")
             # 降级为文字按钮
             github_btn = ctk.CTkButton(
-                info_container,
+                icons_container,
                 text="⚙ GitHub",
                 font=ctk.CTkFont(size=11),
                 text_color="#FFFFFF",
@@ -211,6 +247,19 @@ class MainWindowCTk:
             )
             github_btn.pack(side="left", padx=(0, 5))
         
+        # (icons_container already created above)
+
+        # 添加“遇到报错？”链接在第5列（index=4），并右对齐
+        error_link_label = ctk.CTkLabel(
+            info_row_frame,
+            text="遇到报错？",
+            font=ctk.CTkFont(size=12, underline=True),
+            text_color="#FFFFFF",
+            cursor="hand2"
+        )
+        error_link_label.bind("<Button-1>", lambda e: self._open_error_docs())
+        error_link_label.grid(row=0, column=4, sticky="e", padx=(0, 20), pady=(0, 6))
+
         # B站图标按钮
         try:
             bilibili_icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "bilibili.png"
@@ -218,7 +267,7 @@ class MainWindowCTk:
                 bilibili_image = Image.open(bilibili_icon_path)
                 bilibili_photo = ctk.CTkImage(light_image=bilibili_image, dark_image=bilibili_image, size=(20, 20))
                 bilibili_btn = ctk.CTkButton(
-                    info_container,
+                    icons_container,
                     image=bilibili_photo,
                     text="",
                     fg_color="transparent",
@@ -911,7 +960,8 @@ class MainWindowCTk:
         # Decide to apply patch automatically if not patched (no confirmation dialog)
         should_patch = not patched_status.get('patched', False)
 
-        # Determine DLCs that actually need download (not already installed)
+        # Determine which selected DLC actually require downloading (i.e. not already installed).
+        # This filters out already-installed DLC so we only attempt to download missing items.
         selected_to_download = [d for d in selected if not d.get('installed', False)]
 
         # If no patch will be applied and no DLC is selected, then nothing to do
@@ -927,7 +977,8 @@ class MainWindowCTk:
         def execute_thread():
             # If not patched, ask user whether to apply patch
             try:
-                # mark one-click flow
+                # 使用标识指示该执行由“一键解锁”触发，
+                # 以便在流程结束时统一显示成功弹窗（和避免重复通知）
                 self._one_click_flow = True
                 self._one_click_patch_applied = False
                 if should_patch:
@@ -935,6 +986,7 @@ class MainWindowCTk:
                     self.root.after(0, lambda: self.execute_btn.configure(state="disabled"))
                     success, failed = self.patch_manager.apply_patch(self.dlc_list)
                     if success > 0:
+                        # 记录补丁是否在本次一键解锁流程内被成功应用（用于最终统一弹窗的判断）
                         self._one_click_patch_applied = True
                     # Compose notification and avoid duplicate messages when no DLC selected
                     if success > 0 and failed == 0:
@@ -1066,7 +1118,10 @@ class MainWindowCTk:
             self.logger.info(f"\n{'='*50}")
             self.logger.info(f"下载完成！成功: {success}, 失败: {failed}")
             
-            # 当这是从一键解锁流发起，并且有成功项，显示统一成功弹窗
+            # Unified final modal for one-click flow:
+            # - If downloads succeeded (success>0) during one-click flow, show a unified success message.
+            # - This complements the patch-success path which, if patch was applied but no download occurred,
+            #   will have already triggered a unified success message earlier in start_execute().
             if (self._one_click_flow) and success > 0:
                 self.root.after(0, lambda: messagebox.showinfo("成功", "解锁成功！"))
             # 重置下载状态
@@ -1153,6 +1208,9 @@ class MainWindowCTk:
         
     def apply_patch(self):
         """应用CreamAPI补丁"""
+        # UI 入口：用户点击“应用补丁”按钮时触发。
+        # 注意：与一键解锁流程不同，此方法保留了交互式确认（askyesno），
+        # 因此适合需要手动确认的场景（例如仅想单独应用补丁而不下载 DLC）。
         if not self.game_path:
             messagebox.showwarning("警告", "请先选择游戏路径！")
             return
@@ -1166,7 +1224,7 @@ class MainWindowCTk:
             return
         
         result = messagebox.askyesno("确认", 
-            "即将应用 CreamAPI 补丁\n"
+            "即将应用补丁\n"
             "这将修改游戏的 steam_api64.dll 文件\n"
             "原始文件会自动备份。若游戏目录中缺失该文件，程序将尝试从补丁目录中创建一个目标文件以便处理。\n\n"
             "是否继续？")
@@ -1208,12 +1266,14 @@ class MainWindowCTk:
         
     def remove_patch(self):
         """移除CreamAPI补丁"""
+        # UI 入口：用户点击“移除补丁”按钮触发。
+        # 注意：此方法会尝试从本地备份或補丁目录还原原始 DLL，并删除 `cream_api.ini`。
         if not self.game_path:
             messagebox.showwarning("警告", "请先选择游戏路径！")
             return
         
-        result = messagebox.askyesno("确认",
-            "即将移除 CreamAPI 补丁，是否继续？")
+        result = messagebox.askyesno("确认", 
+            "即将移除补丁，是否继续？")
         
         if not result:
             return
