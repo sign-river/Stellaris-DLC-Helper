@@ -908,12 +908,8 @@ class MainWindowCTk:
         except Exception:
             patched_status = {'patched': False}
 
-        # Ask user for patch application if needed BEFORE starting worker thread
-        should_patch = False
-        if not patched_status.get('patched', False):
-            ask = messagebox.askyesno("确认", 
-                "补丁未应用，是否先应用 CreamAPI 补丁？")
-            should_patch = ask
+        # Decide to apply patch automatically if not patched (no confirmation dialog)
+        should_patch = not patched_status.get('patched', False)
 
         # Determine DLCs that actually need download (not already installed)
         selected_to_download = [d for d in selected if not d.get('installed', False)]
