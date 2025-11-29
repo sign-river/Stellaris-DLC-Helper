@@ -9,8 +9,7 @@ Stellaris-DLC-Helper/
 ├── Stellaris-DLC-Helper.exe  # 主程序
 ├── patches/                  # 补丁文件
 │   └── cream_api.ini
-├── config/                   # 配置文件
-│   └── config.json
+├── config.json               # 配置文件
 ├── assets/                   # 资源文件
 │   └── images/
 │       └── README.md
@@ -167,7 +166,7 @@ class Packager:
                 "--windowed",  # 不显示控制台窗口
                 "--name", "Stellaris-DLC-Helper",
                 "--add-data", f"{self.project_root}/src{separator}src",  # 添加src目录
-                "--add-data", f"{self.project_root}/config{separator}config",  # 添加config目录
+                "--add-data", f"{self.project_root}/config.json{separator}config.json",  # 添加config.json文件
                 "--add-data", f"{self.project_root}/assets{separator}assets",  # 添加assets目录
                 "--hidden-import", "customtkinter",
                 "--hidden-import", "PIL",
@@ -194,13 +193,19 @@ class Packager:
         exe_target = self.final_path / "Stellaris-DLC-Helper.exe"
         shutil.move(str(exe_source), str(exe_target))
 
-        # 复制资源文件夹
-        folders_to_copy = ["patches", "config", "assets"]
+        # 复制资源文件夹和文件
+        folders_to_copy = ["patches", "assets"]
         for folder in folders_to_copy:
             src = self.project_root / folder
             dst = self.final_path / folder
             if src.exists():
                 shutil.copytree(str(src), str(dst))
+        
+        # 复制配置文件
+        config_src = self.project_root / "config.json"
+        config_dst = self.final_path / "config.json"
+        if config_src.exists():
+            shutil.copy2(str(config_src), str(config_dst))
 
         # 创建 libraries 文件夹（可选，用于存放额外库）
         libraries_path = self.final_path / "libraries"
