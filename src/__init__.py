@@ -2,5 +2,7 @@
 Stellaris DLC Helper - 群星DLC一键解锁工具
 """
 
-__version__ = "1.0.0"
+from .config import VERSION
+
+__version__ = VERSION
 __author__ = "sign-river"

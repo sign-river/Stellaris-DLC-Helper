@@ -8,3 +8,6 @@ paramiko>=3.0.0
 
 # 现代化UI框架
 customtkinter>=5.2.0
+
+# 图像处理（PIL，用于加载图标）
+Pillow>=9.0.0

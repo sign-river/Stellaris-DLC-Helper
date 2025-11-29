@@ -54,12 +54,24 @@ class Packager:
         print("安装最小依赖...")
         pip_exe = self.venv_path / "Scripts" / "pip.exe"
 
-        # 安装核心依赖
-        deps = [
-            "requests>=2.28.0",
-            "customtkinter>=5.2.0",
-            "Pillow>=9.0.0",  # PIL
-        ]
+        # 从requirements-build.txt读取依赖
+        requirements_file = self.project_root / "requirements-build.txt"
+        deps = []
+        
+        if requirements_file.exists():
+            with open(requirements_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        deps.append(line)
+        else:
+            # 后备依赖列表
+            print("警告: 未找到requirements-build.txt，使用内置依赖列表")
+            deps = [
+                "requests>=2.28.0",
+                "customtkinter>=5.2.0",
+                "Pillow>=9.0.0",  # PIL
+            ]
 
         for dep in deps:
             print(f"安装 {dep}...")
@@ -144,22 +156,6 @@ class Packager:
         print("生成版本信息文件...")
 
         try:
-            # 从config.json或config.json.example中读取版本信息
-            VERSION = "1.0.0"  # 默认版本
-
-            config_files = ["config.json", "config.json.example"]
-            for config_file in config_files:
-                config_path = self.project_root / config_file
-                if config_path.exists():
-                    try:
-                        with open(config_path, 'r', encoding='utf-8') as f:
-                            config_data = json.load(f)
-                            if "version" in config_data:
-                                VERSION = config_data["version"]
-                                break
-                    except (FileNotFoundError, json.JSONDecodeError, OSError):
-                        pass
-
             # 获取打包目录大小
             dir_size = self._get_dir_size(self.final_path)
 
@@ -171,7 +167,7 @@ class Packager:
                 "update_log": f"{UPDATE_URL_BASE}v{VERSION}/update.log",
                 "min_version": VERSION,
                 "release_date": datetime.now().strftime("%Y-%m-%d"),
-                "file_size": ".1f",
+                "file_size": f"{dir_size:.1f} MB",
                 "checksum": ""  # 可以后续添加MD5校验
             }
 
@@ -226,16 +222,6 @@ class Packager:
             return False
 
         return True
-
-    def _get_dir_size(self, path):
-        """获取目录大小（MB）"""
-        total_size = 0
-        for dirpath, dirnames, filenames in os.walk(path):
-            for filename in filenames:
-                filepath = os.path.join(dirpath, filename)
-                total_size += os.path.getsize(filepath)
-        return total_size / (1024 * 1024)
-
 
 def main():
     """主函数"""
