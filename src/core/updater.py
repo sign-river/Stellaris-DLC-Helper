@@ -77,7 +77,7 @@ class AutoUpdater:
         def _check():
             try:
                 self.logger.info("开始检查更新...")
-                response = requests.get(self.UPDATE_CHECK_URL, timeout=self.UPDATE_CHECK_TIMEOUT)
+                response = requests.get(UPDATE_CHECK_URL, timeout=self.UPDATE_CHECK_TIMEOUT)
                 response.raise_for_status()
 
                 data = response.json()
