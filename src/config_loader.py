@@ -26,7 +26,7 @@ class ConfigLoader:
             "version": "1.0.0",
             "stellaris_app_id": "281990",
             "server": {
-                "url": "http://47.100.2.190/dlc/",
+                "url": "https://dlc.dlchelper.top/dlc/",
                 "timeout": 30
             },
             "network": {

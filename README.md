@@ -132,7 +132,7 @@ Stellaris_DLC_Cache/
 
 ## 🌐 DLC服务器
 
-**服务器地址：** http://47.100.2.190/dlc/
+**服务器地址：** https://dlc.dlchelper.top/dlc/
 
 **文件结构：**
 ```
@@ -236,7 +236,7 @@ pyinstaller --onefile --windowed --icon=icon.ico stellaris_dlc_helper.py
 ## 🔒 隐私与安全
 
 **网络请求说明：**
-- 仅连接到DLC服务器：`http://47.100.2.190`
+- 仅连接到DLC服务器：`https://dlc.dlchelper.top`
 - 不收集任何用户数据
 - 不上传任何信息
 - 所有操作在本地完成

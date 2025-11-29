@@ -15,7 +15,7 @@ VERSION = get_config("version", default="1.0.0")
 STELLARIS_APP_ID = get_config("stellaris_app_id", default="281990")
 
 # DLC 服务器配置
-DLC_SERVER_URL = get_config("server", "url", default="http://47.100.2.190/dlc/")
+DLC_SERVER_URL = get_config("server", "url", default="https://dlc.dlchelper.top/dlc/")
 DLC_INDEX_URL = f"{DLC_SERVER_URL}index.json"
 
 # 网络配置
