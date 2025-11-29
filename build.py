@@ -37,29 +37,49 @@ from src.config import VERSION, UPDATE_URL_BASE
 class Packager:
     """打包器类"""
 
-    def __init__(self):
+    def __init__(self, fast_mode=False):
         self.project_root = Path(__file__).parent
         self.venv_path = self.project_root / "build_venv"
         self.dist_path = self.project_root / "dist"
         self.final_path = self.project_root / "Stellaris-DLC-Helper"
+        self.fast_mode = fast_mode
 
     def create_venv(self):
-        """创建虚拟环境"""
-        print("创建虚拟环境...")
+        """创建虚拟环境（支持重用）"""
+        print("检查虚拟环境...")
+
+        # 检查虚拟环境是否已经存在且有效
+        pip_exe = self.venv_path / "Scripts" / "pip.exe"
+        python_exe = self.venv_path / "Scripts" / "python.exe"
+
+        if self.venv_path.exists() and pip_exe.exists() and python_exe.exists():
+            # 测试虚拟环境是否工作正常
+            try:
+                result = subprocess.run([str(python_exe), "-c", "import sys; print('OK')"],
+                                      capture_output=True, text=True, timeout=10)
+                if result.returncode == 0 and "OK" in result.stdout:
+                    print("虚拟环境已存在且有效，跳过创建")
+                    return
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+                pass
+
+        # 需要重新创建虚拟环境
+        print("创建新的虚拟环境...")
         if self.venv_path.exists():
             shutil.rmtree(self.venv_path)
         venv.create(self.venv_path, with_pip=True)
         print("虚拟环境创建完成")
 
     def install_minimal_deps(self):
-        """安装最小依赖"""
-        print("安装最小依赖...")
+        """安装最小依赖（支持缓存）"""
+        print("检查依赖安装...")
         pip_exe = self.venv_path / "Scripts" / "pip.exe"
+        python_exe = self.venv_path / "Scripts" / "python.exe"
 
         # 从requirements-build.txt读取依赖
         requirements_file = self.project_root / "requirements-build.txt"
         deps = []
-        
+
         if requirements_file.exists():
             with open(requirements_file, 'r', encoding='utf-8') as f:
                 for line in f:
@@ -75,21 +95,58 @@ class Packager:
                 "Pillow>=9.0.0",  # PIL
             ]
 
+        # 检查依赖是否已安装
+        missing_deps = []
         for dep in deps:
+            # 提取包名（去掉版本要求）
+            package_name = dep.split()[0].split('>=')[0].split('==')[0].split('<')[0].split('>')[0]
+            try:
+                result = subprocess.run([str(python_exe), "-c", f"import {package_name}; print('OK')"],
+                                      capture_output=True, text=True, timeout=5)
+                if result.returncode != 0:
+                    missing_deps.append(dep)
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError, ImportError):
+                missing_deps.append(dep)
+
+        if not missing_deps:
+            print("所有依赖已安装，跳过安装步骤")
+            return
+
+        print(f"安装缺失的依赖 ({len(missing_deps)}个)...")
+        for dep in missing_deps:
             print(f"安装 {dep}...")
             subprocess.run([str(pip_exe), "install", dep], check=True)
 
         print("依赖安装完成")
 
     def build_exe(self):
-        """使用 PyInstaller 构建 exe"""
-        print("构建 exe 文件...")
+        """使用 PyInstaller 构建 exe（支持缓存）"""
+        print("检查PyInstaller构建...")
 
         python_exe = self.venv_path / "Scripts" / "python.exe"
 
-        # 首先安装 PyInstaller
-        print("安装 PyInstaller...")
-        subprocess.run([str(python_exe), "-m", "pip", "install", "pyinstaller>=5.0.0"], check=True)
+        # 检查PyInstaller是否已安装
+        try:
+            result = subprocess.run([str(python_exe), "-c", "import PyInstaller; print('OK')"],
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode != 0:
+                raise ImportError()
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, ImportError):
+            print("安装 PyInstaller...")
+            subprocess.run([str(python_exe), "-m", "pip", "install", "pyinstaller>=5.0.0"], check=True)
+
+        # 检查是否需要重新构建（基于源文件变化）
+        exe_path = self.dist_path / "Stellaris-DLC-Helper.exe"
+        if exe_path.exists():
+            # 获取源文件的最新修改时间
+            src_mtime = self._get_src_max_mtime()
+            exe_mtime = exe_path.stat().st_mtime
+
+            if exe_mtime > src_mtime:
+                print("exe文件已存在且是最新的，跳过构建")
+                return
+
+        print("构建 exe 文件...")
 
         # 使用自定义 spec 文件构建
         spec_file = self.project_root / "Stellaris-DLC-Helper.spec"
@@ -227,7 +284,8 @@ class Packager:
 
             # 创建压缩包
             print(f"正在压缩到: {zip_name}")
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            compression = zipfile.ZIP_STORED if self.fast_mode else zipfile.ZIP_DEFLATED
+            with zipfile.ZipFile(zip_path, 'w', compression) as zipf:
                 for root, dirs, files in os.walk(self.final_path):
                     for file in files:
                         file_path = os.path.join(root, file)
@@ -282,6 +340,25 @@ class Packager:
                 print("version.json 中的校验和已更新")
         except Exception as e:
             print(f"更新校验和失败: {e}")
+
+    def _get_src_max_mtime(self):
+        """获取源文件目录中的最新修改时间"""
+        max_mtime = 0
+        src_dirs = ["src", "main.py", "config.json.example"]
+
+        for src_dir in src_dirs:
+            src_path = self.project_root / src_dir
+            if src_path.exists():
+                if src_path.is_file():
+                    max_mtime = max(max_mtime, src_path.stat().st_mtime)
+                else:
+                    for root, dirs, files in os.walk(src_path):
+                        for file in files:
+                            if file.endswith(('.py', '.json', '.txt', '.md')):
+                                file_path = os.path.join(root, file)
+                                max_mtime = max(max_mtime, os.path.getmtime(file_path))
+
+        return max_mtime
 
     def _cleanup_intermediate_files(self):
         """清理打包过程中的中间文件"""
@@ -350,11 +427,19 @@ class Packager:
 
 def main():
     """主函数"""
-    packager = Packager()
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Stellaris DLC Helper 打包工具')
+    parser.add_argument('--fast', action='store_true', help='启用快速模式（跳过压缩，构建更快但文件更大）')
+
+    args = parser.parse_args()
+
+    packager = Packager(fast_mode=args.fast)
     success = packager.package()
 
     if success:
-        print("\n打包成功！发布文件已生成在项目根目录。")
+        mode_desc = "快速模式" if args.fast else "标准模式"
+        print(f"\n打包成功！（{mode_desc}）发布文件已生成在项目根目录。")
     else:
         print("\n打包失败！请检查错误信息。")
         sys.exit(1)
