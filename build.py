@@ -39,7 +39,8 @@ class Packager:
 
     def __init__(self, fast_mode=False):
         self.project_root = Path(__file__).parent
-        self.venv_path = self.project_root / "build_venv"
+        self.cache_root = self.project_root / "Stellaris_DLC_Cache"
+        self.venv_path = self.cache_root / "venv" / "build_venv"
         self.dist_path = self.project_root / "dist"
         self.final_path = self.project_root / "Stellaris-DLC-Helper"
         self.fast_mode = fast_mode
@@ -143,7 +144,7 @@ class Packager:
         print("构建 exe 文件...")
 
         # 保存构建配置哈希
-        config_hash_file = self.project_root / ".build_config_hash"
+        config_hash_file = self.cache_root / "config" / ".build_config_hash"
         current_hash = self._get_build_config_hash()
         with open(config_hash_file, 'w', encoding='utf-8') as f:
             f.write(current_hash)
@@ -380,7 +381,7 @@ class Packager:
             return True
 
         # 检查构建配置哈希
-        config_hash_file = self.project_root / ".build_config_hash"
+        config_hash_file = self.cache_root / "config" / ".build_config_hash"
         current_hash = self._get_build_config_hash()
 
         if config_hash_file.exists():
@@ -405,7 +406,7 @@ class Packager:
                 print("已删除 dist/ 目录")
 
             # 注意：保留虚拟环境以实现缓存效果
-            # 如需清理虚拟环境，请手动删除 build_venv/ 目录
+            # 如需清理虚拟环境，请手动删除 Stellaris_DLC_Cache/venv/build_venv/ 目录
 
             # 删除spec文件
             spec_file = self.project_root / "Stellaris-DLC-Helper.spec"

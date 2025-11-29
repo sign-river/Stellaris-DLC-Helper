@@ -32,7 +32,7 @@ python build.py
 ```
 
 打包脚本会自动执行以下步骤：
-1. 创建虚拟环境 (`build_venv`)
+1. 创建虚拟环境 (`Stellaris_DLC_Cache/venv/build_venv`)
 2. 安装最小依赖 (从 `requirements-build.txt` 读取)
 3. 使用 PyInstaller 构建 exe 文件
 4. 组织文件结构到 `Stellaris-DLC-Helper` 目录
@@ -45,8 +45,8 @@ python build.py
 
 ```bash
 # 1. 创建虚拟环境
-python -m venv build_venv
-build_venv\Scripts\activate
+python -m venv Stellaris_DLC_Cache/venv/build_venv
+Stellaris_DLC_Cache/venv/build_venv/Scripts/activate
 
 # 2. 安装构建依赖
 pip install -r requirements-build.txt
@@ -100,7 +100,7 @@ icon = 'icon.ico'  # 程序图标
 **解决**:
 - 确保 Python 版本 >= 3.7
 - 检查磁盘空间是否足够
-- 删除旧的 `build_venv` 目录后重试
+- 删除旧的 `Stellaris_DLC_Cache/venv/build_venv` 目录后重试
 
 **问题**: 依赖安装失败
 **解决**:
@@ -180,8 +180,8 @@ Get-FileHash "Stellaris-DLC-Helper-v1.0.0.zip" -Algorithm SHA256
 
 ```bash
 # 删除构建文件
-rmdir /s build_venv
-rmdir /s build
+rmdir /s Stellaris_DLC_Cache\venv\build_venv
+rmdir /s Stellaris_DLC_Cache\build
 rmdir /s dist
 rmdir /s Stellaris-DLC-Helper
 ```

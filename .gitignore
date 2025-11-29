@@ -41,14 +41,16 @@ env/
 Thumbs.db
 desktop.ini
 
-# 缓存目录
-Stellaris_DLC_Cache/
+# 缓存目录（保留DLC数据，但忽略构建缓存）
+Stellaris_DLC_Cache/build/
+Stellaris_DLC_Cache/venv/
+Stellaris_DLC_Cache/config/
+Stellaris_DLC_Cache/python/
 
 # 日志文件
 *.log
 
 # 打包相关文件
-build_venv/
 Stellaris-DLC-Helper/
 *.spec
 
@@ -60,9 +62,6 @@ Stellaris-DLC-Helper/
 *.pkg
 *.deb
 *.rpm
-
-# 构建缓存文件
-.build_config_hash
 
 # 配置文件（包含敏感信息）
 config.json
