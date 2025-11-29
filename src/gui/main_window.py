@@ -651,6 +651,9 @@ class MainWindowCTk:
         """自动检测游戏路径并加载DLC列表"""
         self.logger.info("正在自动检测 Stellaris 游戏路径...")
         
+        # 检查是否有未完成的下载需要恢复
+        self._check_pending_download_state()
+        
         def detect_and_load_thread():
             try:
                 # 1. 自动检测游戏路径
@@ -673,6 +676,43 @@ class MainWindowCTk:
                 self.root.after(0, lambda e=e: self.logger.log_exception("自动检测失败", e))
         
         threading.Thread(target=detect_and_load_thread, daemon=True).start()
+    
+    def _check_pending_download_state(self):
+        """检查是否有未完成的下载需要恢复"""
+        try:
+            import json
+            from pathlib import Path
+            from ..utils import PathUtils
+
+            state_file = Path(PathUtils.get_cache_dir()) / "download_state.json"
+            if state_file.exists():
+                with open(state_file, 'r', encoding='utf-8') as f:
+                    state = json.load(f)
+
+                if state.get("download_paused", False):
+                    self.logger.info("检测到未完成的下载，将按钮设置为暂停状态")
+                    # 设置下载暂停状态
+                    self.download_paused = True
+                    # 更新按钮文本
+                    self.execute_btn.configure(text="▶️ 继续下载")
+                    # 删除状态文件
+                    state_file.unlink()
+                    self.logger.info("下载状态已恢复")
+        except Exception as e:
+            self.logger.warning(f"检查下载状态失败: {e}")
+    
+    def _clear_download_state(self):
+        """清除下载状态文件"""
+        try:
+            from pathlib import Path
+            from ..utils import PathUtils
+
+            state_file = Path(PathUtils.get_cache_dir()) / "download_state.json"
+            if state_file.exists():
+                state_file.unlink()
+                self.logger.debug("下载状态文件已清除")
+        except Exception as e:
+            self.logger.warning(f"清除下载状态文件失败: {e}")
     
     def _auto_load_dlc_list(self):
         """自动加载DLC列表（内部方法，不弹窗提示）"""
@@ -1068,6 +1108,9 @@ class MainWindowCTk:
         if not selected:
             messagebox.showinfo("提示", "请至少选择一个DLC！")
             return
+        
+        # 清除旧的下载状态文件
+        self._clear_download_state()
         
         self.is_downloading = True
         self.download_paused = False

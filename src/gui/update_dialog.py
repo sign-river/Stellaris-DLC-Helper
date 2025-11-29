@@ -307,6 +307,13 @@ class UpdateDialog(ctk.CTkToplevel):
     def _restart_app(self):
         """重启应用程序"""
         try:
+            # 检查是否正在下载DLC，如果是则暂停下载
+            if hasattr(self.master, 'is_downloading') and self.master.is_downloading:
+                self.logger.info("检测到正在下载DLC，正在暂停下载...")
+                self.master.pause_download()
+                # 保存下载状态标记
+                self._save_download_state()
+
             import sys
             import os
             python = sys.executable
@@ -314,6 +321,31 @@ class UpdateDialog(ctk.CTkToplevel):
         except Exception as e:
             self.logger.error(f"重启失败: {e}")
             messagebox.showerror("错误", f"重启失败: {e}")
+
+    def _save_download_state(self):
+        """保存下载状态以便重启后恢复"""
+        try:
+            import json
+            from ..utils import PathUtils
+
+            state_file = PathUtils.get_cache_dir() / "download_state.json"
+            state = {
+                "download_paused": True,
+                "timestamp": self._get_timestamp()
+            }
+
+            with open(state_file, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=2)
+
+            self.logger.info("下载状态已保存")
+        except Exception as e:
+            self.logger.error(f"保存下载状态失败: {e}")
+
+    @staticmethod
+    def _get_timestamp():
+        """获取当前时间戳"""
+        from datetime import datetime
+        return datetime.now().isoformat()
 
     def _on_close(self):
         """窗口关闭事件"""
