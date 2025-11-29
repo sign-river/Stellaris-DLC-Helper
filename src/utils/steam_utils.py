@@ -11,11 +11,13 @@ import winreg
 from pathlib import Path
 from typing import Optional, List
 
+from ..config import STELLARIS_APP_ID
+
 
 class SteamUtils:
     """Steam 工具类"""
     
-    STELLARIS_APPID = "281990"
+    STELLARIS_APPID = STELLARIS_APP_ID
     
     @staticmethod
     def get_steam_path() -> Optional[str]:

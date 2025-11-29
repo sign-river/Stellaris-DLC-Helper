@@ -13,7 +13,7 @@ import threading
 from pathlib import Path
 from typing import Callable, Optional
 import logging
-from ..config import REQUEST_TIMEOUT, VERSION, UPDATE_CHECK_URL
+from ..config import REQUEST_TIMEOUT, VERSION, UPDATE_CHECK_URL, CHUNK_SIZE
 from ..utils import PathUtils
 
 
@@ -125,7 +125,7 @@ class AutoUpdater:
             downloaded_size = 0
 
             with open(download_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
+                for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
                     if chunk:
                         f.write(chunk)
                         downloaded_size += len(chunk)
