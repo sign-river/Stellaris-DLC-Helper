@@ -71,18 +71,18 @@ class DLCInstaller:
                     single_item = os.path.join(temp_extract_dir, extracted_items[0])
                     if os.path.isdir(single_item):
                         # 如果是文件夹，将其内容移动到目标目录
+                        os.makedirs(target_folder, exist_ok=True)  # 确保目标目录存在
                         for item in os.listdir(single_item):
                             shutil.move(os.path.join(single_item, item), target_folder)
-                        os.makedirs(target_folder, exist_ok=True)  # 确保目标目录存在
                     else:
                         # 如果是文件，直接移动
-                        shutil.move(single_item, target_folder)
                         os.makedirs(target_folder, exist_ok=True)
+                        shutil.move(single_item, target_folder)
                 else:
                     # 如果有多个项目，直接移动所有内容
+                    os.makedirs(target_folder, exist_ok=True)
                     for item in extracted_items:
                         shutil.move(os.path.join(temp_extract_dir, item), target_folder)
-                    os.makedirs(target_folder, exist_ok=True)
             
             finally:
                 # 清理临时目录
