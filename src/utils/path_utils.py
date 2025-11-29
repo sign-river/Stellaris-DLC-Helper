@@ -82,6 +82,8 @@ class PathUtils:
         返回:
             bool: 是否有效
         """
+        if os.path.exists(os.path.join(path, "stellaris.app")):
+            return True
         return os.path.exists(os.path.join(path, "stellaris.exe"))
     
     @staticmethod

@@ -7,7 +7,9 @@ Steam 工具模块
 
 import os
 import re
-import winreg
+import sys
+if sys.platform.startswith('win'):
+    import winreg
 from pathlib import Path
 from typing import Optional, List
 
