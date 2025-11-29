@@ -65,7 +65,7 @@ class AutoUpdater:
         self.logger = logging.getLogger(__name__)
         self.current_version = VERSION
         self.temp_dir = Path(tempfile.gettempdir()) / "StellarisUpdate"
-        self.backup_dir = PathUtils.get_cache_dir() / "backup"
+        self.backup_dir = Path(PathUtils.get_cache_dir()) / "backup"
 
     def check_for_updates(self, callback: Callable[[Optional[UpdateInfo]], None]) -> None:
         """
