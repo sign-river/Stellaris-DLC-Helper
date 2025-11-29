@@ -52,9 +52,42 @@ class DLCInstaller:
             if os.path.exists(target_folder):
                 shutil.rmtree(target_folder)
             
-            # 解压
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(target_folder)
+            # 创建临时解压目录
+            temp_extract_dir = target_folder + "_temp"
+            if os.path.exists(temp_extract_dir):
+                shutil.rmtree(temp_extract_dir)
+            os.makedirs(temp_extract_dir)
+            
+            try:
+                # 先解压到临时目录
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(temp_extract_dir)
+                
+                # 检查解压后的内容
+                extracted_items = os.listdir(temp_extract_dir)
+                
+                if len(extracted_items) == 1:
+                    # 如果只有一个项目，检查是否是文件夹
+                    single_item = os.path.join(temp_extract_dir, extracted_items[0])
+                    if os.path.isdir(single_item):
+                        # 如果是文件夹，将其内容移动到目标目录
+                        for item in os.listdir(single_item):
+                            shutil.move(os.path.join(single_item, item), target_folder)
+                        os.makedirs(target_folder, exist_ok=True)  # 确保目标目录存在
+                    else:
+                        # 如果是文件，直接移动
+                        shutil.move(single_item, target_folder)
+                        os.makedirs(target_folder, exist_ok=True)
+                else:
+                    # 如果有多个项目，直接移动所有内容
+                    for item in extracted_items:
+                        shutil.move(os.path.join(temp_extract_dir, item), target_folder)
+                    os.makedirs(target_folder, exist_ok=True)
+            
+            finally:
+                # 清理临时目录
+                if os.path.exists(temp_extract_dir):
+                    shutil.rmtree(temp_extract_dir)
             
             # 记录操作
             self.operation_log.add_operation("install_dlc", {
