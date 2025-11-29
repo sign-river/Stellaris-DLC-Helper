@@ -12,6 +12,7 @@ from tkinter import filedialog, messagebox
 import threading
 from pathlib import Path
 from PIL import Image
+import requests
 from ..config import VERSION
 from ..core import DLCManager, DLCDownloader, DLCInstaller, PatchManager
 from ..utils import Logger, PathUtils, SteamUtils
@@ -566,6 +567,21 @@ class MainWindowCTk:
         # 右侧按钮组(前进/执行区)
         right_btn_container = ctk.CTkFrame(button_frame, fg_color="transparent")
         right_btn_container.grid(row=0, column=1, sticky="e", padx=(10, 15), pady=(12, 12))
+        
+        # 更新按钮
+        self.update_btn = ctk.CTkButton(
+            right_btn_container,
+            text="🔄 检查更新",
+            command=self.check_update,
+            width=130,
+            height=45,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            corner_radius=8,
+            fg_color="#42A5F5",
+            hover_color="#1E88E5",
+            text_color="#FFFFFF"
+        )
+        self.update_btn.pack(side="left", padx=(0, 10))
         
         # 执行按钮（合并补丁 & 下载功能）
         self.execute_btn = ctk.CTkButton(
@@ -1394,6 +1410,23 @@ class MainWindowCTk:
                 self.root.after(0, lambda: self.remove_patch_btn.configure(state="normal"))
         
         threading.Thread(target=remove_thread, daemon=True).start()
+    
+    def check_update(self):
+        """检查程序更新"""
+        import webbrowser
+        
+        current_version = VERSION
+        github_url = "https://github.com/sign-river/Stellaris-DLC-Helper/releases"
+        
+        # 显示当前版本信息
+        messagebox.showinfo(
+            "版本信息", 
+            f"当前版本: v{current_version}\n\n"
+            f"如需检查更新，请访问：\n{github_url}"
+        )
+        
+        # 打开浏览器访问releases页面
+        webbrowser.open(github_url)
     
     def _on_window_map(self, event=None):
         """窗口映射事件处理 - 改善最小化恢复时的重绘"""
