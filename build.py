@@ -98,8 +98,28 @@ class Packager:
                 str(python_exe), "-m", "PyInstaller",
                 str(spec_file)
             ]
-            # 在项目根目录运行 PyInstaller，确保 os.getcwd() 返回正确路径
-            subprocess.run(pyinstaller_cmd, check=True, cwd=str(self.project_root))
+        else:
+            # 如果没有spec文件，使用基本命令
+            print("未找到spec文件，使用基本PyInstaller命令...")
+            # Windows下使用分号分隔路径
+            separator = ";" if os.name == 'nt' else ":"
+            pyinstaller_cmd = [
+                str(python_exe), "-m", "PyInstaller",
+                "--onefile",  # 打包成单个exe文件
+                "--windowed",  # 不显示控制台窗口
+                "--name", "Stellaris-DLC-Helper",
+                "--add-data", f"{self.project_root}/src{separator}src",  # 添加src目录
+                "--add-data", f"{self.project_root}/config{separator}config",  # 添加config目录
+                "--add-data", f"{self.project_root}/assets{separator}assets",  # 添加assets目录
+                "--hidden-import", "customtkinter",
+                "--hidden-import", "PIL",
+                "--hidden-import", "PIL.Image",
+                "--hidden-import", "PIL.ImageTk",
+                str(self.project_root / "main.py")  # 主入口文件
+            ]
+
+        # 在项目根目录运行 PyInstaller，确保 os.getcwd() 返回正确路径
+        subprocess.run(pyinstaller_cmd, check=True, cwd=str(self.project_root))
         print("exe 构建完成")
 
     def organize_files(self):
@@ -225,25 +245,12 @@ class Packager:
             print(f"SHA256: {sha256_hash}")
             print(f"MD5: {md5_hash}")
 
-            # 保存哈希信息到文件
-            hash_info = f"""Stellaris DLC Helper v{VERSION} 发布包信息
-
-文件名: {zip_name}
-文件大小: {zip_size:.2f} MB
-SHA256: {sha256_hash}
-MD5: {md5_hash}
-
-生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-"""
-
-            hash_file = self.project_root / f"Stellaris-DLC-Helper-v{VERSION}-checksums.txt"
-            with open(hash_file, 'w', encoding='utf-8') as f:
-                f.write(hash_info)
-
-            print(f"校验文件已保存: {hash_file.name}")
-
             # 更新version.json中的checksum
             self._update_version_checksum(sha256_hash)
+
+            # 清理中间文件
+            print("清理中间文件...")
+            self._cleanup_intermediate_files()
 
             return zip_path, zip_size, sha256_hash
 
@@ -276,6 +283,33 @@ MD5: {md5_hash}
         except Exception as e:
             print(f"更新校验和失败: {e}")
 
+    def _cleanup_intermediate_files(self):
+        """清理打包过程中的中间文件"""
+        try:
+            # 删除构建目录
+            if self.dist_path.exists():
+                shutil.rmtree(self.dist_path)
+                print("已删除 dist/ 目录")
+
+            # 删除虚拟环境
+            if self.venv_path.exists():
+                shutil.rmtree(self.venv_path)
+                print("已删除 build_venv/ 目录")
+
+            # 删除spec文件
+            spec_file = self.project_root / "Stellaris-DLC-Helper.spec"
+            if spec_file.exists():
+                spec_file.unlink()
+                print("已删除 Stellaris-DLC-Helper.spec 文件")
+
+            # 删除解压后的目录
+            if self.final_path.exists():
+                shutil.rmtree(self.final_path)
+                print("已删除 Stellaris-DLC-Helper/ 目录")
+
+        except Exception as e:
+            print(f"清理中间文件时出错: {e}")
+
     def cleanup(self):
         """清理临时文件"""
         print("清理临时文件...")
@@ -299,16 +333,14 @@ MD5: {md5_hash}
             self.build_exe()
             self.organize_files()
             self.create_release_package()
-            self.cleanup()
+            # 注意：中间文件已在create_release_package中清理
 
             print("=" * 50)
             print("完整打包流程完成！")
             print("生成的文件：")
             zip_name = f"Stellaris-DLC-Helper-v{VERSION}.zip"
-            checksum_name = f"Stellaris-DLC-Helper-v{VERSION}-checksums.txt"
             print(f"  📦 {zip_name}")
-            print(f"  🔐 {checksum_name}")
-            print(f"  📁 Stellaris-DLC-Helper/ (解压后的目录)")
+            print("  💡 中间文件已自动清理")
 
         except Exception as e:
             print(f"打包失败: {e}")
@@ -322,7 +354,7 @@ def main():
     success = packager.package()
 
     if success:
-        print("\n打包成功！您可以在 Stellaris-DLC-Helper 文件夹中找到可执行文件。")
+        print("\n打包成功！发布文件已生成在项目根目录。")
     else:
         print("\n打包失败！请检查错误信息。")
         sys.exit(1)

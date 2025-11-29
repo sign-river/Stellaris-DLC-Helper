@@ -47,8 +47,19 @@ Stellaris_DLC_Cache/
 # 日志文件
 *.log
 
-# 临时文件
-*.tmp
+# 打包相关文件
+build_venv/
+Stellaris-DLC-Helper/
+*.spec
+
+# 打包产物
+*.zip
+*.exe
+*.msi
+*.dmg
+*.pkg
+*.deb
+*.rpm
 
 # 配置文件（包含敏感信息）
 config.json
