@@ -44,7 +44,9 @@ class DLCInstaller:
             dlc_folder = PathUtils.get_dlc_folder(self.game_path)
             os.makedirs(dlc_folder, exist_ok=True)
             
-            target_folder = os.path.join(dlc_folder, dlc_key)
+            # 使用ZIP文件名作为文件夹名
+            folder_name = os.path.splitext(os.path.basename(zip_path))[0]
+            target_folder = os.path.join(dlc_folder, folder_name)
             
             # 如果目标文件夹已存在，先删除
             if os.path.exists(target_folder):
@@ -77,12 +79,13 @@ class DLCInstaller:
             bool: 是否成功
         """
         try:
-            dlc_folder = PathUtils.get_dlc_folder(self.game_path)
-            target_folder = os.path.join(dlc_folder, dlc_key)
-            
-            if os.path.exists(target_folder):
-                shutil.rmtree(target_folder)
-                return True
+            operations = self.operation_log.get_operations()
+            for op in reversed(operations):
+                if op["type"] == "install_dlc" and op["details"]["dlc_key"] == dlc_key:
+                    dlc_path = op["details"]["install_path"]
+                    if os.path.exists(dlc_path):
+                        shutil.rmtree(dlc_path)
+                        return True
             return False
         except Exception:
             return False

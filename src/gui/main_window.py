@@ -1096,13 +1096,12 @@ class MainWindowCTk:
                     # 更新当前下载DLC名称
                     self.root.after(0, lambda name=dlc['name']: self.downloading_label.configure(text=f"正在处理: {name}"))
                     
-                    # 检查缓存并下载
-                    if downloader.is_cached(dlc['key']):
+                    # 下载DLC
+                    self.logger.info(f"正在下载: {dlc['name']}...")
+                    cache_path = downloader.download_dlc(dlc['key'], dlc['url'])
+                    if os.path.exists(cache_path):
                         self.logger.info("从本地缓存加载...")
-                        cache_path = PathUtils.get_dlc_cache_path(dlc['key'])
                     else:
-                        self.logger.info(f"正在下载: {dlc['name']}...")
-                        cache_path = downloader.download_dlc(dlc['key'], dlc['url'])
                         self.logger.info("\n下载完成")
                     
                     # 安装

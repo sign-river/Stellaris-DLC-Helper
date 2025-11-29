@@ -133,7 +133,11 @@ class DLCDownloader:
         抛出:
             Exception: 下载失败
         """
-        cache_path = PathUtils.get_dlc_cache_path(dlc_key)
+        # 从URL提取文件名
+        filename = url.split('/')[-1]
+        if not filename:
+            filename = f"{dlc_key}.zip"
+        cache_path = os.path.join(PathUtils.get_dlc_cache_dir(), filename)
         
         # 如果缓存已存在，直接返回
         if os.path.exists(cache_path):
@@ -153,5 +157,12 @@ class DLCDownloader:
         返回:
             bool: 是否已缓存
         """
-        cache_path = PathUtils.get_dlc_cache_path(dlc_key)
-        return os.path.exists(cache_path)
+        # 检查是否有任何以dlc_key开头的zip文件
+        cache_dir = PathUtils.get_dlc_cache_dir()
+        if not os.path.exists(cache_dir):
+            return False
+        
+        for file in os.listdir(cache_dir):
+            if file.startswith(f"{dlc_key}.") and file.endswith('.zip'):
+                return True
+        return False
