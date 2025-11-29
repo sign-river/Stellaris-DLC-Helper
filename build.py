@@ -23,7 +23,9 @@ import sys
 import subprocess
 import shutil
 import venv
+import json
 from pathlib import Path
+from datetime import datetime
 
 
 class Packager:
@@ -128,9 +130,65 @@ class Packager:
         with open(readme_path, 'w', encoding='utf-8') as f:
             f.write(readme_content)
 
+        # 生成 version.json 文件
+        self._generate_version_json()
+
         print("文件组织完成")
 
-    def cleanup(self):
+    def _generate_version_json(self):
+        """生成版本信息文件"""
+        print("生成版本信息文件...")
+
+        try:
+            # 从config.json或config.json.example中读取版本信息
+            VERSION = "1.0.0"  # 默认版本
+
+            config_files = ["config.json", "config.json.example"]
+            for config_file in config_files:
+                config_path = self.project_root / config_file
+                if config_path.exists():
+                    try:
+                        with open(config_path, 'r', encoding='utf-8') as f:
+                            config_data = json.load(f)
+                            if "version" in config_data:
+                                VERSION = config_data["version"]
+                                break
+                    except:
+                        pass
+
+            # 获取打包目录大小
+            dir_size = self._get_dir_size(self.final_path)
+
+            # 生成版本信息
+            version_info = {
+                "latest_version": VERSION,
+                "force_update": False,
+                "update_url": f"https://dlc.dlchelper.top/update/v{VERSION}/Stellaris-DLC-Helper-v{VERSION}.zip",
+                "update_log": f"https://dlc.dlchelper.top/update/v{VERSION}/update.log",
+                "min_version": "1.0.0",
+                "release_date": datetime.now().strftime("%Y-%m-%d"),
+                "file_size": ".1f",
+                "checksum": ""  # 可以后续添加MD5校验
+            }
+
+            # 保存到打包目录
+            version_path = self.final_path / "version.json"
+            with open(version_path, 'w', encoding='utf-8') as f:
+                json.dump(version_info, f, indent=2, ensure_ascii=False)
+
+            print(f"版本信息文件已生成: {version_path}")
+
+        except Exception as e:
+            print(f"生成版本信息文件失败: {e}")
+
+    def _get_dir_size(self, path):
+        """获取目录大小（MB）"""
+        total_size = 0
+        for dirpath, dirnames, filenames in os.walk(path):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                total_size += os.path.getsize(filepath)
+        return total_size / (1024 * 1024)
         """清理临时文件"""
         print("清理临时文件...")
         if self.venv_path.exists():
