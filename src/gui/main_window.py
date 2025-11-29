@@ -1257,7 +1257,18 @@ class MainWindowCTk:
                     
                 except Exception as e:
                     # 记录完整异常堆栈到错误日志，并在 GUI 日志中显示
-                    self.root.after(0, lambda e=e: self.logger.log_exception("错误", e))
+                    error_str = str(e) if e else "未知错误"
+                    
+                    # 提供更友好的错误信息
+                    if "400 Bad Request" in error_str or "URL可能已过期" in error_str:
+                        friendly_msg = f"下载失败: {dlc['name']} - 服务器URL配置问题，请稍后重试或联系开发者"
+                    elif "网络" in error_str or "连接" in error_str:
+                        friendly_msg = f"下载失败: {dlc['name']} - 网络连接问题，请检查网络设置"
+                    else:
+                        friendly_msg = f"下载失败: {dlc['name']} - {error_str}"
+                    
+                    self.logger.error(friendly_msg)
+                    self.root.after(0, lambda e=e, msg=friendly_msg: self.logger.log_exception(msg, e))
                     failed += 1
             
             # 完成，隐藏进度组件

@@ -48,12 +48,18 @@ class DLCManager:
         
         dlc_list = []
         for key, info in dlcs.items():
-            dlc_list.append({
-                "key": key,
-                "name": info.get("name", key),
-                "url": info.get("url", ""),
-                "size": info.get("size", "未知")
-            })
+            url = info.get("url", "")
+            
+            # 验证URL格式（临时解决方案）
+            if url and self._is_url_likely_valid(url):
+                dlc_list.append({
+                    "key": key,
+                    "name": info.get("name", key),
+                    "url": url,
+                    "size": info.get("size", "未知")
+                })
+            else:
+                print(f"警告: 跳过无效URL的DLC: {key} (URL: {url})")
         
         # 按DLC编号排序
         dlc_list.sort(key=self._extract_dlc_number)
@@ -65,6 +71,27 @@ class DLCManager:
         import re
         match = re.search(r'dlc(\d+)', dlc_item["key"])
         return int(match.group(1)) if match else 9999
+    
+    @staticmethod
+    def _is_url_likely_valid(url):
+        """
+        检查URL是否可能有效（临时解决方案）
+        
+        当前问题：Cloudflare R2 URL缺少认证参数
+        """
+        if not url:
+            return False
+        
+        # 检查是否是已知的问题URL格式
+        if "00a3f297aff7772f31b5788221f479b4.r2.cloudflarestorage.com" in url:
+            # 这是当前服务器返回的格式，已知有问题
+            return False
+        
+        # 检查基本URL格式
+        if not url.startswith(('http://', 'https://')):
+            return False
+        
+        return True
     
     def get_installed_dlcs(self):
         """
