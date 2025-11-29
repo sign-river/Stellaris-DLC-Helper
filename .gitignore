@@ -55,9 +55,10 @@ config.json
 *.bak
 *.backup
 
-# 服务器管理工具生成的文件（缓存存在于 Stellaris_DLC_Cache 下）
+# 服务器管理工具生成的文件
 server_index.json
+stellaris_appinfo.json
+server_stellaris_appinfo.json
 
 # 测试文件
 test_*.py
-test_game*/

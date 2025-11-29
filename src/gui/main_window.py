@@ -60,6 +60,7 @@ class MainWindowCTk:
         self.is_downloading = False  # 下载状态
         self.download_paused = False  # 暂停状态
         self.current_downloader = None  # 当前下载器实例
+        self.current_download_url = None  # 当前下载URL
         # 一键解锁流程状态：
         # - _one_click_flow:  标记当前操作由“一键解锁”触发，用于在流程结束时统一展示成功弹窗（避免重复弹窗）
         # - _one_click_patch_applied: 标记在本次一键流程里是否实际应用了补丁（用于决定最终弹窗内容）
@@ -468,6 +469,17 @@ class MainWindowCTk:
         )
         self.speed_label.grid(row=0, column=4, sticky="e")
         self.speed_label.grid_remove()  # 初始隐藏
+        
+        # 第5列：服务器状态文本（默认隐藏）
+        self.server_status_label = ctk.CTkLabel(
+            header_frame,
+            text="",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#FF5722",
+            anchor="center"
+        )
+        self.server_status_label.grid(row=0, column=3, sticky="ew", padx=(10, 10))
+        self.server_status_label.grid_remove()  # 初始隐藏
         
         # 第6列：全选按钮
         self.select_all_btn = ctk.CTkButton(
@@ -1048,27 +1060,91 @@ class MainWindowCTk:
                 progress_callback.last_time = None
                 progress_callback.last_downloaded = 0
                 progress_callback.last_speed_update = 0
+                progress_callback.speed_history = []  # 存储最近的速度值用于平滑
+                progress_callback.history_max_len = 5  # 保持最近5个速度值
+                progress_callback.slow_speed_count = 0  # 连续慢速计数
+                progress_callback.server_issue_detected = False  # 服务器问题标志
+                progress_callback.last_server_check = 0  # 上次服务器检查时间
             
             import time
+            import requests
             current_time = time.time()
             
             # 进度条实时更新（不限制频率）
             self.root.after(0, lambda: self.progress_bar.set(percent / 100))
             
-            # 速度信息每2秒更新一次
+            # 速度信息每1秒更新一次（减少更新间隔以获得更平滑的数据）
             if progress_callback.last_time is not None:
                 time_diff = current_time - progress_callback.last_time
                 
-                # 检查是否到达更新时间（2秒）
-                if current_time - progress_callback.last_speed_update >= 2.0:
-                    if time_diff > 0:
+                # 检查是否到达更新时间（1秒）
+                if current_time - progress_callback.last_speed_update >= 1.0:
+                    # 确保时间差不小于0.1秒，避免除零或过小的除数
+                    if time_diff >= 0.1:
                         bytes_diff = downloaded - progress_callback.last_downloaded
-                        speed_mbps = (bytes_diff / time_diff) / (1024 * 1024)  # MB/秒
                         
-                        # 更新速度显示（只显示速度，不显示百分比）
-                        self.root.after(0, lambda s=speed_mbps: self.speed_label.configure(text=f"{s:.2f} MB/s"))
-                        
-                        progress_callback.last_speed_update = current_time
+                        # 确保字节差不为负（防止异常情况）
+                        if bytes_diff >= 0:
+                            # 计算瞬时速度
+                            instant_speed = (bytes_diff / time_diff) / (1024 * 1024)  # MB/秒
+                            
+                            # 添加到历史记录
+                            progress_callback.speed_history.append(instant_speed)
+                            
+                            # 保持历史记录长度
+                            if len(progress_callback.speed_history) > progress_callback.history_max_len:
+                                progress_callback.speed_history.pop(0)
+                            
+                            # 计算移动平均速度（如果有足够的历史数据）
+                            if len(progress_callback.speed_history) >= 3:
+                                # 使用最近3个值的平均值来平滑
+                                avg_speed = sum(progress_callback.speed_history[-3:]) / 3
+                            else:
+                                # 如果历史数据不足，使用当前瞬时速度
+                                avg_speed = instant_speed
+                            
+                            # 限制速度显示范围，避免异常值（0.01 - 100 MB/s）
+                            if avg_speed < 0.01:
+                                display_speed = 0.00
+                            elif avg_speed > 100:
+                                display_speed = 99.99
+                            else:
+                                display_speed = avg_speed
+                            
+                            # 服务器质量检测逻辑
+                            # 如果不是暂停状态且速度极慢（连续3次低于0.1 MB/s）
+                            if not self.download_paused and display_speed < 0.1:
+                                progress_callback.slow_speed_count += 1
+                                
+                                # 如果连续3次慢速，检测服务器连接
+                                if progress_callback.slow_speed_count >= 3 and not progress_callback.server_issue_detected:
+                                    # 每10秒最多检查一次服务器
+                                    if current_time - progress_callback.last_server_check >= 10:
+                                        progress_callback.last_server_check = current_time
+                                        
+                                        # 检测服务器连接质量
+                                        if self._check_server_connection(self.current_download_url):
+                                            # 服务器正常，重置计数
+                                            progress_callback.slow_speed_count = 0
+                                        else:
+                                            # 服务器有问题，切换到错误显示
+                                            progress_callback.server_issue_detected = True
+                                            self.root.after(0, self._show_server_error)
+                            else:
+                                # 速度恢复正常，重置计数
+                                if progress_callback.slow_speed_count > 0:
+                                    progress_callback.slow_speed_count -= 1
+                                
+                                # 如果之前检测到服务器问题，现在检查是否恢复
+                                if progress_callback.server_issue_detected and display_speed >= 0.5:
+                                    # 速度恢复到0.5 MB/s以上，认为服务器恢复正常
+                                    progress_callback.server_issue_detected = False
+                                    self.root.after(0, self._hide_server_error)
+                            
+                            # 更新速度显示
+                            self.root.after(0, lambda s=display_speed: self.speed_label.configure(text=f"{s:.2f} MB/s"))
+                            
+                            progress_callback.last_speed_update = current_time
             
             progress_callback.last_time = current_time
             progress_callback.last_downloaded = downloaded
@@ -1096,6 +1172,9 @@ class MainWindowCTk:
                     # 更新当前下载DLC名称
                     self.root.after(0, lambda name=dlc['name']: self.downloading_label.configure(text=f"正在处理: {name}"))
                     
+                    # 设置当前下载URL
+                    self.current_download_url = dlc['url']
+                    
                     # 下载DLC
                     self.logger.info(f"正在下载: {dlc['name']}...")
                     cache_path = downloader.download_dlc(dlc['key'], dlc['url'])
@@ -1121,6 +1200,9 @@ class MainWindowCTk:
             self.root.after(0, lambda: self.speed_label.grid_remove())
             self.logger.info(f"\n{'='*50}")
             self.logger.info(f"下载完成！成功: {success}, 失败: {failed}")
+            
+            # 清除当前下载URL
+            self.current_download_url = None
             
             # 一键流程的统一最终模态：
             # - If downloads succeeded (success>0) during one-click flow, show a unified success message.
@@ -1321,3 +1403,99 @@ class MainWindowCTk:
     def _on_window_focus(self, event=None):
         """窗口获得焦点事件处理 - 强制重绘"""
         self.root.update_idletasks()
+    
+    def _check_server_connection(self, current_url=None):
+        """检测服务器连接质量"""
+        try:
+            import requests
+            import time
+            from ..config import REQUEST_TIMEOUT
+            
+            # 如果有当前下载URL，优先检测该服务器
+            if current_url:
+                try:
+                    # 提取服务器域名
+                    from urllib.parse import urlparse
+                    parsed_url = urlparse(current_url)
+                    server_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+                    
+                    # 方法1：多次HEAD请求测试连接稳定性
+                    success_count = 0
+                    total_tests = 4
+                    response_times = []
+                    
+                    for i in range(total_tests):
+                        try:
+                            start_time = time.time()
+                            response = requests.head(server_url, timeout=3, allow_redirects=True)
+                            end_time = time.time()
+                            
+                            if response.status_code in [200, 301, 302, 403, 404]:
+                                success_count += 1
+                                response_times.append(end_time - start_time)
+                        except:
+                            pass
+                        
+                        # 测试间隔
+                        if i < total_tests - 1:
+                            time.sleep(0.1)
+                    
+                    # 计算成功率和平均响应时间
+                    success_rate = success_count / total_tests
+                    avg_response_time = sum(response_times) / len(response_times) if response_times else float('inf')
+                    
+                    # 网络质量判断标准：
+                    # 1. 成功率 >= 50% (至少一半请求成功)
+                    # 2. 平均响应时间 < 2秒
+                    if success_rate >= 0.5 and avg_response_time < 2.0:
+                        self.logger.debug(f"服务器连接质量良好: 成功率={success_rate:.1%}, 平均响应={avg_response_time:.2f}s")
+                        return True
+                    else:
+                        self.logger.warning(f"服务器连接质量差: 成功率={success_rate:.1%}, 平均响应={avg_response_time:.2f}s")
+                        return False
+                    
+                except Exception as e:
+                    self.logger.debug(f"检测当前下载服务器失败: {e}")
+                    # 当前服务器检测失败，继续检测通用服务器
+            
+            # 备用检测：使用通用服务器测试网络连通性
+            test_urls = [
+                "https://github.com/",
+                "https://www.google.com/",
+                "https://httpbin.org/status/200"
+            ]
+            
+            for url in test_urls:
+                try:
+                    response = requests.head(url, timeout=5, allow_redirects=True)
+                    if response.status_code == 200:
+                        return True  # 网络连接正常
+                except:
+                    continue
+            
+            return False  # 所有测试都失败
+            
+        except Exception as e:
+            self.logger.warning(f"服务器连接检测失败: {e}")
+            return False
+    
+    def _show_server_error(self):
+        """显示服务器错误状态"""
+        # 隐藏进度条
+        self.progress_bar.grid_remove()
+        # 显示服务器状态文本
+        self.server_status_label.configure(text="啊哦，服务器好像出问题了，请稍后再试吧！")
+        self.server_status_label.grid()
+        # 隐藏速度标签
+        self.speed_label.grid_remove()
+        self.logger.warning("检测到服务器连接问题，已暂停进度显示")
+    
+    def _hide_server_error(self):
+        """隐藏服务器错误状态，恢复进度条"""
+        # 隐藏服务器状态文本
+        self.server_status_label.grid_remove()
+        # 显示进度条
+        self.progress_bar.grid()
+        # 显示速度标签
+        self.speed_label.grid()
+        self.logger.info("服务器连接恢复正常，已恢复进度显示")
