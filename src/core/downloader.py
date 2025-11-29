@@ -100,15 +100,6 @@ class DLCDownloader:
         抛出:
             Exception: 下载失败
         """
-        # 预验证URL可访问性
-        try:
-            head_response = self.session.head(url, timeout=REQUEST_TIMEOUT)
-            if head_response.status_code == 400:
-                raise Exception(f"服务器拒绝请求 (400 Bad Request) - URL可能已过期或配置错误: {url}")
-            head_response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"无法访问下载URL: {str(e)}")
-        
         # 确保目标目录存在
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
         
