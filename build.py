@@ -27,6 +27,10 @@ import json
 from pathlib import Path
 from datetime import datetime
 
+# 导入配置系统
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+from src.config import VERSION, UPDATE_URL_BASE
+
 
 class Packager:
     """打包器类"""
@@ -111,7 +115,7 @@ class Packager:
         libraries_path.mkdir(exist_ok=True)
 
         # 创建 README.txt
-        readme_content = """Stellaris DLC Helper v1.0.0
+        readme_content = f"""Stellaris DLC Helper v{VERSION}
 
 使用说明：
 1. 运行 Stellaris-DLC-Helper.exe
@@ -163,9 +167,9 @@ class Packager:
             version_info = {
                 "latest_version": VERSION,
                 "force_update": False,
-                "update_url": f"https://dlc.dlchelper.top/update/v{VERSION}/Stellaris-DLC-Helper-v{VERSION}.zip",
-                "update_log": f"https://dlc.dlchelper.top/update/v{VERSION}/update.log",
-                "min_version": "1.0.0",
+                "update_url": f"{UPDATE_URL_BASE}v{VERSION}/Stellaris-DLC-Helper-v{VERSION}.zip",
+                "update_log": f"{UPDATE_URL_BASE}v{VERSION}/update.log",
+                "min_version": VERSION,
                 "release_date": datetime.now().strftime("%Y-%m-%d"),
                 "file_size": ".1f",
                 "checksum": ""  # 可以后续添加MD5校验
