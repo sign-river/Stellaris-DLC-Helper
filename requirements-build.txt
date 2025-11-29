@@ -1,0 +1,14 @@
+# Stellaris DLC Helper 打包依赖（最小化）
+# 仅包含运行所需的核心依赖
+
+# HTTP请求库
+requests>=2.28.0
+
+# 现代化UI框架
+customtkinter>=5.2.0
+
+# 图像处理（PIL）
+Pillow>=9.0.0
+
+# 打包工具（仅开发环境需要）
+# pyinstaller>=5.0.0
