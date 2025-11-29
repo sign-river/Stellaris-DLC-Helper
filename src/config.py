@@ -26,6 +26,7 @@ APPINFO_URL = get_config("server", "appinfo_url", default="https://dlc.dlchelper
 # 网络配置
 REQUEST_TIMEOUT = get_config("server", "timeout", default=30)
 CHUNK_SIZE = get_config("network", "chunk_size", default=8192)
+RETRY_TIMES = get_config("network", "retry_times", default=3)
 
 # 缓存配置
 CACHE_DIR_NAME = get_config("cache", "dir_name", default="Stellaris_DLC_Cache")

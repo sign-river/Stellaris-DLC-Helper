@@ -6,8 +6,9 @@
 """
 
 import os
+import time
 import requests
-from ..config import REQUEST_TIMEOUT, CHUNK_SIZE
+from ..config import REQUEST_TIMEOUT, CHUNK_SIZE, RETRY_TIMES
 from ..utils import PathUtils
 
 
@@ -25,6 +26,18 @@ class DLCDownloader:
         self.paused = False  # 暂停标志
         self.stopped = False  # 停止标志
         
+        # 创建会话以复用连接
+        self.session = requests.Session()
+        # 设置合理的超时和重试
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=10,
+            max_retries=0,  # 我们自己处理重试
+            pool_block=False
+        )
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
+        
     def pause(self):
         """暂停下载"""
         self.paused = True
@@ -37,10 +50,13 @@ class DLCDownloader:
         """停止下载"""
         self.stopped = True
         self.paused = False
+        # 关闭会话
+        if hasattr(self, 'session'):
+            self.session.close()
     
     def download(self, url, dest_path):
         """
-        下载文件（支持断点续传）
+        下载文件（支持断点续传和重试）
         
         参数:
             url: 下载URL
@@ -52,72 +68,106 @@ class DLCDownloader:
         抛出:
             Exception: 下载失败
         """
-        try:
-            # 确保目标目录存在
-            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        last_exception = None
+        
+        # 重试机制
+        for attempt in range(RETRY_TIMES):
+            try:
+                return self._download_single_attempt(url, dest_path)
+            except Exception as e:
+                last_exception = e
+                if attempt < RETRY_TIMES - 1:  # 不是最后一次尝试
+                    wait_time = min(2 ** attempt, 10)  # 指数退避，最多等待10秒
+                    print(f"下载失败 (尝试 {attempt + 1}/{RETRY_TIMES}): {str(e)}，{wait_time}秒后重试...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"下载失败，已达到最大重试次数 ({RETRY_TIMES})")
+        
+        # 所有重试都失败了
+        raise Exception(f"下载失败，已重试{RETRY_TIMES}次: {str(last_exception)}")
+    
+    def _download_single_attempt(self, url, dest_path):
+        """
+        单次下载尝试（内部方法）
+        
+        参数:
+            url: 下载URL
+            dest_path: 目标文件路径
             
-            # 临时文件路径
-            temp_path = dest_path + ".tmp"
+        返回:
+            bool: 是否成功
             
-            # 检查是否有未完成的下载
-            downloaded = 0
+        抛出:
+            Exception: 下载失败
+        """
+        # 确保目标目录存在
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        
+        # 临时文件路径
+        temp_path = dest_path + ".tmp"
+        
+        # 检查是否有未完成的下载
+        downloaded = 0
+        if os.path.exists(temp_path):
+            downloaded = os.path.getsize(temp_path)
+        
+        # 设置断点续传的请求头
+        headers = {}
+        if downloaded > 0:
+            headers['Range'] = f'bytes={downloaded}-'
+        
+        response = self.session.get(url, stream=True, timeout=REQUEST_TIMEOUT, headers=headers)
+        
+        # 416 表示请求的范围无效（文件已完整）
+        if response.status_code == 416:
             if os.path.exists(temp_path):
-                downloaded = os.path.getsize(temp_path)
-            
-            # 设置断点续传的请求头
-            headers = {}
-            if downloaded > 0:
-                headers['Range'] = f'bytes={downloaded}-'
-            
-            response = requests.get(url, stream=True, timeout=REQUEST_TIMEOUT, headers=headers)
-            
-            # 416 表示请求的范围无效（文件已完整）
-            if response.status_code == 416:
-                if os.path.exists(temp_path):
-                    os.rename(temp_path, dest_path)
-                return True
-            
-            response.raise_for_status()
-            
-            # 获取文件总大小
-            if 'Content-Range' in response.headers:
-                # 断点续传：从 Content-Range 中解析总大小
-                total = int(response.headers['Content-Range'].split('/')[-1])
-            else:
-                # 全新下载
-                total = int(response.headers.get('content-length', 0))
-            
-            # 写入模式：追加或新建
-            mode = 'ab' if downloaded > 0 else 'wb'
-            
-            with open(temp_path, mode) as f:
-                for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
-                    # 检查是否被停止
-                    if self.stopped:
-                        raise Exception("下载已停止")
-                    
-                    # 检查是否暂停
-                    while self.paused and not self.stopped:
-                        import time
-                        time.sleep(0.1)
-                    
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        
-                        # 调用进度回调
-                        if self.progress_callback and total > 0:
-                            percent = (downloaded / total) * 100
-                            self.progress_callback(percent, downloaded, total)
-            
-            # 下载完成，重命名临时文件
-            if os.path.exists(dest_path):
-                os.remove(dest_path)
-            os.rename(temp_path, dest_path)
-            
+                os.rename(temp_path, dest_path)
             return True
-        except Exception as e:
-            raise Exception(f"下载失败: {str(e)}")
+        
+        response.raise_for_status()
+        
+        # 获取文件总大小
+        if 'Content-Range' in response.headers:
+            # 断点续传：从 Content-Range 中解析总大小
+            total = int(response.headers['Content-Range'].split('/')[-1])
+        else:
+            # 全新下载
+            total = int(response.headers.get('content-length', 0))
+        
+        # 写入模式：追加或新建
+        mode = 'ab' if downloaded > 0 else 'wb'
+        
+        with open(temp_path, mode) as f:
+            for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+                # 检查是否被停止
+                if self.stopped:
+                    raise Exception("下载已停止")
+                
+                # 检查是否暂停
+                while self.paused and not self.stopped:
+                    time.sleep(0.1)
+                
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    
+                    # 调用进度回调
+                    if self.progress_callback and total > 0:
+                        percent = (downloaded / total) * 100
+                        self.progress_callback(percent, downloaded, total)
+        
+        # 下载完成，重命名临时文件
+        if os.path.exists(dest_path):
+            os.remove(dest_path)
+        os.rename(temp_path, dest_path)
+        
+        # 验证文件完整性
+        if total > 0:
+            actual_size = os.path.getsize(dest_path)
+            if actual_size != total:
+                raise Exception(f"文件大小不匹配: 期望 {total} 字节，实际 {actual_size} 字节")
+        
+        return True
     
     def download_dlc(self, dlc_key, url):
         """
