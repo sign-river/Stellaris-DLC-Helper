@@ -15,6 +15,8 @@ from PIL import Image
 import requests
 from ..config import VERSION
 from ..core import DLCManager, DLCDownloader, DLCInstaller, PatchManager
+from ..core.updater import AutoUpdater
+from .update_dialog import UpdateDialog
 from ..utils import Logger, PathUtils, SteamUtils
 
 
@@ -92,6 +94,9 @@ class MainWindowCTk:
         
         # 自动检测游戏路径并加载DLC列表
         self.root.after(100, self.auto_detect_and_load)
+
+        # 延迟检查更新（避免启动时卡顿）
+        self.root.after(2000, self._auto_check_update)
         
         # 将 GUI 日志处理器附加到根日志记录器，以便标准日志转发到 GUI
         try:
@@ -1411,22 +1416,36 @@ class MainWindowCTk:
         
         threading.Thread(target=remove_thread, daemon=True).start()
     
+    def _auto_check_update(self):
+        """自动检查更新（启动时调用）"""
+        def on_update_check_complete(update_info):
+            if update_info and update_info.is_force_update(VERSION):
+                # 强制更新，显示对话框
+                UpdateDialog(self.root, update_info)
+            # 非强制更新不显示弹窗，避免打扰用户
+
+        updater = AutoUpdater()
+        updater.check_for_updates(on_update_check_complete)
+    
     def check_update(self):
         """检查程序更新"""
-        import webbrowser
-        
-        current_version = VERSION
-        github_url = "https://github.com/sign-river/Stellaris-DLC-Helper/releases"
-        
-        # 显示当前版本信息
-        messagebox.showinfo(
-            "版本信息", 
-            f"当前版本: v{current_version}\n\n"
-            f"如需检查更新，请访问：\n{github_url}"
-        )
-        
-        # 打开浏览器访问releases页面
-        webbrowser.open(github_url)
+        # 显示检查中提示
+        self.update_btn.configure(state="disabled", text="🔄 检查中...")
+        self.root.update()
+
+        def on_update_check_complete(update_info):
+            self.update_btn.configure(state="normal", text="🔄 检查更新")
+
+            if update_info:
+                # 有更新，显示更新对话框
+                UpdateDialog(self.root, update_info)
+            else:
+                # 没有更新或检查失败
+                messagebox.showinfo("检查更新", "当前已是最新版本")
+
+        # 创建更新器并检查更新
+        updater = AutoUpdater()
+        updater.check_for_updates(on_update_check_complete)
     
     def _on_window_map(self, event=None):
         """窗口映射事件处理 - 改善最小化恢复时的重绘"""
