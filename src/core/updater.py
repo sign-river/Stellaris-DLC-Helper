@@ -60,6 +60,7 @@ class AutoUpdater:
     """自动更新器类"""
 
     UPDATE_CHECK_URL = "https://dlc.dlchelper.top/update/version.json"
+    UPDATE_CHECK_TIMEOUT = 15  # 更新检查超时时间（秒）
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ class AutoUpdater:
         def _check():
             try:
                 self.logger.info("开始检查更新...")
-                response = requests.get(self.UPDATE_CHECK_URL, timeout=REQUEST_TIMEOUT)
+                response = requests.get(self.UPDATE_CHECK_URL, timeout=self.UPDATE_CHECK_TIMEOUT)
                 response.raise_for_status()
 
                 data = response.json()
@@ -221,6 +222,9 @@ class AutoUpdater:
         """创建当前版本的备份"""
         try:
             self.backup_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 清理旧备份，只保留最近3个
+            self._cleanup_old_backups()
 
             app_root = Path(__file__).parent.parent.parent
             backup_name = f"backup_{self.current_version}_{PathUtils.get_timestamp()}"
@@ -252,6 +256,28 @@ class AutoUpdater:
         except Exception as e:
             self.logger.error(f"创建备份失败: {e}")
             return False
+
+    def _cleanup_old_backups(self) -> None:
+        """清理旧备份，只保留最近3个"""
+        try:
+            backup_dirs = sorted(
+                self.backup_dir.glob("backup_*"),
+                key=lambda x: x.stat().st_mtime,
+                reverse=True
+            )
+            
+            # 保留最近3个备份
+            max_backups = 3
+            if len(backup_dirs) > max_backups:
+                for old_backup in backup_dirs[max_backups:]:
+                    try:
+                        shutil.rmtree(old_backup)
+                        self.logger.debug(f"删除旧备份: {old_backup}")
+                    except Exception as e:
+                        self.logger.warning(f"删除旧备份失败 {old_backup}: {e}")
+                        
+        except Exception as e:
+            self.logger.warning(f"清理旧备份时出错: {e}")
 
     def _replace_files(self, target_dir: Path, source_dir: Path) -> None:
         """替换文件"""

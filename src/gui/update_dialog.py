@@ -34,8 +34,37 @@ class UpdateDialog(ctk.CTkToplevel):
         self.grab_set()
         self.focus_set()
 
+        # 禁用主窗口的下载功能
+        self._disable_main_window_download()
+
         self._create_widgets()
         self._center_window(parent)
+
+    def _disable_main_window_download(self):
+        """禁用主窗口的下载功能"""
+        try:
+            if hasattr(self.master, 'execute_btn'):
+                self.master.execute_btn.configure(state="disabled", text="🔄 更新中...")
+            if hasattr(self.master, 'update_btn'):
+                self.master.update_btn.configure(state="disabled")
+        except Exception as e:
+            self.logger.warning(f"禁用下载功能失败: {e}")
+
+    def _enable_main_window_download(self):
+        """重新启用主窗口的下载功能"""
+        try:
+            if hasattr(self.master, 'execute_btn'):
+                # 根据当前状态设置正确的按钮文本
+                if hasattr(self.master, 'download_paused') and self.master.download_paused:
+                    self.master.execute_btn.configure(state="normal", text="▶️ 继续下载")
+                elif hasattr(self.master, 'is_downloading') and self.master.is_downloading:
+                    self.master.execute_btn.configure(state="normal", text="⏸️ 暂停下载")
+                else:
+                    self.master.execute_btn.configure(state="normal", text="🔓 一键解锁")
+            if hasattr(self.master, 'update_btn'):
+                self.master.update_btn.configure(state="normal", text="🔄 检查更新")
+        except Exception as e:
+            self.logger.warning(f"启用下载功能失败: {e}")
 
     def _create_widgets(self):
         """创建界面组件"""
@@ -354,4 +383,5 @@ class UpdateDialog(ctk.CTkToplevel):
             messagebox.showwarning("提示", "此更新为强制更新，请完成更新后再关闭。")
             return
 
+        self._enable_main_window_download()
         self.destroy()
