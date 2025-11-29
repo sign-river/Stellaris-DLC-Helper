@@ -24,6 +24,8 @@ import subprocess
 import shutil
 import venv
 import json
+import hashlib
+import zipfile
 from pathlib import Path
 from datetime import datetime
 
@@ -189,6 +191,92 @@ class Packager:
                 filepath = os.path.join(dirpath, filename)
                 total_size += os.path.getsize(filepath)
         return total_size / (1024 * 1024)
+
+    def create_release_package(self):
+        """创建发布压缩包"""
+        print("创建发布压缩包...")
+
+        try:
+            # 压缩包名称
+            zip_name = f"Stellaris-DLC-Helper-v{VERSION}.zip"
+            zip_path = self.project_root / zip_name
+
+            # 删除已存在的压缩包
+            if zip_path.exists():
+                zip_path.unlink()
+
+            # 创建压缩包
+            print(f"正在压缩到: {zip_name}")
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(self.final_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, self.final_path)
+                        zipf.write(file_path, arcname)
+
+            # 计算文件大小和哈希
+            zip_size = zip_path.stat().st_size / (1024 * 1024)  # MB
+
+            # 计算SHA256哈希
+            sha256_hash = self._calculate_file_hash(zip_path, 'sha256')
+            md5_hash = self._calculate_file_hash(zip_path, 'md5')
+
+            print(f"压缩包大小: {zip_size:.2f} MB")
+            print(f"SHA256: {sha256_hash}")
+            print(f"MD5: {md5_hash}")
+
+            # 保存哈希信息到文件
+            hash_info = f"""Stellaris DLC Helper v{VERSION} 发布包信息
+
+文件名: {zip_name}
+文件大小: {zip_size:.2f} MB
+SHA256: {sha256_hash}
+MD5: {md5_hash}
+
+生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+
+            hash_file = self.project_root / f"Stellaris-DLC-Helper-v{VERSION}-checksums.txt"
+            with open(hash_file, 'w', encoding='utf-8') as f:
+                f.write(hash_info)
+
+            print(f"校验文件已保存: {hash_file.name}")
+
+            # 更新version.json中的checksum
+            self._update_version_checksum(sha256_hash)
+
+            return zip_path, zip_size, sha256_hash
+
+        except Exception as e:
+            print(f"创建压缩包失败: {e}")
+            return None, 0, ""
+
+    def _calculate_file_hash(self, file_path, algorithm='sha256'):
+        """计算文件哈希值"""
+        hash_func = hashlib.new(algorithm)
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_func.update(chunk)
+        return hash_func.hexdigest()
+
+    def _update_version_checksum(self, sha256_hash):
+        """更新version.json中的校验和"""
+        try:
+            version_path = self.final_path / "version.json"
+            if version_path.exists():
+                with open(version_path, 'r', encoding='utf-8') as f:
+                    version_info = json.load(f)
+
+                version_info["checksum"] = sha256_hash
+
+                with open(version_path, 'w', encoding='utf-8') as f:
+                    json.dump(version_info, f, indent=2, ensure_ascii=False)
+
+                print("version.json 中的校验和已更新")
+        except Exception as e:
+            print(f"更新校验和失败: {e}")
+
+    def cleanup(self):
         """清理临时文件"""
         print("清理临时文件...")
         if self.venv_path.exists():
@@ -210,12 +298,17 @@ class Packager:
             self.install_minimal_deps()
             self.build_exe()
             self.organize_files()
+            self.create_release_package()
             self.cleanup()
 
             print("=" * 50)
-            print("打包完成！")
-            print(f"输出目录: {self.final_path}")
-            print(f"文件大小: {self._get_dir_size(self.final_path):.2f} MB")
+            print("完整打包流程完成！")
+            print("生成的文件：")
+            zip_name = f"Stellaris-DLC-Helper-v{VERSION}.zip"
+            checksum_name = f"Stellaris-DLC-Helper-v{VERSION}-checksums.txt"
+            print(f"  📦 {zip_name}")
+            print(f"  🔐 {checksum_name}")
+            print(f"  📁 Stellaris-DLC-Helper/ (解压后的目录)")
 
         except Exception as e:
             print(f"打包失败: {e}")
