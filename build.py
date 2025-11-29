@@ -135,18 +135,18 @@ class Packager:
             print("安装 PyInstaller...")
             subprocess.run([str(python_exe), "-m", "pip", "install", "pyinstaller>=5.0.0"], check=True)
 
-        # 检查是否需要重新构建（基于源文件变化）
-        exe_path = self.dist_path / "Stellaris-DLC-Helper.exe"
-        if exe_path.exists():
-            # 获取源文件的最新修改时间
-            src_mtime = self._get_src_max_mtime()
-            exe_mtime = exe_path.stat().st_mtime
-
-            if exe_mtime > src_mtime:
-                print("exe文件已存在且是最新的，跳过构建")
-                return
+        # 检查是否需要重新构建（基于源文件变化和构建配置）
+        if not self._should_rebuild_exe():
+            print("exe文件已存在且是最新的，跳过构建")
+            return
 
         print("构建 exe 文件...")
+
+        # 保存构建配置哈希
+        config_hash_file = self.project_root / ".build_config_hash"
+        current_hash = self._get_build_config_hash()
+        with open(config_hash_file, 'w', encoding='utf-8') as f:
+            f.write(current_hash)
 
         # 使用自定义 spec 文件构建
         spec_file = self.project_root / "Stellaris-DLC-Helper.spec"
@@ -341,24 +341,60 @@ class Packager:
         except Exception as e:
             print(f"更新校验和失败: {e}")
 
-    def _get_src_max_mtime(self):
-        """获取源文件目录中的最新修改时间"""
-        max_mtime = 0
-        src_dirs = ["src", "main.py", "config.json.example"]
+    def _get_build_config_hash(self):
+        """获取构建配置的哈希值"""
+        config_parts = []
 
-        for src_dir in src_dirs:
-            src_path = self.project_root / src_dir
-            if src_path.exists():
-                if src_path.is_file():
-                    max_mtime = max(max_mtime, src_path.stat().st_mtime)
-                else:
-                    for root, dirs, files in os.walk(src_path):
-                        for file in files:
-                            if file.endswith(('.py', '.json', '.txt', '.md')):
-                                file_path = os.path.join(root, file)
-                                max_mtime = max(max_mtime, os.path.getmtime(file_path))
+        # 添加版本号
+        config_parts.append(f"version:{VERSION}")
 
-        return max_mtime
+        # 添加依赖列表
+        requirements_file = self.project_root / "requirements-build.txt"
+        if requirements_file.exists():
+            with open(requirements_file, 'r', encoding='utf-8') as f:
+                deps_content = f.read().strip()
+                config_parts.append(f"deps:{deps_content}")
+
+        # 添加构建脚本的哈希（前1000个字符）
+        build_script = self.project_root / "build.py"
+        if build_script.exists():
+            with open(build_script, 'r', encoding='utf-8') as f:
+                script_content = f.read()[:1000]  # 只取前1000字符
+                config_parts.append(f"script:{hash(script_content)}")
+
+        # 合并所有配置并计算哈希
+        config_str = "|".join(config_parts)
+        return hashlib.md5(config_str.encode()).hexdigest()
+
+    def _should_rebuild_exe(self):
+        """判断是否需要重新构建exe"""
+        exe_path = self.dist_path / "Stellaris-DLC-Helper.exe"
+        if not exe_path.exists():
+            return True
+
+        # 检查源文件修改时间
+        src_mtime = self._get_src_max_mtime()
+        exe_mtime = exe_path.stat().st_mtime
+
+        if exe_mtime < src_mtime:
+            return True
+
+        # 检查构建配置哈希
+        config_hash_file = self.project_root / ".build_config_hash"
+        current_hash = self._get_build_config_hash()
+
+        if config_hash_file.exists():
+            try:
+                with open(config_hash_file, 'r', encoding='utf-8') as f:
+                    saved_hash = f.read().strip()
+                if saved_hash != current_hash:
+                    return True
+            except:
+                return True
+        else:
+            return True
+
+        return False
 
     def _cleanup_intermediate_files(self):
         """清理打包过程中的中间文件"""

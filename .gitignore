@@ -61,6 +61,9 @@ Stellaris-DLC-Helper/
 *.deb
 *.rpm
 
+# 构建缓存文件
+.build_config_hash
+
 # 配置文件（包含敏感信息）
 config.json
 *.bak
