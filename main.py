@@ -17,13 +17,6 @@ from src.gui.main_window import MainWindowCTk
 
 def main():
     """主函数"""
-    # 检查Python版本兼容性
-    import sys
-    if sys.version_info < (3, 7):
-        print("错误: 此程序需要Python 3.7或更高版本")
-        print(f"当前Python版本: {sys.version}")
-        sys.exit(1)
-    
     # Configure basic logging for console and file (before creating UI)
     configure_basic_logging(log_to_file=True)
     logging.getLogger().info(f"日志文件路径: {get_default_log_file_path()}")

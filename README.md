@@ -3,7 +3,6 @@
 🌟 群星(Stellaris) DLC 一键解锁工具
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.7%2B-blue)](https://www.python.org/downloads/)
 [![GitHub release](https://img.shields.io/github/v/release/sign-river/Stellaris-DLC-Helper)](https://github.com/sign-river/Stellaris-DLC-Helper/releases)
 
 > 专为群星(Stellaris)设计的轻量级DLC管理工具 | 云端下载 | 智能缓存 | 操作可还原
