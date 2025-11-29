@@ -1126,6 +1126,7 @@ class MainWindowCTk:
                 progress_callback.last_time = None
                 progress_callback.last_downloaded = 0
                 progress_callback.last_speed_update = 0
+                progress_callback.last_speed_downloaded = 0  # 用于速度计算的下载基准点
                 progress_callback.speed_history = []  # 存储最近的速度值用于平滑
                 progress_callback.history_max_len = 5  # 保持最近5个速度值
                 progress_callback.slow_speed_count = 0  # 连续慢速计数
@@ -1145,72 +1146,74 @@ class MainWindowCTk:
                 
                 # 检查是否到达更新时间（1秒）
                 if current_time - progress_callback.last_speed_update >= 1.0:
-                    # 确保时间差不小于0.1秒，避免除零或过小的除数
-                    if time_diff >= 0.1:
-                        bytes_diff = downloaded - progress_callback.last_downloaded
+                    # 计算从上次速度更新到这次的速度
+                    speed_time_diff = current_time - progress_callback.last_speed_update
+                    speed_bytes_diff = downloaded - progress_callback.last_speed_downloaded
+                    
+                    # 确保时间差和字节差有效
+                    if speed_time_diff >= 0.1 and speed_bytes_diff >= 0:
+                        # 计算瞬时速度
+                        instant_speed = (speed_bytes_diff / speed_time_diff) / (1024 * 1024)  # MB/秒
                         
-                        # 确保字节差不为负（防止异常情况）
-                        if bytes_diff >= 0:
-                            # 计算瞬时速度
-                            instant_speed = (bytes_diff / time_diff) / (1024 * 1024)  # MB/秒
+                        # 添加到历史记录
+                        progress_callback.speed_history.append(instant_speed)
+                        
+                        # 保持历史记录长度
+                        if len(progress_callback.speed_history) > progress_callback.history_max_len:
+                            progress_callback.speed_history.pop(0)
+                        
+                        # 计算移动平均速度（如果有足够的历史数据）
+                        if len(progress_callback.speed_history) >= 3:
+                            # 使用最近3个值的平均值来平滑
+                            avg_speed = sum(progress_callback.speed_history[-3:]) / 3
+                        else:
+                            # 如果历史数据不足，使用当前瞬时速度
+                            avg_speed = instant_speed
+                        
+                        # 限制速度显示范围，避免异常值（0.01 - 100 MB/s）
+                        if avg_speed < 0.01:
+                            display_speed = 0.00
+                        elif avg_speed > 100:
+                            display_speed = 99.99
+                        else:
+                            display_speed = avg_speed
+                        
+                        # 服务器质量检测逻辑
+                        # 如果不是暂停状态且速度极慢（连续3次低于0.1 MB/s）
+                        if not self.download_paused and display_speed < 0.1:
+                            progress_callback.slow_speed_count += 1
                             
-                            # 添加到历史记录
-                            progress_callback.speed_history.append(instant_speed)
+                            # 如果连续3次慢速，检测服务器连接
+                            if progress_callback.slow_speed_count >= 3 and not progress_callback.server_issue_detected:
+                                # 每10秒最多检查一次服务器
+                                if current_time - progress_callback.last_server_check >= 10:
+                                    progress_callback.last_server_check = current_time
+                                    
+                                    # 检测服务器连接质量
+                                    if self._check_server_connection(self.current_download_url):
+                                        # 服务器正常，重置计数
+                                        progress_callback.slow_speed_count = 0
+                                    else:
+                                        # 服务器有问题，切换到错误显示
+                                        progress_callback.server_issue_detected = True
+                                        self.root.after(0, self._show_server_error)
+                        else:
+                            # 速度恢复正常，重置计数
+                            if progress_callback.slow_speed_count > 0:
+                                progress_callback.slow_speed_count -= 1
                             
-                            # 保持历史记录长度
-                            if len(progress_callback.speed_history) > progress_callback.history_max_len:
-                                progress_callback.speed_history.pop(0)
-                            
-                            # 计算移动平均速度（如果有足够的历史数据）
-                            if len(progress_callback.speed_history) >= 3:
-                                # 使用最近3个值的平均值来平滑
-                                avg_speed = sum(progress_callback.speed_history[-3:]) / 3
-                            else:
-                                # 如果历史数据不足，使用当前瞬时速度
-                                avg_speed = instant_speed
-                            
-                            # 限制速度显示范围，避免异常值（0.01 - 100 MB/s）
-                            if avg_speed < 0.01:
-                                display_speed = 0.00
-                            elif avg_speed > 100:
-                                display_speed = 99.99
-                            else:
-                                display_speed = avg_speed
-                            
-                            # 服务器质量检测逻辑
-                            # 如果不是暂停状态且速度极慢（连续3次低于0.1 MB/s）
-                            if not self.download_paused and display_speed < 0.1:
-                                progress_callback.slow_speed_count += 1
-                                
-                                # 如果连续3次慢速，检测服务器连接
-                                if progress_callback.slow_speed_count >= 3 and not progress_callback.server_issue_detected:
-                                    # 每10秒最多检查一次服务器
-                                    if current_time - progress_callback.last_server_check >= 10:
-                                        progress_callback.last_server_check = current_time
-                                        
-                                        # 检测服务器连接质量
-                                        if self._check_server_connection(self.current_download_url):
-                                            # 服务器正常，重置计数
-                                            progress_callback.slow_speed_count = 0
-                                        else:
-                                            # 服务器有问题，切换到错误显示
-                                            progress_callback.server_issue_detected = True
-                                            self.root.after(0, self._show_server_error)
-                            else:
-                                # 速度恢复正常，重置计数
-                                if progress_callback.slow_speed_count > 0:
-                                    progress_callback.slow_speed_count -= 1
-                                
-                                # 如果之前检测到服务器问题，现在检查是否恢复
-                                if progress_callback.server_issue_detected and display_speed >= 0.5:
-                                    # 速度恢复到0.5 MB/s以上，认为服务器恢复正常
-                                    progress_callback.server_issue_detected = False
-                                    self.root.after(0, self._hide_server_error)
-                            
-                            # 更新速度显示
-                            self.root.after(0, lambda s=display_speed: self.speed_label.configure(text=f"{s:.2f} MB/s"))
-                            
-                            progress_callback.last_speed_update = current_time
+                            # 如果之前检测到服务器问题，现在检查是否恢复
+                            if progress_callback.server_issue_detected and display_speed >= 0.5:
+                                # 速度恢复到0.5 MB/s以上，认为服务器恢复正常
+                                progress_callback.server_issue_detected = False
+                                self.root.after(0, self._hide_server_error)
+                        
+                        # 更新速度显示
+                        self.root.after(0, lambda s=display_speed: self.speed_label.configure(text=f"{s:.2f} MB/s"))
+                        
+                        # 更新速度计算基准点
+                        progress_callback.last_speed_update = current_time
+                        progress_callback.last_speed_downloaded = downloaded
             
             progress_callback.last_time = current_time
             progress_callback.last_downloaded = downloaded
