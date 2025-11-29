@@ -50,6 +50,9 @@ Stellaris_DLC_Cache/python/
 # 日志文件
 *.log
 
+# 操作日志文件
+Stellaris_DLC_Cache/operation_logs/
+
 # 打包相关文件
 Stellaris-DLC-Helper/
 *.spec
