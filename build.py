@@ -368,10 +368,8 @@ class Packager:
                 shutil.rmtree(self.dist_path)
                 print("已删除 dist/ 目录")
 
-            # 删除虚拟环境
-            if self.venv_path.exists():
-                shutil.rmtree(self.venv_path)
-                print("已删除 build_venv/ 目录")
+            # 注意：保留虚拟环境以实现缓存效果
+            # 如需清理虚拟环境，请手动删除 build_venv/ 目录
 
             # 删除spec文件
             spec_file = self.project_root / "Stellaris-DLC-Helper.spec"
@@ -417,7 +415,7 @@ class Packager:
             print("生成的文件：")
             zip_name = f"Stellaris-DLC-Helper-v{VERSION}.zip"
             print(f"  📦 {zip_name}")
-            print("  💡 中间文件已自动清理")
+            print("  💡 中间文件已清理（保留虚拟环境以加速下次打包）")
 
         except Exception as e:
             print(f"打包失败: {e}")
