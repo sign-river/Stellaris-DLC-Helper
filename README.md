@@ -26,7 +26,7 @@
 ### 下载使用
 
 1. 前往 [Releases](https://github.com/sign-river/Stellaris-DLC-Helper/releases/latest) 页面
-2. 下载 `Stellaris.DLC.Helper.vX.X.X.zip`
+2. 下载 `Stellaris.DLC.Helper.v1.0.0.zip`
 3. 解压到任意位置
 4. 运行 `Stellaris-DLC-Helper.exe`
 
@@ -78,7 +78,7 @@
 
 ## 📝 更新日志
 
-### v1.0.0 (2025-01-27)
+### v1.0.0 (2025-11-30)
 - 🎉 首次发布
 - ✨ 基础DLC下载和安装功能
 - 💾 本地缓存系统
