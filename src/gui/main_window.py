@@ -1127,8 +1127,6 @@ class MainWindowCTk:
                 progress_callback.last_downloaded = 0
                 progress_callback.last_speed_update = 0
                 progress_callback.last_speed_downloaded = 0  # 用于速度计算的下载基准点
-                progress_callback.speed_history = []  # 存储最近的速度值用于平滑
-                progress_callback.history_max_len = 5  # 保持最近5个速度值
                 progress_callback.slow_speed_count = 0  # 连续慢速计数
                 progress_callback.server_issue_detected = False  # 服务器问题标志
                 progress_callback.last_server_check = 0  # 上次服务器检查时间
@@ -1140,12 +1138,12 @@ class MainWindowCTk:
             # 进度条实时更新（不限制频率）
             self.root.after(0, lambda: self.progress_bar.set(percent / 100))
             
-            # 速度信息每1秒更新一次（减少更新间隔以获得更平滑的数据）
+            # 速度信息每0.5秒更新一次（提高更新频率以获得更准确的数据）
             if progress_callback.last_time is not None:
                 time_diff = current_time - progress_callback.last_time
                 
-                # 检查是否到达更新时间（1秒）
-                if current_time - progress_callback.last_speed_update >= 1.0:
+                # 检查是否到达更新时间（0.5秒）
+                if current_time - progress_callback.last_speed_update >= 0.5:
                     # 计算从上次速度更新到这次的速度
                     speed_time_diff = current_time - progress_callback.last_speed_update
                     speed_bytes_diff = downloaded - progress_callback.last_speed_downloaded
@@ -1155,32 +1153,27 @@ class MainWindowCTk:
                         # 计算瞬时速度
                         instant_speed = (speed_bytes_diff / speed_time_diff) / (1024 * 1024)  # MB/秒
                         
-                        # 添加到历史记录
-                        progress_callback.speed_history.append(instant_speed)
-                        
-                        # 保持历史记录长度
-                        if len(progress_callback.speed_history) > progress_callback.history_max_len:
-                            progress_callback.speed_history.pop(0)
-                        
-                        # 计算移动平均速度（如果有足够的历史数据）
-                        if len(progress_callback.speed_history) >= 3:
-                            # 使用最近3个值的平均值来平滑
-                            avg_speed = sum(progress_callback.speed_history[-3:]) / 3
+                        # 使用指数移动平均（EMA）来平滑速度，避免简单平均导致的速度逐渐下降
+                        # EMA公式: ema = alpha * current + (1 - alpha) * previous_ema
+                        # alpha = 0.3 表示对新值更敏感
+                        if not hasattr(progress_callback, 'previous_ema'):
+                            progress_callback.previous_ema = instant_speed
+                            display_speed = instant_speed
                         else:
-                            # 如果历史数据不足，使用当前瞬时速度
-                            avg_speed = instant_speed
+                            alpha = 0.3
+                            display_speed = alpha * instant_speed + (1 - alpha) * progress_callback.previous_ema
+                            progress_callback.previous_ema = display_speed
                         
                         # 限制速度显示范围，避免异常值（0.01 - 100 MB/s）
-                        if avg_speed < 0.01:
+                        if display_speed < 0.01:
                             display_speed = 0.00
-                        elif avg_speed > 100:
+                        elif display_speed > 100:
                             display_speed = 99.99
-                        else:
-                            display_speed = avg_speed
                         
                         # 服务器质量检测逻辑
-                        # 如果不是暂停状态且速度极慢（连续3次低于0.1 MB/s）
-                        if not self.download_paused and display_speed < 0.1:
+                        # 只有在下载时间超过5秒后才开始检测服务器问题，避免小文件误判
+                        download_duration = current_time - progress_callback.last_time
+                        if not self.download_paused and download_duration > 5.0 and display_speed < 0.1:
                             progress_callback.slow_speed_count += 1
                             
                             # 如果连续3次慢速，检测服务器连接
