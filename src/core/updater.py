@@ -5,15 +5,13 @@
 负责检查、下载和应用程序更新
 """
 
-import os
-import json
 import requests
 import zipfile
 import shutil
 import tempfile
 import threading
 from pathlib import Path
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Optional
 import logging
 from ..config import REQUEST_TIMEOUT, VERSION, UPDATE_CHECK_URL
 from ..utils import PathUtils
