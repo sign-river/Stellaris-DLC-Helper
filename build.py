@@ -153,7 +153,7 @@ class Packager:
                             if "version" in config_data:
                                 VERSION = config_data["version"]
                                 break
-                    except:
+                    except (FileNotFoundError, json.JSONDecodeError, OSError):
                         pass
 
             # 获取打包目录大小

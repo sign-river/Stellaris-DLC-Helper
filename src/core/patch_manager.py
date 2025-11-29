@@ -170,7 +170,7 @@ class PatchManager:
         import requests
         import json
         from pathlib import Path
-        from ..config import REQUEST_TIMEOUT
+        from ..config import REQUEST_TIMEOUT, APPINFO_URL
         
         # 读取模板
         template_path = os.path.join(self.patch_dir, 'cream_api.ini')
@@ -187,7 +187,7 @@ class PatchManager:
         # 1. 优先尝试从服务器HTTP获取 appinfo 文件
         appinfo = None
         try:
-            appinfo_url = "https://dlc.dlchelper.top/appinfo/stellaris_appinfo.json"
+            appinfo_url = APPINFO_URL
             self.logger.info(f"正在从服务器获取 Steam DLC ID 映射...")
             response = requests.get(appinfo_url, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()

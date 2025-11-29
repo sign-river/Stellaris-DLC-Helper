@@ -36,7 +36,7 @@ class SteamUtils:
             steam_path = winreg.QueryValueEx(key, "InstallPath")[0]
             winreg.CloseKey(key)
             return steam_path
-        except:
+        except (FileNotFoundError, OSError):
             pass
         
         try:
@@ -50,7 +50,7 @@ class SteamUtils:
             steam_path = winreg.QueryValueEx(key, "InstallPath")[0]
             winreg.CloseKey(key)
             return steam_path
-        except:
+        except (FileNotFoundError, OSError):
             pass
         
         return None

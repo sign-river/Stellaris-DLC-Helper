@@ -64,6 +64,8 @@ class MainWindowCTk:
         self.download_paused = False  # 暂停状态
         self.current_downloader = None  # 当前下载器实例
         self.current_download_url = None  # 当前下载URL
+        # 状态锁，保护多线程访问的状态变量
+        self._state_lock = threading.Lock()
         # 一键解锁流程状态：
         # - _one_click_flow:  标记当前操作由“一键解锁”触发，用于在流程结束时统一展示成功弹窗（避免重复弹窗）
         # - _one_click_patch_applied: 标记在本次一键流程里是否实际应用了补丁（用于决定最终弹窗内容）
@@ -1528,7 +1530,7 @@ class MainWindowCTk:
                             if response.status_code in [200, 301, 302, 403, 404]:
                                 success_count += 1
                                 response_times.append(end_time - start_time)
-                        except:
+                        except (requests.RequestException, OSError):
                             pass
                         
                         # 测试间隔
@@ -1565,7 +1567,7 @@ class MainWindowCTk:
                     response = requests.head(url, timeout=5, allow_redirects=True)
                     if response.status_code == 200:
                         return True  # 网络连接正常
-                except:
+                except (requests.RequestException, OSError):
                     continue
             
             return False  # 所有测试都失败

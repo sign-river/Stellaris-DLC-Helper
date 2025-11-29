@@ -15,7 +15,7 @@ import threading
 from pathlib import Path
 from typing import Callable, Optional, Dict, Any
 import logging
-from ..config import REQUEST_TIMEOUT, VERSION
+from ..config import REQUEST_TIMEOUT, VERSION, UPDATE_CHECK_URL
 from ..utils import PathUtils
 
 
@@ -59,7 +59,6 @@ class UpdateInfo:
 class AutoUpdater:
     """自动更新器类"""
 
-    UPDATE_CHECK_URL = "https://dlc.dlchelper.top/update/version.json"
     UPDATE_CHECK_TIMEOUT = 15  # 更新检查超时时间（秒）
 
     def __init__(self):

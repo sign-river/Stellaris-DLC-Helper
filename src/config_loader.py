@@ -27,7 +27,9 @@ class ConfigLoader:
             "stellaris_app_id": "281990",
             "server": {
                 "url": "https://dlc.dlchelper.top/dlc/",
-                "timeout": 30
+                "timeout": 30,
+                "update_url_base": "https://dlc.dlchelper.top/update/",
+                "appinfo_url": "https://dlc.dlchelper.top/appinfo/stellaris_appinfo.json"
             },
             "network": {
                 "chunk_size": 8192,
