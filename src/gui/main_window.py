@@ -153,8 +153,9 @@ class MainWindowCTk:
         # - 2: 中间（文本组：作者, QQ）
         # - 3: 中间（图标组：GitHub, B站）
         # - 4: 最右侧（遇到报错？ 链接）
+        # 只让左侧第0列与右侧第4列可拉伸，保证第2列（中间文本组）始终处于水平居中
         info_row_frame.grid_columnconfigure(0, weight=1)
-        info_row_frame.grid_columnconfigure(1, weight=1)
+        info_row_frame.grid_columnconfigure(1, weight=0)
         info_row_frame.grid_columnconfigure(2, weight=0)
         info_row_frame.grid_columnconfigure(3, weight=0)
         info_row_frame.grid_columnconfigure(4, weight=1)
@@ -162,6 +163,7 @@ class MainWindowCTk:
         # 中间文本容器放在第3列（index=2）
         center_container = ctk.CTkFrame(info_row_frame, fg_color="transparent")
         center_container.grid(row=0, column=2)
+        # 确保 center_container 处于列的水平中间，不拉伸
 
         # 中部内层容器：用来组合作者/QQ群/图标并使其整体居中
         center_inner = ctk.CTkFrame(center_container, fg_color="transparent")
