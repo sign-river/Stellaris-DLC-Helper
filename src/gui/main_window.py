@@ -1401,6 +1401,10 @@ class MainWindowCTk:
             
             # 初始化下载器将在每次尝试中创建，确保 stop/close 不会影响后续尝试
             
+            # pending switch info used to perform controlled switch after re-test
+            self._pending_switch_url = None
+            self._pending_switch_source = None
+
             for idx, dlc in enumerate(selected, 1):
                 # 检查是否需要重新选择源（在下载过程中可能因测速而改变）
                 current_source = getattr(self, 'best_download_source', 'domestic_cloud')
@@ -1468,17 +1472,40 @@ class MainWindowCTk:
                                             if new_source and new_source != getattr(self, 'best_download_source', None):
                                                 self.logger.info(f"检测到更快源: {new_source} ({measured_speed:.2f} MB/s)，准备切换")
                                                 self.best_download_source = new_source
-                                                # 发起停止当前下载以触发重试切换逻辑
+                                                # 记录等待切换的信息，先暂停当前下载器
+                                                try:
+                                                    self._pending_switch_url = new_url
+                                                    self._pending_switch_source = new_source
+                                                    if hasattr(self, 'current_downloader') and self.current_downloader:
+                                                        try:
+                                                            self.current_downloader.pause()
+                                                            self.logger.info('下载已暂停，正在切换源...')
+                                                        except Exception:
+                                                            pass
+                                                except Exception:
+                                                    pass
+                                                # 现在开始停止以便主线程在下一次重试时重新创建 downloader 并使用新 URL
                                                 if hasattr(self, 'current_downloader') and self.current_downloader:
                                                     try:
                                                         self.current_downloader.stop()
                                                     except Exception:
                                                         pass
                                                 return
+                                            else:
+                                                # 没有找到更快的源，恢复暂停的下载，并显示服务器错误
+                                                try:
+                                                    if hasattr(self, 'current_downloader') and self.current_downloader:
+                                                        try:
+                                                            self.current_downloader.resume()
+                                                            self.logger.info('恢复当前下载')
+                                                        except Exception:
+                                                            pass
+                                                except Exception:
+                                                    pass
                                     except Exception as _e:
                                         # 记录异常但继续循环
                                         self.logger.debug(f"gitee quick re-test 错误: {_e}")
-                                    # 等待下一次检测
+                                        # 等待下一次检测
                                     for _ in range(int(check_interval)):
                                         if stop_event.is_set():
                                             break
@@ -1505,6 +1532,21 @@ class MainWindowCTk:
                                 del progress_callback.previous_ema
                             except Exception:
                                 pass
+                    except Exception:
+                        pass
+
+                    # 如果有 pending switch URL（来自 gitee_retest 线程），使用新的 test url 并重置 pending 信息
+                    try:
+                        if getattr(self, '_pending_switch_url', None):
+                            sel = self._pending_switch_url
+                            src = self._pending_switch_source
+                            # 将新 source 放到 selected_url 和备选中
+                            selected_url = sel
+                            selected_fallback_urls = [(u, s) for u, s in all_urls if s != src]
+                            # 重置 pending 标志
+                            self._pending_switch_url = None
+                            self._pending_switch_source = None
+                            self.logger.info(f"切换到新下载 URL: {selected_url}")
                     except Exception:
                         pass
 
