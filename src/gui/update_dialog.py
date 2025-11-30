@@ -143,14 +143,14 @@ class UpdateDialog(ctk.CTkToplevel):
         button_frame = ctk.CTkFrame(self, fg_color="transparent")
         button_frame.pack(fill="x", padx=20, pady=(0, 20))
 
-        # 稍后提醒按钮（非强制更新时显示）
-        if not self.update_info.is_force_update(self.updater.current_version):
-            later_button = ctk.CTkButton(
-                button_frame,
-                text="稍后提醒",
-                command=self._remind_later
-            )
-            later_button.pack(side="left", padx=(0, 10))
+        # 稍后提醒按钮（强制/非强制更新均显示，但强制更新时会提示确认）
+        # 注意: 强制更新仍会在界面中显示“稍后提醒”，以便用户有明确选择权，但点击时会弹出警告提示。
+        later_button = ctk.CTkButton(
+            button_frame,
+            text="稍后提醒",
+            command=self._remind_later
+        )
+        later_button.pack(side="left", padx=(0, 10))
 
         # 立即更新按钮
         update_button = ctk.CTkButton(
@@ -187,8 +187,31 @@ class UpdateDialog(ctk.CTkToplevel):
             messagebox.showerror("错误", f"无法打开更新日志: {e}")
 
     def _remind_later(self):
-        """稍后提醒"""
-        self.destroy()
+        """稍后提醒: 如果是强制更新，先弹出警告确认，确认后关闭对话框。"""
+        try:
+            if self.update_info.is_force_update(self.updater.current_version):
+                # 温和提示: 强制更新的特殊处理
+                res = messagebox.askokcancel(
+                    "重要提示",
+                    "此更新为重要更新，跳过可能导致程序功能异常或不兼容。\n确定要稍后提醒并关闭更新界面吗？"
+                )
+                if res:
+                    # 仅关闭更新对话框，不重新打开
+                    self._enable_main_window_download()
+                    self.destroy()
+                else:
+                    # 取消关闭，继续保留更新对话
+                    return
+            else:
+                self._enable_main_window_download()
+                self.destroy()
+        except Exception as e:
+            self.logger.warning(f"处理稍后提醒时出错: {e}")
+            try:
+                self._enable_main_window_download()
+            except Exception:
+                pass
+            self.destroy()
 
     def _start_update(self):
         """开始更新"""
@@ -399,9 +422,13 @@ class UpdateDialog(ctk.CTkToplevel):
     def _on_close(self):
         """窗口关闭事件"""
         if self.update_info.is_force_update(self.updater.current_version):
-            # 强制更新时不允许关闭
-            messagebox.showwarning("提示", "此更新为强制更新，请完成更新后再关闭。")
-            return
+            # 温和提示: 强制更新时也允许关闭，但先询问用户是否确认关闭更新
+            res = messagebox.askokcancel(
+                "重要提示",
+                "此更新为重要更新，跳过可能导致程序功能异常或不兼容。\n是否仍要关闭更新界面？"
+            )
+            if not res:
+                return
 
         self._enable_main_window_download()
         self.destroy()
