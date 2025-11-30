@@ -466,7 +466,7 @@ class SourceManager:
             log_callback("开始测速选择最佳下载源...")
         
         # 按优先级顺序测试
-        priority_order = ["r2", "domestic_cloud", "github", "gitee"]
+        priority_order = ["r2", "github", "domestic_cloud", "gitee"]
         
         for source_name in priority_order:
             if source_name in test_urls:
