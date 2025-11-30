@@ -167,30 +167,41 @@ class SourceManager:
         """
         urls = []
 
-        # 如果DLC信息中已有URL（标准格式），添加到列表
-        if "url" in dlc_info and dlc_info["url"]:
-            urls.append(dlc_info["url"])
+        # 为所有启用的源生成下载URL
+        enabled_sources = self.get_enabled_sources()
 
-        # 根据源格式生成额外的URL
-        source_name = dlc_info.get("_source")
-        source_url = dlc_info.get("_source_url")
+        for source in enabled_sources:
+            source_name = source.get("name")
+            source_url = source.get("url", "").rstrip("/")
+            format_type = source.get("format", "standard")
 
-        if source_name and source_url:
-            source_config = self.get_source_by_name(source_name)
-            if source_config:
-                format_type = source_config.get("format", "standard")
-
-                if format_type == "gitee_release":
-                    # Gitee release asset URL格式
-                    # TODO: 根据实际API实现
-                    pass
-                elif format_type == "github_release":
-                    # GitHub release asset URL格式
-                    # TODO: 根据实际API实现
-                    pass
-                elif format_type == "custom":
-                    # 自定义格式
-                    # TODO: 根据实际需求实现
-                    pass
+            if format_type == "standard":
+                # 标准格式：直接使用DLC信息中的URL，但替换域名部分
+                if "url" in dlc_info and dlc_info["url"]:
+                    # 从原始URL中提取相对路径
+                    original_url = dlc_info["url"]
+                    # 替换基础URL部分
+                    # 例如：https://dlc.dlchelper.top/dlc/281990/dlc001.zip -> http://47.100.2.190/dlc/281990/dlc001.zip
+                    if original_url.startswith("https://dlc.dlchelper.top/dlc/"):
+                        relative_path = original_url[len("https://dlc.dlchelper.top/dlc/"):]
+                        new_url = f"{source_url}/{relative_path}"
+                        if new_url not in urls:  # 避免重复
+                            urls.append(new_url)
+                    else:
+                        # 如果不是标准R2 URL，直接使用原始URL（但只对当前源）
+                        if source_name == dlc_info.get("_source"):
+                            urls.append(original_url)
+            elif format_type == "gitee_release":
+                # Gitee release asset URL格式
+                # TODO: 根据实际API实现
+                pass
+            elif format_type == "github_release":
+                # GitHub release asset URL格式
+                # TODO: 根据实际API实现
+                pass
+            elif format_type == "custom":
+                # 自定义格式
+                # TODO: 根据实际需求实现
+                pass
 
         return urls
