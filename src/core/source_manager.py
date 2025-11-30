@@ -385,11 +385,13 @@ class SourceManager:
                 speed_mb = (total_downloaded / 1024 / 1024) / final_duration
                 
                 if not silent:
-                    message = f"[{description}] 最终速度: {speed_mb:.2f} MB/s"
+                    message1 = f"[{description}] 耗时: {final_duration:.2f}秒 | 下载量: {total_downloaded/1024/1024:.2f} MB"
+                    message2 = f"[{description}] 最终速度: {speed_mb:.2f} MB/s"
                     print(f"   [i] 耗时: {final_duration:.2f}秒 | 下载量: {total_downloaded/1024/1024:.2f} MB")
                     print(f"   >>> 最终速度: {speed_mb:.2f} MB/s", end="")
                     if log_callback:
-                        log_callback(message)
+                        log_callback(message1)
+                        log_callback(message2)
                 
                 if speed_mb > threshold_mb:
                     if not silent:
