@@ -1143,7 +1143,7 @@ class MainWindowCTk:
             self.logger.info("正在测速选择最佳下载源...")
             try:
                 best_source, test_url = self.dlc_manager.source_manager.get_best_download_source(
-                    silent=True, 
+                    silent=False,  # 允许显示详细信息到控制台，但GUI会通过log_callback显示
                     log_callback=self.logger.info
                 )
                 self.best_download_source = best_source
