@@ -1530,6 +1530,19 @@ class MainWindowCTk:
                     
                     # 设置当前下载URL
                     self.current_download_url = selected_url
+                    # 同步显示当前下载源（确保即时刷新，而不依赖于 progress_callback 的回调）
+                    try:
+                        display_map = {
+                            "r2": "R2云存储",
+                            "domestic_cloud": "国内云服务器",
+                            "gitee": "Gitee",
+                            "github": "GitHub"
+                        }
+                        display_name = display_map.get(current_source, current_source)
+                        self.root.after(0, lambda: self.source_label.configure(text=f"下载源: {display_name}"))
+                        self.root.after(0, lambda: self.source_label.grid())
+                    except Exception:
+                        pass
 
                     # 如果当前选定的是 Gitee 源，启动一个后台线程在下载过程中定期快速检测其它源速度（不影响当前下载）
                     # 如果发现更快的源（例如速度 > 5MB/s），则切换到该源
