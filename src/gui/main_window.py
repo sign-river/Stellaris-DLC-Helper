@@ -1167,6 +1167,21 @@ class MainWindowCTk:
         self.download_paused = False
         self.execute_btn.configure(text="⏸️ 暂停下载")
         self.logger.info(f"\n开始下载 {len(selected)} 个DLC...")
+        # 在下载开始前，将当前选择的最佳源显示在UI（若已选择）
+        try:
+            display_map = {
+                "r2": "R2云存储",
+                "domestic_cloud": "国内云服务器",
+                "gitee": "Gitee",
+                "github": "GitHub"
+            }
+            best = getattr(self, 'best_download_source', None)
+            if best:
+                display_name = display_map.get(best, best)
+                self.root.after(0, lambda: self.source_label.configure(text=f"下载源: {display_name}"))
+                self.root.after(0, lambda: self.source_label.grid())
+        except Exception:
+            pass
         
         def progress_callback(percent, downloaded, total):
             """下载进度回调"""
