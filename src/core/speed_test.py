@@ -11,14 +11,14 @@ def measure_speed(url, description, threshold_mb):
     }
 
     try:
-        # 连接 3s 超时，读取 8s 超时
-        with requests.get(url, headers=headers, stream=True, timeout=(3.0, 8.0)) as response:
+        # 【修改点1】连接超时放宽到 5s，读取超时放宽到 20s (防 R2 丢包报错)
+        with requests.get(url, headers=headers, stream=True, timeout=(5.0, 20.0)) as response:
             # 1. 检查状态码
             if not response.ok:
                 print(f"   [X] 失败: 服务器返回状态码 {response.status_code}")
                 return False, 0.0
 
-            # 2. 检查 Content-Length (诊断文件是否变小了)
+            # 2. 检查 Content-Length
             content_length = response.headers.get('Content-Length')
             if content_length:
                 mb_size = int(content_length) / 1024 / 1024
@@ -45,16 +45,16 @@ def measure_speed(url, description, threshold_mb):
                 duration = current_time - start_time
                 
                 # --- 停止条件诊断 ---
-                if duration >= 5.0:
-                    print("   [√] 停止原因: 满 5 秒时间到")
+                # 【修改点2】确保这里是 10.0 秒
+                if duration >= 10.0:
+                    print("   [√] 停止原因: 满 10 秒时间到")
                     break
                 
                 if total_downloaded >= 70 * 1024 * 1024:
-                    print("   [√] 停止原因: 速度太快 (超过100MB)")
+                    print("   [√] 停止原因: 速度太快 (超过70MB)")
                     break
             else:
-                # 如果循环自然结束（即文件读完了，也没触发 break）
-                print("   [!] 停止原因: 文件被下载完了 (文件太小?)")
+                print("   [!] 停止原因: 文件被下载完了")
 
             # 4. 计算结果
             final_duration = time.time() - start_time
@@ -73,22 +73,22 @@ def measure_speed(url, description, threshold_mb):
                 return False, speed_mb
 
     except requests.exceptions.ConnectTimeout:
-        print("   [X] 连接超时 (3秒内未连上)\n")
+        print("   [X] 连接超时 (5秒内未连上)\n")
         return False, 0.0
     except Exception as e:
         print(f"   [X] 发生错误: {e}\n")
         return False, 0.0
 
 def get_best_download_url():
-    # 请确保这里填的是那个 70MB 文件的地址
-    url_r2 = "https://dlc.dlchelper.top/dlc/test/test.bin"
+    # 确保这里填的是那个 70MB 文件的地址
+    url_r2 = "https://dlc.dlchelper.top/dlc/test/test2.bin"
     url_github = "https://github.com/sign-river/File_warehouse/releases/download/test/test.bin"
     url_domestic = "http://47.100.2.190/dlc/test/test.bin" 
     url_gitee = "https://gitee.com/signriver/file_warehouse/releases/download/test/test.bin"
- 
 
     print("=" * 40)
-    print("开始诊断模式测速 (5秒采样)")
+    # 【修改点3】更新文案显示
+    print("开始诊断模式测速 (10秒采样)")
     print("=" * 40)
     
     # 1. R2

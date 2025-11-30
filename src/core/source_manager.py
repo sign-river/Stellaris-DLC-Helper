@@ -446,7 +446,7 @@ class SourceManager:
             if source.get("enabled", False):
                 name = source.get("name")
                 if name == "r2":
-                    test_urls[name] = "https://dlc.dlchelper.top/dlc/test/test.bin"
+                    test_urls[name] = "https://dlc.dlchelper.top/dlc/test/test2.bin"
                 elif name == "domestic_cloud":
                     test_urls[name] = "http://47.100.2.190/dlc/test/test.bin"
                 elif name == "github":
