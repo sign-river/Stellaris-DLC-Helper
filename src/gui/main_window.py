@@ -485,7 +485,7 @@ class MainWindowCTk:
             header_frame,
             text="下载源: 未知",
             font=ctk.CTkFont(size=11),
-            text_color="#FF9800",
+            text_color="#1976D2",
             width=100
         )
         self.source_label.grid(row=0, column=6, sticky="w")
