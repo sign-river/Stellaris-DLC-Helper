@@ -9,6 +9,7 @@ import os
 import requests
 from ..config import DLC_INDEX_URL, STELLARIS_APP_ID, REQUEST_TIMEOUT
 from ..utils import PathUtils
+from .source_manager import SourceManager
 
 
 class DLCManager:
@@ -22,10 +23,11 @@ class DLCManager:
             game_path: 游戏路径
         """
         self.game_path = game_path
+        self.source_manager = SourceManager()
         
     def fetch_dlc_list(self):
         """
-        从服务器获取DLC列表
+        从多个服务器获取DLC列表并合并
         
         返回:
             list: DLC列表，每项包含 key, name, url, size
@@ -33,14 +35,28 @@ class DLCManager:
         抛出:
             Exception: 网络错误或数据格式错误
         """
-        response = requests.get(DLC_INDEX_URL, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-        data = response.json()
+        all_data = []
         
-        if STELLARIS_APP_ID not in data:
+        # 从所有启用的源获取数据
+        enabled_sources = self.source_manager.get_enabled_sources()
+        if not enabled_sources:
+            raise Exception("没有启用的下载源")
+        
+        for source in enabled_sources:
+            data = self.source_manager.fetch_dlc_data_from_source(source)
+            if data:
+                all_data.append(data)
+        
+        if not all_data:
+            raise Exception("所有下载源都无法访问")
+        
+        # 合并数据
+        merged_data = self.source_manager.merge_dlc_data(all_data)
+        
+        if STELLARIS_APP_ID not in merged_data:
             raise Exception("服务器上暂无Stellaris的DLC数据")
         
-        stellaris_data = data[STELLARIS_APP_ID]
+        stellaris_data = merged_data[STELLARIS_APP_ID]
         dlcs = stellaris_data.get("dlcs", {})
         
         if not dlcs:
@@ -48,11 +64,16 @@ class DLCManager:
         
         dlc_list = []
         for key, info in dlcs.items():
+            # 获取所有可用的下载URL
+            urls = self.source_manager.get_download_urls_for_dlc(key, info)
+            
             dlc_list.append({
                 "key": key,
                 "name": info.get("name", key),
-                "url": info.get("url", ""),
-                "size": info.get("size", "未知")
+                "url": urls[0] if urls else "",  # 主URL
+                "urls": urls,  # 所有可用URL，用于fallback
+                "size": info.get("size", "未知"),
+                "source": info.get("_source", "unknown")
             })
         
         # 按DLC编号排序

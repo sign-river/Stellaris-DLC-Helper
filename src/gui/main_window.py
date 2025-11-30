@@ -1239,7 +1239,8 @@ class MainWindowCTk:
                     
                     # 下载DLC
                     self.logger.info(f"正在下载: {dlc['name']}...")
-                    cache_path = downloader.download_dlc(dlc['key'], dlc['url'])
+                    fallback_urls = dlc.get('urls', [])[1:] if dlc.get('urls') else []  # 排除主URL
+                    cache_path = downloader.download_dlc(dlc['key'], dlc['url'], fallback_urls)
                     if os.path.exists(cache_path):
                         self.logger.info("从本地缓存加载...")
                     else:

@@ -14,8 +14,19 @@ VERSION = get_config("version", default="1.0.0")
 # Stellaris 游戏 AppID
 STELLARIS_APP_ID = get_config("stellaris_app_id", default="281990")
 
-# DLC 服务器配置
-DLC_SERVER_URL = get_config("server", "url", default="https://dlc.dlchelper.top/dlc/")
+# DLC 服务器配置 - 多源支持
+DLC_SOURCES = get_config("server", "sources", default=[
+    {
+        "name": "r2",
+        "url": "https://dlc.dlchelper.top/dlc/",
+        "priority": 1,
+        "enabled": True,
+        "format": "standard"
+    }
+])
+
+# 兼容性：保留原有配置作为默认源
+DLC_SERVER_URL = DLC_SOURCES[0]["url"] if DLC_SOURCES else "https://dlc.dlchelper.top/dlc/"
 DLC_INDEX_URL = f"{DLC_SERVER_URL}index.json"
 
 # 更新服务器配置

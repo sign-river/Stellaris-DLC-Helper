@@ -54,13 +54,14 @@ class DLCDownloader:
         if hasattr(self, 'session'):
             self.session.close()
     
-    def download(self, url, dest_path):
+    def download(self, url, dest_path, fallback_urls=None):
         """
-        下载文件（支持断点续传和重试）
+        下载文件（支持断点续传、重试和多源fallback）
         
         参数:
-            url: 下载URL
+            url: 主下载URL
             dest_path: 目标文件路径
+            fallback_urls: 备用URL列表（可选）
             
         返回:
             bool: 是否成功
@@ -68,23 +69,26 @@ class DLCDownloader:
         抛出:
             Exception: 下载失败
         """
+        urls_to_try = [url]
+        if fallback_urls:
+            urls_to_try.extend(fallback_urls)
+        
         last_exception = None
         
-        # 重试机制
-        for attempt in range(RETRY_TIMES):
+        # 尝试每个URL
+        for current_url in urls_to_try:
             try:
-                return self._download_single_attempt(url, dest_path)
+                print(f"尝试从 {current_url} 下载...")
+                return self._download_single_attempt(current_url, dest_path)
             except Exception as e:
                 last_exception = e
-                if attempt < RETRY_TIMES - 1:  # 不是最后一次尝试
-                    wait_time = min(2 ** attempt, 10)  # 指数退避，最多等待10秒
-                    print(f"下载失败 (尝试 {attempt + 1}/{RETRY_TIMES}): {str(e)}，{wait_time}秒后重试...")
-                    time.sleep(wait_time)
-                else:
-                    print(f"下载失败，已达到最大重试次数 ({RETRY_TIMES})")
+                print(f"从 {current_url} 下载失败: {str(e)}")
+                if current_url != urls_to_try[-1]:  # 不是最后一个URL
+                    print("尝试下一个源...")
+                    continue
         
-        # 所有重试都失败了
-        raise Exception(f"下载失败，已重试{RETRY_TIMES}次: {str(last_exception)}")
+        # 所有URL都失败了
+        raise Exception(f"所有下载源都失败，最后一次错误: {str(last_exception)}")
     
     def _download_single_attempt(self, url, dest_path):
         """
@@ -169,13 +173,14 @@ class DLCDownloader:
         
         return True
     
-    def download_dlc(self, dlc_key, url):
+    def download_dlc(self, dlc_key, url, fallback_urls=None):
         """
         下载DLC到缓存
         
         参数:
             dlc_key: DLC键名
-            url: 下载URL
+            url: 主下载URL
+            fallback_urls: 备用URL列表
             
         返回:
             str: 缓存文件路径
@@ -194,7 +199,7 @@ class DLCDownloader:
             return cache_path
         
         # 下载到缓存
-        self.download(url, cache_path)
+        self.download(url, cache_path, fallback_urls)
         return cache_path
     
     def is_cached(self, dlc_key):
