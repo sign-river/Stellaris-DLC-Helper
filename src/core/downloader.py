@@ -321,10 +321,22 @@ class DLCDownloader:
                     f.write(chunk)
                     downloaded += len(chunk)
                     
-                    # 调用进度回调
-                    if self.progress_callback and total > 0:
-                        percent = (downloaded / total) * 100
-                        self.progress_callback(percent, downloaded, total)
+                    # 调用进度回调（无论 total 是否可用都调用，以便支持未知长度的流式下载）
+                    if self.progress_callback:
+                        try:
+                            if total and total > 0:
+                                percent = (downloaded / total) * 100
+                            else:
+                                percent = None
+                            # 传递 total（可能为0/None）以便回调做对应处理
+                            try:
+                                self.progress_callback(percent, downloaded, total)
+                            except TypeError:
+                                # 某些调用方可能期望只有 (percent, downloaded, total)，忽略TypeError
+                                pass
+                        except Exception:
+                            # 记录回调内异常但不要中断下载
+                            pass
         
         # 下载完成，重命名临时文件
         if os.path.exists(dest_path):

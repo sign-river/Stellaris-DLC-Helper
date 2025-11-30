@@ -956,11 +956,8 @@ class MainWindowCTk:
                                     height=20)  # 深色文字
             
             label.pack(side="left", padx=5, pady=2)
-            # 显示每个 DLC 的主源（数据获取时确定）
-            source_display = dlc.get('source', dlc.get('_original_source', '未知'))
-            source_label = ctk.CTkLabel(item_frame, text=f"源: {source_display}", font=ctk.CTkFont(size=10), text_color="#757575")
-            source_label.pack(side="right", padx=(0, 8))
-            # 添加查看 URL 映射的按钮（调试/信息）
+            # 移除每个 DLC 后面的 "源:" 标签（已由顶部状态显示），并将点击 DLC 名称绑定为输出 URL 映射到操作日志
+            # 添加查看 URL 映射的操作（不弹窗，只写入操作日志）
             def _show_urls(key=dlc['key'], d=dlc):
                 try:
                     urls = d.get('url_map', {})
@@ -972,14 +969,19 @@ class MainWindowCTk:
                     checksum = d.get('checksum') or d.get('sha256') or d.get('hash')
                     if checksum:
                         message = f"校验哈希: {checksum}\n\n" + message
-                    # 记录到日志并显示对话框
+                    # 记录到操作日志（不弹窗）
                     self.logger.info(f"DLC {d.get('name')} 的 URL 映射:\n{message}")
-                    messagebox.showinfo(f"{d.get('name')} - URL 映射", message)
                 except Exception as e:
                     self.logger.log_exception("显示 URL 映射失败", e)
 
-            url_btn = ctk.CTkButton(item_frame, text="链接", width=60, height=24, corner_radius=6, command=_show_urls)
-            url_btn.pack(side="right", padx=(8, 0))
+            # 将 DLC 名称绑定点击事件，输出 URL 映射到操作日志
+            try:
+                # 事件处理器：写入日志
+                def _label_click(event=None, key=dlc['key'], d=dlc):
+                    _show_urls(key=key, d=d)
+                label.bind("<Button-1>", _label_click)
+            except Exception:
+                pass
             
             self.dlc_vars.append(dlc_info)
         
@@ -1220,6 +1222,7 @@ class MainWindowCTk:
                 progress_callback.slow_speed_count = 0  # 连续慢速计数
                 progress_callback.server_issue_detected = False  # 服务器问题标志
                 progress_callback.last_server_check = 0  # 上次服务器检查时间
+                progress_callback.download_start_time = None
                 
                 # 添加更新下载源的方法
                 def update_source(source_name):
@@ -1234,11 +1237,30 @@ class MainWindowCTk:
             import requests
             current_time = time.time()
             
-            # 进度条实时更新（不限制频率）
-            self.root.after(0, lambda: self.progress_bar.set(percent / 100))
+                # 进度条实时更新（不限制频率）
+            # 仅当 percent 有效时更新进度条（total 未知时 percent=None）
+            try:
+                if percent is not None:
+                    self.root.after(0, lambda: self.progress_bar.set(percent / 100))
+            except Exception:
+                pass
             
             # 速度信息每0.5秒更新一次（提高更新频率以获得更准确的数据）
-            if progress_callback.last_time is not None:
+            # 初次回调时初始化速度相关时间点，避免过大的首次时间差
+            if progress_callback.last_time is None:
+                progress_callback.last_time = current_time
+                progress_callback.last_speed_update = current_time
+                progress_callback.last_speed_downloaded = downloaded
+                progress_callback.download_start_time = current_time
+                # 重置 EMA，避免从上一个下载继承值
+                if hasattr(progress_callback, 'previous_ema'):
+                    delattr = False
+                    try:
+                        del progress_callback.previous_ema
+                    except Exception:
+                        pass
+                # 初次回调不计算速度
+            else:
                 time_diff = current_time - progress_callback.last_time
                 
                 # 检查是否到达更新时间（0.5秒）
@@ -1271,7 +1293,8 @@ class MainWindowCTk:
                         
                         # 服务器质量检测逻辑
                         # 只有在下载时间超过5秒后才开始检测服务器问题，避免小文件误判
-                        download_duration = current_time - progress_callback.last_time
+                        # 使用 download_start_time 计算实际下载时长
+                        download_duration = current_time - (progress_callback.download_start_time or progress_callback.last_time)
                         if not self.download_paused and download_duration > 5.0 and display_speed < 0.1:
                             progress_callback.slow_speed_count += 1
                             
