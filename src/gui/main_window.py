@@ -1140,14 +1140,13 @@ class MainWindowCTk:
         
         # 在后台线程中进行测速选择最佳源
         def speed_test_thread():
-            self.logger.info("正在测速选择最佳下载源...")
             try:
                 best_source, test_url = self.dlc_manager.source_manager.get_best_download_source(
                     silent=False,  # 允许显示详细信息到控制台，但GUI会通过log_callback显示
                     log_callback=self.logger.info
                 )
                 self.best_download_source = best_source
-                self.logger.info(f"选择下载源: {best_source}")
+                # 选择结果已在get_best_download_source中通过log_callback输出，这里不再重复
             except Exception as e:
                 self.logger.warning(f"测速失败，使用默认源: {e}")
                 self.best_download_source = "domestic_cloud"
