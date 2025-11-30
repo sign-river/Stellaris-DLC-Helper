@@ -72,6 +72,20 @@ class Logger:
         """成功日志"""
         self.log(f"✓ {message}", "SUCCESS")
 
+    def debug(self, message):
+        """调试日志"""
+        self.log(message, "DEBUG")
+
+    def exception(self, message, exc: Exception = None):
+        """记录异常并显示到 GUI 日志（同时将异常写入错误日志文件）"""
+        try:
+            # 使用现有的错误记录方法
+            self.error(message)
+            import logging
+            logging.getLogger().exception(message)
+        except Exception:
+            pass
+
     def get_logging_handler(self) -> Handler:
         """创建一个将日志记录转发到 GUI Logger 的 logging.Handler。
 

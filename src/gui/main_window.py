@@ -1490,6 +1490,24 @@ class MainWindowCTk:
                         gitee_retest_thread = threading.Thread(target=_gitee_quick_retest, args=(gitee_fast_switch_event,), daemon=True)
                         gitee_retest_thread.start()
                     
+                    # 在每次下载前重置进度回调相关状态，避免连续多个小文件之间共享计数导致误判
+                    try:
+                        progress_callback.last_time = None
+                        progress_callback.last_downloaded = 0
+                        progress_callback.last_speed_update = 0
+                        progress_callback.last_speed_downloaded = 0
+                        progress_callback.slow_speed_count = 0
+                        progress_callback.server_issue_detected = False
+                        progress_callback.last_server_check = 0
+                        progress_callback.download_start_time = None
+                        if hasattr(progress_callback, 'previous_ema'):
+                            try:
+                                del progress_callback.previous_ema
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
                     # 下载DLC
                     try:
                         self.logger.info(f"正在下载: {dlc['name']} (使用源: {self.best_download_source})... URL: {selected_url}")
@@ -1505,10 +1523,23 @@ class MainWindowCTk:
                         self.dlc_installer.install(cache_path, dlc['key'], dlc['name'])
                         self.logger.success("安装成功")
                         success += 1
+                        # 成功则停止 gitee 线程（如有）并跳出重试循环
+                        try:
+                            if gitee_fast_switch_event:
+                                gitee_fast_switch_event.set()
+                        except Exception:
+                            pass
                         # 下载成功则跳出重试循环
                         break
                     except Exception as e:
                         last_exception = e
+                        # 结束时确保快速重测线程（gitee）停止，避免其跨文件持续运行
+                        try:
+                            if gitee_fast_switch_event:
+                                gitee_fast_switch_event.set()
+                        except Exception:
+                            pass
+
                         # 如果是停止导致的异常（通过 stop() 发起），尝试刷新最佳源并继续重试
                         err_str = str(e)
                         # 检测 stop 情况或连接异常
