@@ -13,6 +13,9 @@ import threading
 from pathlib import Path
 from typing import Callable, Optional
 import logging
+import hashlib
+import os
+import re
 from ..config import REQUEST_TIMEOUT, VERSION, UPDATE_CHECK_URL, CHUNK_SIZE
 from ..utils import PathUtils
 
@@ -41,8 +44,19 @@ class UpdateInfo:
     @staticmethod
     def _compare_versions(version1: str, version2: str) -> int:
         """比较版本号，返回 -1, 0, 1"""
-        v1_parts = [int(x) for x in version1.split('.')]
-        v2_parts = [int(x) for x in version2.split('.')]
+        # Normalize: strip leading 'v' and parse numeric prefix of each segment
+        def _parse(v: str):
+            if not v:
+                return []
+            v = str(v).lower().lstrip('v')
+            parts = []
+            for seg in v.split('.'):
+                m = re.match(r"(\d+)", seg)
+                parts.append(int(m.group(1)) if m else 0)
+            return parts
+
+        v1_parts = _parse(version1)
+        v2_parts = _parse(version2)
 
         for i in range(max(len(v1_parts), len(v2_parts))):
             v1 = v1_parts[i] if i < len(v1_parts) else 0
@@ -117,6 +131,11 @@ class AutoUpdater:
             filename = f"Stellaris-DLC-Helper-v{update_info.latest_version}.zip"
             download_path = self.temp_dir / filename
 
+            # 验证 update_url 格式与安全性
+            if update_info.update_url:
+                if not update_info.update_url.lower().startswith(("https://", "http://")):
+                    self.logger.warning(f"更新 URL 格式异常: {update_info.update_url}")
+
             # 下载文件
             response = requests.get(update_info.update_url, stream=True, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
@@ -131,6 +150,21 @@ class AutoUpdater:
                         downloaded_size += len(chunk)
                         progress_callback(downloaded_size, total_size)
 
+            # 校验checksum（如果存在），优先使用sha256
+            if update_info.checksum:
+                sha256_hash = hashlib.sha256()
+                with open(download_path, 'rb') as fh:
+                    for block in iter(lambda: fh.read(4096), b""):
+                        sha256_hash.update(block)
+                got_hash = sha256_hash.hexdigest()
+                expected = update_info.checksum.strip().lower()
+                if got_hash != expected:
+                    self.logger.error(f"更新包校验失败: 期望 {expected}，实际 {got_hash}")
+                    try:
+                        download_path.unlink()
+                    except Exception:
+                        pass
+                    return None
             self.logger.info(f"更新包下载完成: {download_path}")
             return download_path
 
@@ -162,16 +196,27 @@ class AutoUpdater:
             extract_dir = self.temp_dir / "extracted"
             extract_dir.mkdir(exist_ok=True)
 
+            # 安全解压: 防止zip-slip（路径穿越）
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                for member in zip_ref.namelist():
+                    # Skip directory entries
+                    if member.endswith('/'):
+                        continue
+                    # Create full path and ensure it's within extract_dir
+                    dest_path = extract_dir / member
+                    dest_path_parent = dest_path.parent
+                    if not str(dest_path.resolve()).startswith(str(extract_dir.resolve()) + os.sep):
+                        self.logger.error(f"更新包包含非法路径: {member}")
+                        return False
                 zip_ref.extractall(extract_dir)
 
-            # 找到解压后的程序目录（应该只有一个文件夹）
+            # 找到解压后的程序目录：若ZIP中只包含单个顶层文件夹，使用它；否则使用整个 extract_dir
             extracted_dirs = [d for d in extract_dir.iterdir() if d.is_dir()]
-            if not extracted_dirs:
-                self.logger.error("更新包中没有找到程序目录")
-                return False
-
-            new_app_dir = extracted_dirs[0]
+            if len(extracted_dirs) == 1:
+                new_app_dir = extracted_dirs[0]
+            else:
+                # ZIP 可能将文件平铺在根目录
+                new_app_dir = extract_dir
 
             # 替换文件
             self._replace_files(app_root, new_app_dir)
@@ -198,7 +243,8 @@ class AutoUpdater:
             app_root = Path(__file__).parent.parent.parent
 
             # 查找最新的备份
-            backup_dirs = sorted(self.backup_dir.glob("backup_*"), reverse=True)
+            # 按修改时间排序，选择最新的备份
+            backup_dirs = sorted(self.backup_dir.glob("backup_*"), key=lambda x: x.stat().st_mtime, reverse=True)
             if not backup_dirs:
                 self.logger.error("没有找到备份文件")
                 return False
@@ -224,7 +270,13 @@ class AutoUpdater:
             self._cleanup_old_backups()
 
             app_root = Path(__file__).parent.parent.parent
-            backup_name = f"backup_{self.current_version}_{PathUtils.get_timestamp()}"
+            # 兼容性：如果 PathUtils 没有 get_timestamp 方法，则使用 datetime 生成安全时间戳
+            try:
+                timestamp = PathUtils.get_timestamp()
+            except Exception:
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            backup_name = f"backup_{self.current_version}_{timestamp}"
             backup_path = self.backup_dir / backup_name
 
             # 复制需要备份的文件
@@ -281,6 +333,11 @@ class AutoUpdater:
         for item in source_dir.iterdir():
             src = source_dir / item.name
             dst = target_dir / item.name
+
+            # 防止路径穿越：确保目标路径位于 target_dir 下
+            if not str(dst.resolve()).startswith(str(target_dir.resolve()) + os.sep):
+                self.logger.warning(f"尝试写入目标目录以外的路径，跳过: {dst}")
+                continue
 
             if src.is_dir():
                 if dst.exists():

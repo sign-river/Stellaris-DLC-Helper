@@ -7,6 +7,7 @@
 import os
 import sys
 import hashlib
+from datetime import datetime
 from ..config import CACHE_DIR_NAME, DLC_CACHE_SUBDIR, LOG_CACHE_SUBDIR, STELLARIS_APP_ID
 
 
@@ -119,3 +120,11 @@ class PathUtils:
         返回: str: 文件完整路径
         """
         return os.path.join(PathUtils.get_appinfo_dir(), filename)
+
+    @staticmethod
+    def get_timestamp() -> str:
+        """
+        获取安全的时间戳字符串，适用于文件名或目录名（无冒号等不合法字符）。
+        返回: YYYYmmddHHMMSS 格式字符串
+        """
+        return datetime.now().strftime("%Y%m%d%H%M%S")
