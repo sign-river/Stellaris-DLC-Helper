@@ -204,11 +204,17 @@ class Packager:
             if src.exists():
                 shutil.copytree(str(src), str(dst))
         
-        # 复制配置文件
+        # 复制配置文件与映射文件
         config_src = self.project_root / "config.json"
         config_dst = self.final_path / "config.json"
         if config_src.exists():
             shutil.copy2(str(config_src), str(config_dst))
+
+        # 将 pairings.json 也复制到发布包中，方便外部修改/更新映射文件而无需重新打包
+        pairings_src = self.project_root / "pairings.json"
+        pairings_dst = self.final_path / "pairings.json"
+        if pairings_src.exists():
+            shutil.copy2(str(pairings_src), str(pairings_dst))
 
         # 创建 libraries 文件夹（可选，用于存放额外库）
         libraries_path = self.final_path / "libraries"
