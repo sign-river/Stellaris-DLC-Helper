@@ -110,14 +110,24 @@ class UpdateDialog(ctk.CTkToplevel):
             )
             size_label.pack(anchor="w", padx=15, pady=(0, 10))
 
-        # 更新日志按钮
+        # 更新日志文本（直接在本窗口显示）
         if self.update_info.update_log_url:
-            log_button = ctk.CTkButton(
-                info_frame,
-                text="查看更新日志",
-                command=self._show_update_log
-            )
-            log_button.pack(pady=(0, 10))
+            self.log_textbox = ctk.CTkTextbox(info_frame, width=440, height=120)
+            self.log_textbox.pack(pady=(0, 10))
+            self.log_textbox.insert("0.0", "正在加载更新日志...")
+            # 异步加载日志并填充
+            def load_log_thread():
+                try:
+                    content = self.updater.fetch_update_log(self.update_info)
+                    if content:
+                        self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", content)))
+                    else:
+                        self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", "无法加载更新日志或日志为空（请检查网络）。")))
+                except Exception as e:
+                    self.logger.warning(f"加载更新日志失败: {e}")
+                    self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", f"加载日志失败: {e}")))
+
+            threading.Thread(target=load_log_thread, daemon=True).start()
 
         # 强制更新提示
         if self.update_info.is_force_update(self.updater.current_version):
@@ -278,9 +288,14 @@ class UpdateDialog(ctk.CTkToplevel):
         )
         success_label.pack(pady=(30, 10))
 
+        message_text = "程序已成功更新到最新版本。\n请重启程序以应用更改。"
+        # 如果 exe 的替换被延期(写为 *.new)，提示用户退出以完成替换
+        if hasattr(self.updater, 'exe_replacement_pending') and self.updater.exe_replacement_pending:
+            message_text = '更新已准备好，但需要重新启动以完成替换（会在退出后自动应用）。\n请点击"立即重启"以退出并完成更新。'
+
         message_label = ctk.CTkLabel(
             self,
-            text="程序已成功更新到最新版本。\n请重启程序以应用更改。",
+            text=message_text,
             font=ctk.CTkFont(size=12)
         )
         message_label.pack(pady=(0, 20))
@@ -345,6 +360,11 @@ class UpdateDialog(ctk.CTkToplevel):
 
             import sys
             import os
+            # 如果 exe 替换已排程（在 apply_update 中写入 .new 并创建替换脚本），直接退出主进程以便批处理替换
+            if hasattr(self.updater, 'exe_replacement_pending') and self.updater.exe_replacement_pending:
+                # 触发退出，让替换批处理接管并重启
+                os._exit(0)
+
             python = sys.executable
             os.execl(python, python, *sys.argv)
         except Exception as e:

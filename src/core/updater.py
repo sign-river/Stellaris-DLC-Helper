@@ -10,6 +10,8 @@ import zipfile
 import shutil
 import tempfile
 import threading
+import subprocess
+import time
 from pathlib import Path
 from typing import Callable, Optional
 import logging
@@ -78,6 +80,7 @@ class AutoUpdater:
         self.current_version = VERSION
         self.temp_dir = Path(tempfile.gettempdir()) / "StellarisUpdate"
         self.backup_dir = Path(PathUtils.get_cache_dir()) / "backup"
+        self.exe_replacement_pending = False
 
     def check_for_updates(self, callback: Callable[[Optional[UpdateInfo]], None]) -> None:
         """
@@ -136,19 +139,80 @@ class AutoUpdater:
                 if not update_info.update_url.lower().startswith(("https://", "http://")):
                     self.logger.warning(f"更新 URL 格式异常: {update_info.update_url}")
 
-            # 下载文件
-            response = requests.get(update_info.update_url, stream=True, timeout=REQUEST_TIMEOUT)
+            # 支持续传：如果已存在部分下载文件，尝试使用 Range 请求继续
+            headers = {}
+            existing_size = 0
+            if download_path.exists():
+                existing_size = download_path.stat().st_size
+                # 如果已下载的文件与清单中 checksum 匹配，直接返回（不重复下载）
+                if update_info.checksum:
+                    try:
+                        sha256_hash = hashlib.sha256()
+                        with open(download_path, 'rb') as fh:
+                            for block in iter(lambda: fh.read(4096), b""):
+                                sha256_hash.update(block)
+                        got_hash = sha256_hash.hexdigest()
+                        expected = update_info.checksum.strip().lower()
+                        if got_hash == expected:
+                            self.logger.info(f"发现已完整下载的更新包: {download_path}")
+                            return download_path
+                    except Exception:
+                        # 如果计算失败，继续下载/续传
+                        existing_size = download_path.stat().st_size
+
+            # 如果服务器支持 Range 或者已有部分文件，则设置 Range header
+            if existing_size > 0:
+                headers['Range'] = f'bytes={existing_size}-'
+                mode = 'ab'
+                downloaded_size = existing_size
+                # 更新界面进度为已下载
+                try:
+                    progress_callback(downloaded_size, total_size)
+                except Exception:
+                    pass
+            else:
+                mode = 'wb'
+                downloaded_size = 0
+
+            # 发起请求（支持续传）
+            response = requests.get(update_info.update_url, stream=True, timeout=REQUEST_TIMEOUT, headers=headers)
             response.raise_for_status()
 
-            total_size = int(response.headers.get('content-length', 0))
-            downloaded_size = 0
+            # 根据响应判断 total size（如果是 206，则 Content-Range 可用）
+            total_size = 0
+            if 'content-range' in response.headers:
+                # Content-Range: bytes 1234-5678/8901
+                try:
+                    content_range = response.headers.get('content-range')
+                    total_size = int(content_range.split('/')[-1])
+                except Exception:
+                    total_size = int(response.headers.get('content-length', 0)) + existing_size
+            else:
+                total_size = int(response.headers.get('content-length', 0))
 
-            with open(download_path, 'wb') as f:
+            # 如果已有文件已经满足 total_size，则直接返回（无需下载）
+            try:
+                if existing_size > 0 and total_size > 0 and existing_size >= total_size:
+                    self.logger.info("发现已完整下载的更新包（通过大小判断）: {download_path}")
+                    return download_path
+            except Exception:
+                pass
+
+            # 如果服务器没有返回 206，并且有已存在文件，则重新下载完整文件（覆盖）
+            if existing_size > 0 and response.status_code == 200:
+                self.logger.info("服务器不支持续传，重新从头下载")
+                mode = 'wb'
+                downloaded_size = 0
+            # 开始写入文件
+            with open(download_path, mode) as f:
                 for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
                     if chunk:
                         f.write(chunk)
                         downloaded_size += len(chunk)
-                        progress_callback(downloaded_size, total_size)
+                        try:
+                            progress_callback(downloaded_size, total_size)
+                        except Exception:
+                            pass
 
             # 校验checksum（如果存在），优先使用sha256
             if update_info.checksum:
@@ -188,6 +252,19 @@ class AutoUpdater:
             # 创建备份
             if not self._create_backup():
                 return False
+
+            def fetch_update_log(self, update_info: UpdateInfo, timeout: int = 10) -> Optional[str]:
+                """获取更新日志内容（文本）"""
+                if not update_info or not update_info.update_log_url:
+                    return None
+                try:
+                    self.logger.info(f"获取更新日志: {update_info.update_log_url}")
+                    r = requests.get(update_info.update_log_url, timeout=timeout)
+                    r.raise_for_status()
+                    return r.text
+                except Exception as e:
+                    self.logger.warning(f"获取更新日志失败: {e}")
+                    return None
 
             # 获取程序根目录
             app_root = Path(__file__).parent.parent.parent
@@ -339,13 +416,80 @@ class AutoUpdater:
                 self.logger.warning(f"尝试写入目标目录以外的路径，跳过: {dst}")
                 continue
 
-            if src.is_dir():
-                if dst.exists():
-                    shutil.rmtree(dst)
-                shutil.copytree(src, dst)
-            else:
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
+            try:
+                if src.is_dir():
+                    if dst.exists():
+                        shutil.rmtree(dst)
+                    shutil.copytree(src, dst)
+                else:
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    # 若要替换的是 exe 文件，Windows 下可能无法直接覆盖正在运行的文件
+                    if dst.suffix.lower() == '.exe':
+                        try:
+                            shutil.copy2(src, dst)
+                        except (PermissionError, OSError):
+                            # 写入临时 new 文件，并创建替换脚本在程序退出后完成替换
+                            tmp_new = target_dir / (dst.name + '.new')
+                            shutil.copy2(src, tmp_new)
+                            self.logger.info(f"程序正在运行，已将新 exe 写为临时文件: {tmp_new}")
+                            try:
+                                self._create_replace_script(tmp_new, dst, owner_pid=os.getpid())
+                            except Exception as e:
+                                self.logger.warning(f"创建替换脚本失败: {e}")
+                    else:
+                        shutil.copy2(src, dst)
+            except Exception as e:
+                self.logger.warning(f"替换文件失败 {src} -> {dst}: {e}")
+
+    def _create_replace_script(self, new_exe: Path, dst_exe: Path, owner_pid: int = None) -> None:
+        """创建 Windows 批处理脚本用于等待主程序退出再替换 exe 并重启（或使用 helper exe）。"""
+        try:
+            # 使用随机或时间戳生成脚本名
+            script_path = dst_exe.parent / f"apply_update_{int(time.time())}.bat"
+        except Exception:
+            script_path = dst_exe.parent / f"apply_update.bat"
+
+        new_exe_abs = str(new_exe.resolve())
+        dst_exe_abs = str(dst_exe.resolve())
+        app_root = dst_exe.parent
+
+        # 优先尝试使用 updater_helper.exe（更可靠），否则降级为批处理脚本
+        helper_path = app_root / 'updater_helper.exe'
+        if helper_path.exists():
+            args = [str(helper_path), '--new', new_exe_abs, '--dst', dst_exe_abs]
+            if owner_pid:
+                args += ['--pid', str(owner_pid)]
+            subprocess.Popen(args, cwd=str(app_root))
+            try:
+                self.exe_replacement_pending = True
+            except Exception:
+                pass
+            return
+
+        bat_content = (
+            '@echo off\r\n'
+            ':wait_loop\r\n'
+            f'tasklist /FI "PID eq {owner_pid}" 2>NUL | find "{owner_pid}" >NUL\r\n' if owner_pid else f'tasklist /FI "IMAGENAME eq {dst_exe.name}" 2>NUL | find /I "{dst_exe.name}" >NUL\r\n'
+            'IF %ERRORLEVEL%==0 (\r\n'
+            '    timeout /T 1 /NOBREAK >nul\r\n'
+            '    goto :wait_loop\r\n'
+            ')\r\n'
+            f'move /Y "{new_exe_abs}" "{dst_exe_abs}"\r\n'
+            f'start "" "{dst_exe_abs}"\r\n'
+            'del "%~f0"\r\n'
+        )
+
+        with open(script_path, 'w', encoding='utf-8') as f:
+            f.write(bat_content)
+
+        # 标记 exe 替换已经计划
+        try:
+            self.exe_replacement_pending = True
+        except Exception:
+            pass
+
+        # 启动脚本（新窗口）
+        subprocess.Popen(['cmd', '/c', 'start', '""', str(script_path)], cwd=str(dst_exe.parent))
 
     def cleanup_temp_files(self) -> None:
         """清理临时文件"""

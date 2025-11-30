@@ -138,6 +138,17 @@ class Packager:
         # 检查是否需要重新构建（基于源文件变化和构建配置）
         if not self._should_rebuild_exe():
             print("exe文件已存在且是最新的，跳过构建")
+            # 如果 updater_helper 脚本存在但 helper exe 不存在，则尝试仅构建 helper
+            helper_script = self.project_root / 'tools' / 'updater_helper.py'
+            helper_exe = self.dist_path / 'updater_helper.exe'
+            if helper_script.exists() and not helper_exe.exists():
+                print('补充构建 updater_helper.exe...')
+                helper_cmd = [
+                    str(python_exe), '-m', 'PyInstaller',
+                    '--onefile', '--name', 'updater_helper',
+                    str(helper_script)
+                ]
+                subprocess.run(helper_cmd, check=True, cwd=str(self.project_root))
             return
 
         print("构建 exe 文件...")
@@ -175,11 +186,24 @@ class Packager:
                 "--hidden-import", "PIL",
                 "--hidden-import", "PIL.Image",
                 "--hidden-import", "PIL.ImageTk",
+                "--hidden-import", "unicodedata",
+                "--hidden-import", "idna",
+                "--hidden-import", "charset_normalizer",
                 str(self.project_root / "main.py")  # 主入口文件
             ]
 
         # 在项目根目录运行 PyInstaller，确保 os.getcwd() 返回正确路径
         subprocess.run(pyinstaller_cmd, check=True, cwd=str(self.project_root))
+        # 额外构建：updater_helper 可执行程序（更稳定的替换器）
+        helper_script = self.project_root / 'tools' / 'updater_helper.py'
+        if helper_script.exists():
+            print('正在构建 updater_helper.exe...')
+            helper_cmd = [
+                str(python_exe), '-m', 'PyInstaller',
+                '--onefile', '--name', 'updater_helper',
+                str(helper_script)
+            ]
+            subprocess.run(helper_cmd, check=True, cwd=str(self.project_root))
         print("exe 构建完成")
 
     def organize_files(self):
@@ -219,6 +243,11 @@ class Packager:
         # 创建 libraries 文件夹（可选，用于存放额外库）
         libraries_path = self.final_path / "libraries"
         libraries_path.mkdir(exist_ok=True)
+
+        # 如果存在 helper exe，则复制到 release 根目录
+        helper_exe = self.dist_path / "updater_helper.exe"
+        if helper_exe.exists():
+            shutil.copy2(str(helper_exe), str(self.final_path / "updater_helper.exe"))
 
         # 创建 README.txt
         readme_content = f"""Stellaris DLC Helper v{VERSION}
