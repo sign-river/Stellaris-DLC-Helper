@@ -63,7 +63,7 @@ def test_source_connectivity():
                     test_url = f"{base_url}/001.zip"
                 elif format_type == 'gitee_release':
                     # Gitee: https://gitee.com/signriver/file_warehouse/releases/download/ste1-26/001.zip
-                    test_url = f"{base_url}ste1-26/001.zip"
+                    test_url = f"{base_url}/ste1-26/001.zip"
 
                 print(f'   测试URL: {test_url}')
 
