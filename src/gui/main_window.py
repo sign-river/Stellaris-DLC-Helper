@@ -492,6 +492,18 @@ class MainWindowCTk:
         )
         self.source_label.grid(row=0, column=6, sticky="w")
         self.source_label.grid_remove()  # 初始隐藏
+
+        # 第6.1列：重测/暂停状态标签（默认隐藏）
+        self.retest_status_label = ctk.CTkLabel(
+            header_frame,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color="#1976D2",
+            width=160,
+            anchor="w"
+        )
+        self.retest_status_label.grid(row=0, column=7, sticky="w")
+        self.retest_status_label.grid_remove()
         
         # 第5列：服务器状态文本（默认隐藏）
         self.server_status_label = ctk.CTkLabel(
@@ -661,6 +673,45 @@ class MainWindowCTk:
         
         # 设置日志组件
         self.logger.set_widget(self.log_text, self.root)
+
+    # --------------------- UI helpers: re-test spinner ---------------------
+    def _start_retest_ui(self, text: str = "正在测速..."):
+        """开始显示测速/暂停状态，并启动文本动画（spinner）。"""
+        try:
+            self.retest_status_text = text
+            self.retest_spinner_running = True
+            self.retest_spinner_idx = 0
+            self.root.after(0, lambda: self.retest_status_label.grid())
+            self._retest_spinner_step()
+        except Exception:
+            pass
+
+    def _retest_spinner_step(self):
+        if not getattr(self, 'retest_spinner_running', False):
+            return
+        try:
+            chars = ['|', '/', '-', '\\']
+            idx = getattr(self, 'retest_spinner_idx', 0) % len(chars)
+            ch = chars[idx]
+            txt = f"{ch} {getattr(self, 'retest_status_text', '')}"
+            self.retest_status_label.configure(text=txt)
+            self.retest_spinner_idx = idx + 1
+            self._retest_spinner_after_id = self.root.after(250, self._retest_spinner_step)
+        except Exception:
+            pass
+
+    def _stop_retest_ui(self):
+        """停止显示测速状态并清理 spinner 定时任务。"""
+        try:
+            self.retest_spinner_running = False
+            if hasattr(self, '_retest_spinner_after_id'):
+                try:
+                    self.root.after_cancel(self._retest_spinner_after_id)
+                except Exception:
+                    pass
+            self.root.after(0, lambda: self.retest_status_label.grid_remove())
+        except Exception:
+            pass
         
     # ========== 以下是业务逻辑方法，将逐步从旧版本迁移 ==========
     
@@ -1321,10 +1372,27 @@ class MainWindowCTk:
                                         # 在后台线程中重新测速
                                         def retest_thread():
                                             try:
+                                                # 在 UI 上显示测速状态并暂停当前下载，以免并发状态冲突
+                                                try:
+                                                    self.root.after(0, lambda: self._start_retest_ui("正在测速..."))
+                                                    if hasattr(self, 'current_downloader') and self.current_downloader:
+                                                        try:
+                                                            self.current_downloader.pause()
+                                                        except Exception:
+                                                            pass
+                                                except Exception:
+                                                    pass
+
                                                 new_source, new_test_url = self.dlc_manager.source_manager.get_best_download_source(
                                                     silent=True,
                                                     log_callback=self.logger.info
                                                 )
+                                                # 结束 re-test UI
+                                                try:
+                                                    self.root.after(0, self._stop_retest_ui)
+                                                except Exception:
+                                                    pass
+
                                                 if new_source != self.best_download_source:
                                                     self.best_download_source = new_source
                                                     self.logger.info(f"切换到新下载源: {new_source}")
@@ -1338,7 +1406,12 @@ class MainWindowCTk:
                                                         }.get(new_source, new_source)
                                                         progress_callback.update_source(display_name)
                                                     
-                                                    # 停止当前下载器，让它重新开始
+                                                    # 标记 pending switch, 停止当前下载器，让它重新开始
+                                                    try:
+                                                        self._pending_switch_url = new_test_url
+                                                        self._pending_switch_source = new_source
+                                                    except Exception:
+                                                        pass
                                                     if hasattr(self, 'current_downloader') and self.current_downloader:
                                                         # 停止当前下载器（但保留 session），保留当前 file 的 tmp 以便尝试续传
                                                         self.current_downloader.stop()
@@ -1490,6 +1563,8 @@ class MainWindowCTk:
                                                             self.download_paused = True
                                                             self.current_downloader.pause()
                                                             self.root.after(0, lambda: self.execute_btn.configure(text='▶️ 继续下载'))
+                                                            # 显示重测状态
+                                                            self.root.after(0, lambda: self._start_retest_ui("暂停并测速..."))
                                                             self.logger.info('下载已暂停，正在切换源...')
                                                         except Exception:
                                                             pass
@@ -1501,6 +1576,11 @@ class MainWindowCTk:
                                                         self.current_downloader.stop()
                                                     except Exception:
                                                         pass
+                                                # 结束重测 UI（由主线程恢复状态）
+                                                try:
+                                                    self.root.after(0, self._stop_retest_ui)
+                                                except Exception:
+                                                    pass
                                                 return
                                             else:
                                                 # 没有找到更快的源，恢复暂停的下载，并显示服务器错误
@@ -1513,6 +1593,11 @@ class MainWindowCTk:
                                                             self.root.after(0, lambda: self.execute_btn.configure(text='⏸️ 暂停下载'))
                                                             # 恢复UI状态
                                                             self.root.after(0, self._hide_server_error)
+                                                            # 结束重测UI
+                                                            try:
+                                                                self.root.after(0, self._stop_retest_ui)
+                                                            except Exception:
+                                                                pass
                                                         except Exception:
                                                             pass
                                                 except Exception:
