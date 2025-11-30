@@ -73,10 +73,34 @@
 - 需要配置Gitee API URL
 - TODO: 实现Gitee API数据解析
 
-#### github_release
-- 适用于GitHub仓库的Releases
-- 需要配置GitHub API URL
-- TODO: 实现GitHub API数据解析
+### GitHub Releases
+
+```json
+{
+  "name": "github",
+  "url": "https://github.com/sign-river/File_warehouse/releases/download/ste4.2/",
+  "priority": 3,
+  "enabled": true,
+  "format": "github_release",
+  "repo": "sign-river/File_warehouse",
+  "tag": "ste4.2",
+  "mapping_file": "pairings.json"
+}
+```
+
+**映射文件格式** (`pairings.json`):
+```json
+{
+  "dlc001_symbols_of_domination.zip": "001.zip",
+  "dlc002_arachnoid.zip": "002.zip",
+  ...
+}
+```
+
+**下载URL示例**:
+- 原始文件名: `dlc001_symbols_of_domination.zip`
+- 映射后文件名: `001.zip`
+- 下载URL: `https://github.com/sign-river/File_warehouse/releases/download/ste4.2/001.zip`
 
 #### custom
 - 自定义格式

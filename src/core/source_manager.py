@@ -5,6 +5,7 @@
 负责管理多个下载源的配置、优先级和切换逻辑
 """
 
+import os
 import requests
 from typing import List, Dict, Any, Optional
 from ..config import DLC_SOURCES, REQUEST_TIMEOUT, STELLARIS_APP_ID
@@ -12,10 +13,11 @@ from ..config import DLC_SOURCES, REQUEST_TIMEOUT, STELLARIS_APP_ID
 
 class SourceManager:
     """多源管理器类"""
-
+    
     def __init__(self):
         self.sources = self._load_sources()
-
+        self.mappings = self._load_mappings()
+    
     def _load_sources(self) -> List[Dict[str, Any]]:
         """加载并验证源配置"""
         sources = []
@@ -26,7 +28,23 @@ class SourceManager:
         # 按优先级排序（数字越小优先级越高）
         sources.sort(key=lambda x: x.get("priority", 999))
         return sources
-
+    
+    def _load_mappings(self) -> Dict[str, Dict[str, str]]:
+        """加载文件名映射配置"""
+        mappings = {}
+        for source in DLC_SOURCES:
+            if source.get("enabled", False) and source.get("format") == "github_release":
+                mapping_file = source.get("mapping_file")
+                if mapping_file:
+                    try:
+                        import json
+                        mapping_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), mapping_file)
+                        with open(mapping_path, 'r', encoding='utf-8') as f:
+                            mappings[source.get("name")] = json.load(f)
+                    except Exception as e:
+                        print(f"警告: 无法加载映射文件 {mapping_file}: {e}")
+        return mappings
+    
     def get_enabled_sources(self) -> List[Dict[str, Any]]:
         """获取所有启用的源"""
         return [s for s in self.sources if s.get("enabled", False)]
@@ -57,6 +75,14 @@ class SourceManager:
         返回:
             DLC数据字典或None（如果获取失败）
         """
+        format_type = source.get("format", "standard")
+        
+        # 对于github_release格式，不需要获取index.json，直接返回成功
+        # 因为DLC列表从其他源获取，GitHub只作为下载源
+        if format_type == "github_release":
+            print(f"GitHub源 '{source.get('name')}' 配置成功（无需index.json）")
+            return {STELLARIS_APP_ID: {"dlcs": {}}}
+        
         try:
             base_url = source.get("url", "").rstrip("/")
             index_url = f"{base_url}/index.json"
@@ -71,8 +97,6 @@ class SourceManager:
                 return self._process_standard_format(data, source)
             elif format_type == "gitee_release":
                 return self._process_gitee_format(data, source)
-            elif format_type == "github_release":
-                return self._process_github_format(data, source)
             elif format_type == "custom":
                 return self._process_custom_format(data, source)
             else:
@@ -197,8 +221,18 @@ class SourceManager:
                 pass
             elif format_type == "github_release":
                 # GitHub release asset URL格式
-                # TODO: 根据实际API实现
-                pass
+                if source_name in self.mappings and "url" in dlc_info:
+                    # 从原始URL中提取文件名
+                    original_url = dlc_info["url"]
+                    filename = original_url.split('/')[-1]  # 获取文件名，如 dlc001_symbols_of_domination.zip
+                    
+                    # 使用映射表查找对应的GitHub文件名
+                    mapping = self.mappings[source_name]
+                    if filename in mapping:
+                        github_filename = mapping[filename]
+                        github_url = f"{source_url}/{github_filename}"
+                        if github_url not in urls:
+                            urls.append(github_url)
             elif format_type == "custom":
                 # 自定义格式
                 # TODO: 根据实际需求实现
