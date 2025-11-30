@@ -1299,7 +1299,8 @@ class MainWindowCTk:
                         # 只有在下载时间超过5秒后才开始检测服务器问题，避免小文件误判
                         # 使用 download_start_time 计算实际下载时长
                         download_duration = current_time - (progress_callback.download_start_time or progress_callback.last_time)
-                        if not self.download_paused and download_duration > 5.0 and display_speed < 0.1:
+                        # 如果速度低于 1.0 MB/s（变更要求），视为慢速
+                        if not self.download_paused and download_duration > 5.0 and display_speed < 1.0:
                             progress_callback.slow_speed_count += 1
                             
                             # 如果连续3次慢速，检测服务器连接
@@ -1444,6 +1445,50 @@ class MainWindowCTk:
                     
                     # 设置当前下载URL
                     self.current_download_url = selected_url
+
+                    # 如果当前选定的是 Gitee 源，启动一个后台线程在下载过程中定期快速检测其它源速度（不影响当前下载）
+                    # 如果发现更快的源（例如速度 > 5MB/s），则切换到该源
+                    gitee_fast_switch_event = None
+                    gitee_retest_thread = None
+                    if current_source == 'gitee':
+                        import threading
+                        gitee_fast_switch_event = threading.Event()
+
+                        def _gitee_quick_retest(stop_event: threading.Event, dlc_key=dlc['key'], current_source_name=current_source):
+                            try:
+                                # 每次检查间隔 (秒)
+                                check_interval = 10
+                                required_speed = 5.0
+                                while not stop_event.is_set():
+                                    try:
+                                        res = self.dlc_manager.source_manager.find_first_source_above(required_speed, exclude=[current_source_name], silent=True, log_callback=self.logger.info, max_seconds=2.0, max_bytes=2*1024*1024)
+                                        if res:
+                                            new_source, new_url, measured_speed = res
+                                            # 如果找到更快的源，记录并触发切换
+                                            if new_source and new_source != getattr(self, 'best_download_source', None):
+                                                self.logger.info(f"检测到更快源: {new_source} ({measured_speed:.2f} MB/s)，准备切换")
+                                                self.best_download_source = new_source
+                                                # 发起停止当前下载以触发重试切换逻辑
+                                                if hasattr(self, 'current_downloader') and self.current_downloader:
+                                                    try:
+                                                        self.current_downloader.stop()
+                                                    except Exception:
+                                                        pass
+                                                return
+                                    except Exception as _e:
+                                        # 记录异常但继续循环
+                                        self.logger.debug(f"gitee quick re-test 错误: {_e}")
+                                    # 等待下一次检测
+                                    for _ in range(int(check_interval)):
+                                        if stop_event.is_set():
+                                            break
+                                        time.sleep(1)
+                            except Exception as e:
+                                self.logger.debug(f"gitee quick re-test 线程终止: {e}")
+
+                        import time
+                        gitee_retest_thread = threading.Thread(target=_gitee_quick_retest, args=(gitee_fast_switch_event,), daemon=True)
+                        gitee_retest_thread.start()
                     
                     # 下载DLC
                     try:
@@ -1533,6 +1578,18 @@ class MainWindowCTk:
                         self.root.after(0, lambda e=e, msg=friendly_msg: self.logger.log_exception(msg, e))
                         failed += 1
             
+            # 停止任何仍在运行的 gitee 快速重测线程（如果存在）
+            try:
+                if 'gitee_fast_switch_event' in locals() and gitee_fast_switch_event:
+                    gitee_fast_switch_event.set()
+                if 'gitee_retest_thread' in locals() and gitee_retest_thread and gitee_retest_thread.is_alive():
+                    try:
+                        gitee_retest_thread.join(timeout=1)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
             # 完成，隐藏进度组件
             self.root.after(0, lambda: self.downloading_label.grid_remove())
             self.root.after(0, lambda: self.progress_bar.grid_remove())

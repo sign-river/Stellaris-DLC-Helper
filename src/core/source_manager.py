@@ -352,7 +352,7 @@ class SourceManager:
 
         return urls
 
-    def measure_speed(self, url, description, threshold_mb, log_callback=None):
+    def measure_speed(self, url, description, threshold_mb, log_callback=None, max_seconds: float = 5.0, max_bytes: int = 70 * 1024 * 1024):
         """
         测速单个URL
         
@@ -412,6 +412,7 @@ class SourceManager:
                 first_chunk = True
                 
                 # 3. 开始下载循环
+                total_read = 0
                 for chunk in response.iter_content(chunk_size=64 * 1024):
                     if not chunk: break
                     
@@ -426,7 +427,7 @@ class SourceManager:
                     duration = current_time - start_time
                     
                     # --- 停止条件诊断 ---
-                    if duration >= 5.0:
+                    if duration >= max_seconds:
                         message = f"[{description}] 测速完成: 满 5 秒时间到"
                         if log_callback:
                             log_callback(message)
@@ -434,7 +435,8 @@ class SourceManager:
                             print("   [√] 停止原因: 满 5 秒时间到")
                         break
                     
-                    if total_downloaded >= 70 * 1024 * 1024:
+                    total_read += len(chunk)
+                    if total_downloaded >= max_bytes or total_read >= max_bytes:
                         message = f"[{description}] 测速完成: 速度太快 (超过70MB)"
                         if log_callback:
                             log_callback(message)
@@ -602,3 +604,52 @@ class SourceManager:
         default_candidates = test_candidates.get("domestic_cloud", [])
         default_url = default_candidates[0] if default_candidates else "http://47.100.2.190/dlc/test/test.bin"
         return "domestic_cloud", default_url
+
+    def find_first_source_above(self, required_speed_mb: float, exclude: Optional[List[str]] = None, silent=False, log_callback=None, max_seconds: float = 2.0, max_bytes: int = 2 * 1024 * 1024) -> Optional[Tuple[str, str, float]]:
+        """
+        快速检测（轻量）其他源，返回第一个测速速度 > required_speed_mb 的源及测速 URL和速度
+
+        参数:
+            required_speed_mb: 需要超过的速度阈值（MB/s）
+            exclude: 排除的源名称列表
+            max_seconds: 单次测速最大秒数（默认 2s）
+            max_bytes: 单次测速最大字节数（默认 2MB）
+        返回:
+            tuple: (source_name, test_url, speed_mb) 或 None
+        """
+        self._silent_mode = silent
+        exclude = exclude or []
+        sources_by_name = {source.get("name"): source for source in DLC_SOURCES}
+        priority_order = ["r2", "github", "domestic_cloud", "gitee"]
+        for source_name in priority_order:
+            if source_name in exclude:
+                continue
+            source = sources_by_name.get(source_name)
+            if not source or not source.get('enabled', False):
+                continue
+            # build candidate list - in our config we expect test_url
+            candidates = []
+            if source.get('test_url'):
+                candidates.append(source.get('test_url'))
+            else:
+                base = source.get('url', '').rstrip('/')
+                fmt = source.get('format', 'standard')
+                if source_name == 'r2':
+                    candidates.append(f"{base}/test/test2.bin")
+                elif source_name == 'domestic_cloud':
+                    candidates.append(f"{base}/test/test.bin")
+                elif fmt in ['github_release', 'gitee_release']:
+                    if '/releases/download/' in base:
+                        parts = base.split('/releases/download/')
+                        prefix = parts[0] + '/releases/download/'
+                        candidates.append(f"{prefix}test/test.bin")
+                    else:
+                        candidates.append(f"{base}/test/test.bin")
+                else:
+                    candidates.append(f"{base}/test/test.bin")
+
+            for candidate in candidates:
+                ok, speed = self.measure_speed(candidate, f"{source_name}", required_speed_mb, log_callback, max_seconds=max_seconds, max_bytes=max_bytes)
+                if ok and speed > required_speed_mb:
+                    return source_name, candidate, speed
+        return None
