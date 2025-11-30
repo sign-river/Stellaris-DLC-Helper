@@ -1416,6 +1416,14 @@ class MainWindowCTk:
                     attempt += 1
                     # 每次尝试都创建新的 downloader，以避免 stop() 的副作用
                     try:
+                        # 如果之前因为重测而暂停了下载，则在开始新尝试前恢复UI和状态
+                        if getattr(self, 'download_paused', False):
+                            try:
+                                self.download_paused = False
+                                self.root.after(0, lambda: self.execute_btn.configure(text='⏸️ 暂停下载'))
+                                self.logger.info('重新开始下载')
+                            except Exception:
+                                pass
                         # 关闭并清理旧的 downloader（如存在）
                         if hasattr(self, 'current_downloader') and self.current_downloader:
                             try:
@@ -1478,7 +1486,10 @@ class MainWindowCTk:
                                                     self._pending_switch_source = new_source
                                                     if hasattr(self, 'current_downloader') and self.current_downloader:
                                                         try:
+                                                            # 标记 UI 为暂停状态
+                                                            self.download_paused = True
                                                             self.current_downloader.pause()
+                                                            self.root.after(0, lambda: self.execute_btn.configure(text='▶️ 继续下载'))
                                                             self.logger.info('下载已暂停，正在切换源...')
                                                         except Exception:
                                                             pass
@@ -1496,8 +1507,12 @@ class MainWindowCTk:
                                                 try:
                                                     if hasattr(self, 'current_downloader') and self.current_downloader:
                                                         try:
+                                                            self.logger.info('未发现更快源，恢复当前下载')
                                                             self.current_downloader.resume()
-                                                            self.logger.info('恢复当前下载')
+                                                            self.download_paused = False
+                                                            self.root.after(0, lambda: self.execute_btn.configure(text='⏸️ 暂停下载'))
+                                                            # 恢复UI状态
+                                                            self.root.after(0, self._hide_server_error)
                                                         except Exception:
                                                             pass
                                                 except Exception:
