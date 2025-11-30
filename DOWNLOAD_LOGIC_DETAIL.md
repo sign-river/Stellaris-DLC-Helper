@@ -40,10 +40,11 @@ Stellaris DLC Helper 实现了智能的多源下载系统，支持4个下载源�
 
 #### URL生成
 ```python
-# 原始URL: https://dlc.dlchelper.top/dlc/281990/dlc001_symbols_of_domination.zip
-# 生成逻辑: 直接替换域名部分
-original_url = "https://dlc.dlchelper.top/dlc/281990/dlc001_symbols_of_domination.zip"
-relative_path = "281990/dlc001_symbols_of_domination.zip"  # 移除基础URL部分
+# 从国内服务器URL生成R2 URL
+original_url = "http://47.100.2.190/dlc/281990/dlc001_symbols_of_domination.zip"
+# 提取相对路径: 281990/dlc001_symbols_of_domination.zip
+relative_path = original_url[len("http://47.100.2.190/dlc/"):]
+# 生成R2 URL: https://dlc.dlchelper.top/dlc/281990/dlc001_symbols_of_domination.zip
 final_url = f"https://dlc.dlchelper.top/dlc/{relative_path}"
 ```
 

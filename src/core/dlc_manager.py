@@ -57,13 +57,21 @@ class DLCManager:
         dlc_list = []
         for key, info in dlcs.items():
             # 获取所有可用的下载URL（包括所有源的备用URL）
-            urls = self.source_manager.get_download_urls_for_dlc(key, info)
+            url_tuples = self.source_manager.get_download_urls_for_dlc(key, info)
+            
+            # 分离主URL和备用URL
+            if url_tuples:
+                main_url = url_tuples[0][0]  # 主URL
+                fallback_urls = url_tuples[1:]  # 备用URL元组列表
+            else:
+                main_url = ""
+                fallback_urls = []
             
             dlc_list.append({
                 "key": key,
                 "name": info.get("name", key),
-                "url": urls[0] if urls else "",  # 主URL
-                "urls": urls,  # 所有可用URL，用于fallback
+                "url": main_url,  # 主URL
+                "urls": fallback_urls,  # 备用URL元组列表，用于fallback
                 "size": info.get("size", "未知"),
                 "source": info.get("_source", "unknown")
             })

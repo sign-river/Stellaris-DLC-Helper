@@ -422,7 +422,7 @@ class MainWindowCTk:
         dlc_frame.grid_rowconfigure(1, weight=1)
         dlc_frame.grid_columnconfigure(0, weight=1)
         
-        # 标题行（8列布局：DLC标题 | 下载信息 | 进度条 | 速度 | 全选按钮）
+        # 标题行（9列布局：DLC标题 | 下载信息 | 进度条 | 速度 | 下载源 | 全选按钮）
         header_frame = ctk.CTkFrame(dlc_frame, fg_color="transparent")
         header_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 10))
         
@@ -433,7 +433,9 @@ class MainWindowCTk:
         header_frame.grid_columnconfigure(3, weight=1)               # 进度条（弹性）
         header_frame.grid_columnconfigure(4, weight=0, minsize=100)  # 速度显示
         header_frame.grid_columnconfigure(5, weight=0, minsize=10)   # 间隔
-        header_frame.grid_columnconfigure(6, weight=0, minsize=80)   # 全选按钮
+        header_frame.grid_columnconfigure(6, weight=0, minsize=120)  # 下载源显示
+        header_frame.grid_columnconfigure(7, weight=0, minsize=10)   # 间隔
+        header_frame.grid_columnconfigure(8, weight=0, minsize=80)   # 全选按钮
         
         # 第0列：DLC列表标题
         label = ctk.CTkLabel(
@@ -478,6 +480,17 @@ class MainWindowCTk:
         self.speed_label.grid(row=0, column=4, sticky="e")
         self.speed_label.grid_remove()  # 初始隐藏
         
+        # 第6列：当前下载源（默认隐藏）
+        self.source_label = ctk.CTkLabel(
+            header_frame,
+            text="下载源: 未知",
+            font=ctk.CTkFont(size=11),
+            text_color="#FF9800",
+            width=100
+        )
+        self.source_label.grid(row=0, column=6, sticky="w")
+        self.source_label.grid_remove()  # 初始隐藏
+        
         # 第5列：服务器状态文本（默认隐藏）
         self.server_status_label = ctk.CTkLabel(
             header_frame,
@@ -489,7 +502,7 @@ class MainWindowCTk:
         self.server_status_label.grid(row=0, column=3, sticky="ew", padx=(10, 10))
         self.server_status_label.grid_remove()  # 初始隐藏
         
-        # 第6列：全选按钮
+        # 第8列：全选按钮
         self.select_all_btn = ctk.CTkButton(
             header_frame,
             text="全选",
@@ -502,7 +515,7 @@ class MainWindowCTk:
             hover_color="#1E88E5",
             text_color="#FFFFFF"
         )
-        self.select_all_btn.grid(row=0, column=6, sticky="e")
+        self.select_all_btn.grid(row=0, column=8, sticky="e")
         
         # 滚动框架（用于显示DLC列表）
         self.dlc_scrollable_frame = ctk.CTkScrollableFrame(
@@ -1130,6 +1143,13 @@ class MainWindowCTk:
                 progress_callback.slow_speed_count = 0  # 连续慢速计数
                 progress_callback.server_issue_detected = False  # 服务器问题标志
                 progress_callback.last_server_check = 0  # 上次服务器检查时间
+                
+                # 添加更新下载源的方法
+                def update_source(source_name):
+                    self.root.after(0, lambda: self.source_label.configure(text=f"下载源: {source_name}"))
+                    self.root.after(0, lambda: self.source_label.grid())
+                
+                progress_callback.update_source = update_source
             
             import time
             import requests
@@ -1219,8 +1239,10 @@ class MainWindowCTk:
             self.root.after(0, lambda: self.downloading_label.grid())
             self.root.after(0, lambda: self.progress_bar.grid())
             self.root.after(0, lambda: self.speed_label.grid())
+            self.root.after(0, lambda: self.source_label.grid())
             self.root.after(0, lambda: self.progress_bar.set(0))
             self.root.after(0, lambda: self.speed_label.configure(text="0.00 MB/s"))
+            self.root.after(0, lambda: self.source_label.configure(text="下载源: 连接中..."))
             
             # 初始化下载器
             downloader = DLCDownloader(progress_callback)
@@ -1272,6 +1294,7 @@ class MainWindowCTk:
             self.root.after(0, lambda: self.downloading_label.grid_remove())
             self.root.after(0, lambda: self.progress_bar.grid_remove())
             self.root.after(0, lambda: self.speed_label.grid_remove())
+            self.root.after(0, lambda: self.source_label.grid_remove())
             self.logger.info(f"\n{'='*50}")
             self.logger.info(f"下载完成！成功: {success}, 失败: {failed}")
             

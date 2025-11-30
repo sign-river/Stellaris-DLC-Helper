@@ -26,6 +26,10 @@ class DLCDownloader:
         self.paused = False  # 暂停标志
         self.stopped = False  # 停止标志
         
+        # 创建SourceManager实例用于检查启用的源
+        from .source_manager import SourceManager
+        self.source_manager = SourceManager()
+        
         # 创建会话以复用连接
         self.session = requests.Session()
         # 设置合理的超时和重试
@@ -69,21 +73,55 @@ class DLCDownloader:
         抛出:
             Exception: 下载失败
         """
-        urls_to_try = [url]
+        # 使用所有URL，但只尝试启用的源
+        urls_to_try = []
         if fallback_urls:
-            urls_to_try.extend(fallback_urls)
+            # 检查哪些源是启用的
+            enabled_source_names = set()
+            if hasattr(self, 'source_manager') and self.source_manager:
+                enabled_sources = self.source_manager.get_enabled_sources()
+                enabled_source_names = {s.get("name") for s in enabled_sources}
+            
+            # 只添加启用的源
+            for url, source_name in fallback_urls:
+                if source_name in enabled_source_names:
+                    urls_to_try.append((url, source_name))
+        
+        # 如果没有启用的备用URL，使用主URL
+        if not urls_to_try:
+            urls_to_try = [(url, "domestic_cloud")]  # 默认使用国内云
         
         last_exception = None
         
         # 尝试每个URL
-        for current_url in urls_to_try:
+        for current_url, source_name in urls_to_try:
             try:
-                print(f"尝试从 {current_url} 下载...")
+                print(f"尝试从 {source_name} 下载...")
+                # 如果有UI回调，更新当前下载源显示
+                if hasattr(self, 'progress_callback') and self.progress_callback:
+                    # 确保progress_callback已初始化
+                    if not hasattr(self.progress_callback, 'update_source'):
+                        # 调用一次progress_callback来初始化它
+                        try:
+                            self.progress_callback(0, 0, 100)
+                        except:
+                            pass  # 忽略初始化错误
+                    
+                    # 现在调用update_source
+                    if hasattr(self.progress_callback, 'update_source'):
+                        # 源名称映射为用户友好的显示名称
+                        display_name = {
+                            "r2": "R2云存储",
+                            "domestic_cloud": "国内云服务器", 
+                            "gitee": "Gitee",
+                            "github": "GitHub"
+                        }.get(source_name, source_name)
+                        self.progress_callback.update_source(display_name)
                 return self._download_single_attempt(current_url, dest_path)
             except Exception as e:
                 last_exception = e
-                print(f"从 {current_url} 下载失败: {str(e)}")
-                if current_url != urls_to_try[-1]:  # 不是最后一个URL
+                print(f"从 {source_name} 下载失败: {str(e)}")
+                if (current_url, source_name) != urls_to_try[-1]:  # 不是最后一个URL
                     print("尝试下一个源...")
                     continue
         
@@ -180,7 +218,7 @@ class DLCDownloader:
         参数:
             dlc_key: DLC键名
             url: 主下载URL
-            fallback_urls: 备用URL列表
+            fallback_urls: 备用URL列表 (List[Tuple[str, str]] - URL和源名称的元组)
             
         返回:
             str: 缓存文件路径

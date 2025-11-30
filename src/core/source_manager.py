@@ -7,7 +7,7 @@
 
 import os
 import requests
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from ..config import DLC_SOURCES, REQUEST_TIMEOUT, STELLARIS_APP_ID
 
 
@@ -32,8 +32,8 @@ class SourceManager:
     def _load_mappings(self) -> Dict[str, Dict[str, str]]:
         """加载文件名映射配置"""
         mappings = {}
-        for source in DLC_SOURCES:
-            if source.get("enabled", False) and source.get("format") in ["github_release", "gitee_release"]:
+        for source in DLC_SOURCES:  # 加载所有源的映射，包括禁用的
+            if source.get("format") in ["github_release", "gitee_release"]:
                 mapping_file = source.get("mapping_file")
                 if mapping_file:
                     try:
@@ -43,6 +43,7 @@ class SourceManager:
                             mappings[source.get("name")] = json.load(f)
                     except Exception as e:
                         print(f"警告: 无法加载映射文件 {mapping_file}: {e}")
+                        mappings[source.get("name")] = {}  # 空映射
         return mappings
     
     def get_enabled_sources(self) -> List[Dict[str, Any]]:
@@ -178,7 +179,7 @@ class SourceManager:
 
         return merged
 
-    def get_download_urls_for_dlc(self, dlc_key: str, dlc_info: Dict[str, Any]) -> List[str]:
+    def get_download_urls_for_dlc(self, dlc_key: str, dlc_info: Dict[str, Any]) -> List[Tuple[str, str]]:
         """
         获取指定DLC的所有可用下载URL（按优先级排序）
 
@@ -187,14 +188,28 @@ class SourceManager:
             dlc_info: DLC信息字典
 
         返回:
-            下载URL列表
+            (URL, 源名称) 元组列表
         """
         urls = []
 
-        # 为所有启用的源生成下载URL
-        enabled_sources = self.get_enabled_sources()
-
-        for source in enabled_sources:
+        # 按固定优先级顺序生成下载URL：R2 -> 国内云 -> Gitee -> GitHub
+        priority_order = ["r2", "domestic_cloud", "gitee", "github"]
+        
+        # 获取所有源配置（包括禁用的）
+        sources_by_name = {source.get("name"): source for source in DLC_SOURCES}
+        
+        for source_name in priority_order:
+            if source_name in sources_by_name:
+                source = sources_by_name[source_name]
+                source_url = source.get("url", "").rstrip("/")
+                format_type = source.get("format", "standard")
+            if source_name in sources_by_name:
+                source = sources_by_name[source_name]
+                source_url = source.get("url", "").rstrip("/")
+                format_type = source.get("format", "standard")
+            source_name = source.get("name")
+            source_url = source.get("url", "").rstrip("/")
+            format_type = source.get("format", "standard")
             source_name = source.get("name")
             source_url = source.get("url", "").rstrip("/")
             format_type = source.get("format", "standard")
@@ -208,20 +223,20 @@ class SourceManager:
                     if original_url.startswith("http://47.100.2.190/dlc/"):
                         relative_path = original_url[len("http://47.100.2.190/dlc/"):]
                         new_url = f"{source_url}/{relative_path}"
-                        if new_url not in urls:  # 避免重复
-                            urls.append(new_url)
+                        if new_url not in [url for url, _ in urls]:  # 避免重复
+                            urls.append((new_url, source_name))
                     # 如果是其他URL且是当前源，直接使用
                     elif source_name == dlc_info.get("_source"):
-                        urls.append(original_url)
+                        urls.append((original_url, source_name))
             elif format_type == "gitee_release":
                 # Gitee release asset URL格式
-                if source_name in self.mappings and "url" in dlc_info:
+                if "url" in dlc_info:
                     # 从原始URL中提取文件名
                     original_url = dlc_info["url"]
                     filename = original_url.split('/')[-1]  # 获取文件名，如 dlc001_symbols_of_domination.zip
                     
-                    # 使用映射表查找对应的Gitee文件名
-                    mapping = self.mappings[source_name]
+                    # 尝试使用映射表查找对应的Gitee文件名
+                    mapping = self.mappings.get(source_name, {})
                     if filename in mapping:
                         gitee_filename = mapping[filename]
                         
@@ -242,24 +257,24 @@ class SourceManager:
                             
                             if selected_tag:
                                 gitee_url = f"{source_url}/{selected_tag}/{gitee_filename}"
-                                if gitee_url not in urls:
-                                    urls.append(gitee_url)
+                                if gitee_url not in [url for url, _ in urls]:
+                                    urls.append((gitee_url, source_name))
                         except (ValueError, IndexError) as e:
                             print(f"警告: 无法解析Gitee文件名编号 {gitee_filename}: {e}")
             elif format_type == "github_release":
                 # GitHub release asset URL格式
-                if source_name in self.mappings and "url" in dlc_info:
+                if "url" in dlc_info:
                     # 从原始URL中提取文件名
                     original_url = dlc_info["url"]
                     filename = original_url.split('/')[-1]  # 获取文件名，如 dlc001_symbols_of_domination.zip
                     
-                    # 使用映射表查找对应的GitHub文件名
-                    mapping = self.mappings[source_name]
+                    # 尝试使用映射表查找对应的GitHub文件名
+                    mapping = self.mappings.get(source_name, {})
                     if filename in mapping:
                         github_filename = mapping[filename]
                         github_url = f"{source_url}/{github_filename}"
-                        if github_url not in urls:
-                            urls.append(github_url)
+                        if github_url not in [url for url, _ in urls]:
+                            urls.append((github_url, source_name))
             elif format_type == "custom":
                 # 自定义格式
                 # TODO: 根据实际需求实现
