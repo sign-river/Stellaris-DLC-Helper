@@ -1124,19 +1124,29 @@ class MainWindowCTk:
             messagebox.showinfo("提示", "请至少选择一个DLC！")
             return
         
-        # 在开始下载前进行测速选择最佳源
-        self.logger.info("正在测速选择最佳下载源...")
-        try:
-            best_source, test_url = self.dlc_manager.source_manager.get_best_download_source(
-                silent=True, 
-                log_callback=self.logger.info
-            )
-            self.best_download_source = best_source
-            self.logger.info(f"选择下载源: {best_source}")
-        except Exception as e:
-            self.logger.warning(f"测速失败，使用默认源: {e}")
-            self.best_download_source = "domestic_cloud"
+        # 在后台线程中进行测速选择最佳源
+        def speed_test_thread():
+            self.logger.info("正在测速选择最佳下载源...")
+            try:
+                best_source, test_url = self.dlc_manager.source_manager.get_best_download_source(
+                    silent=True, 
+                    log_callback=self.logger.info
+                )
+                self.best_download_source = best_source
+                self.logger.info(f"选择下载源: {best_source}")
+            except Exception as e:
+                self.logger.warning(f"测速失败，使用默认源: {e}")
+                self.best_download_source = "domestic_cloud"
+            
+            # 测速完成后，在主线程中继续下载流程
+            self.root.after(0, lambda: self._continue_download_after_speed_test(selected))
         
+        # 启动测速线程
+        import threading
+        threading.Thread(target=speed_test_thread, daemon=True).start()
+    
+    def _continue_download_after_speed_test(self, selected):
+        """测速完成后继续下载流程"""
         # 清除旧的下载状态文件
         self._clear_download_state()
         
