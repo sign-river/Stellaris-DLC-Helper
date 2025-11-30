@@ -490,24 +490,48 @@ class SourceManager:
         
         # 获取启用源的配置（按名称索引）
         sources_by_name = {source.get("name"): source for source in DLC_SOURCES}
-        # 获取测试URL：优先使用源配置中的 test_url，然后基于源基址自动构建
-        test_urls = {}
+        # 获取测试 URL 候选：优先使用源配置中的 test_url，若未配置则基于 source.url 构建多个候选项供测速尝试
+        test_candidates = {}
         for source in DLC_SOURCES:
-            if source.get("enabled", False):
-                name = source.get("name")
-                # 优先使用显式配置的 test_url
-                test_url = source.get("test_url")
-                if not test_url:
-                    base = source.get("url", "").rstrip('/')
-                    # 不同source可能使用不同的测试文件
-                    if name == "r2":
-                        test_url = f"{base}/test/test2.bin"
-                    elif name == "domestic_cloud":
-                        test_url = f"{base}/test/test.bin"
-                    else:
-                        # 对于GitHub/Gitee等release格式，不同的结构可能需要显式 test_url
-                        test_url = f"{base}/test/test.bin"
-                test_urls[name] = test_url
+            if not source.get("enabled", False):
+                continue
+            name = source.get("name")
+            candidates = []
+            # 优先使用显式配置的 test_url
+            if source.get('test_url'):
+                candidates.append(source.get('test_url'))
+
+            base = source.get("url", "").rstrip('/')
+            fmt = source.get('format', 'standard')
+
+            if name == 'r2':
+                candidates.append(f"{base}/test/test2.bin")
+            elif name == 'domestic_cloud':
+                candidates.append(f"{base}/test/test.bin")
+            elif fmt in ['github_release', 'gitee_release']:
+                # release 格式，生成常见的几个可能 URL：
+                # 1) base/test.bin
+                # 2) base/test/test.bin
+                # 3) 如果 base 包含 /releases/download/<tag>，生成以 tag=test 的 URL： prefix + 'test/test.bin' 和 prefix + 'test.bin'
+                candidates.append(f"{base}/test.bin")
+                candidates.append(f"{base}/test/test.bin")
+                if '/releases/download/' in base:
+                    parts = base.split('/releases/download/')
+                    prefix = parts[0] + '/releases/download/'
+                    candidates.append(f"{prefix}test/test.bin")
+                    candidates.append(f"{prefix}test.bin")
+            else:
+                # 其它格式的默认尝试
+                candidates.append(f"{base}/test/test.bin")
+
+            # 去重并过滤空项
+            seen = set()
+            filtered = []
+            for c in candidates:
+                if c and c not in seen:
+                    seen.add(c)
+                    filtered.append(c)
+            test_candidates[name] = filtered
 
         if not silent:
             message = "开始测速选择最佳下载源..."
@@ -524,23 +548,27 @@ class SourceManager:
         priority_order = ["r2", "github", "domestic_cloud", "gitee"]
         
         for source_name in priority_order:
-            if source_name in test_urls:
+            if source_name in test_candidates:
+                candidates = test_candidates[source_name]
                 threshold = 3.0 if source_name in ["r2", "domestic_cloud"] else 2.0
                 # 允许从源配置中覆盖阈值
                 cfg = sources_by_name.get(source_name) if 'sources_by_name' in locals() else None
                 if cfg and cfg.get('threshold_mb'):
                     threshold = cfg.get('threshold_mb')
-                ok, speed = self.measure_speed(test_urls[source_name], source_name, threshold, log_callback)
-                if ok:
-                    if not silent:
-                        message = f"选择下载源: {source_name} (速度: {speed:.2f} MB/s)"
-                        print(message)
-                        if log_callback:
-                            log_callback(message)
-                    elif log_callback:
-                        # 即使silent，也要在GUI中显示选择结果
-                        log_callback(f"选择下载源: {source_name} (速度: {speed:.2f} MB/s)")
-                    return source_name, test_urls[source_name]
+                # 逐个 candidate 测试
+                for candidate in candidates:
+                    ok, speed = self.measure_speed(candidate, f"{source_name}", threshold, log_callback)
+                    if ok:
+                        if not silent:
+                            message = f"选择下载源: {source_name} (速度: {speed:.2f} MB/s) -> {candidate}"
+                            print(message)
+                            if log_callback:
+                                log_callback(message)
+                        elif log_callback:
+                            log_callback(f"选择下载源: {source_name} (速度: {speed:.2f} MB/s) -> {candidate}")
+                        return source_name, candidate
+                    # 如果不达标则继续测试下一个 candidate
+                    continue
 
         if not silent:
             message = "所有源测速均未达标，使用默认源"
@@ -551,4 +579,7 @@ class SourceManager:
         elif log_callback:
             # 即使silent，也要在GUI中显示默认源信息
             log_callback("所有源测速均未达标，使用默认源")
-        return "domestic_cloud", test_urls.get("domestic_cloud", "http://47.100.2.190/dlc/test/test.bin")
+        # 所有候选都未达标，返回默认的 test url（优先取配置中定义的候选）
+        default_candidates = test_candidates.get("domestic_cloud", [])
+        default_url = default_candidates[0] if default_candidates else "http://47.100.2.190/dlc/test/test.bin"
+        return "domestic_cloud", default_url
