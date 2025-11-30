@@ -84,7 +84,8 @@ def get_best_download_url():
     url_r2 = "https://dlc.dlchelper.top/dlc/test/test.bin"
     url_github = "https://github.com/sign-river/File_warehouse/releases/download/test/test.bin"
     url_domestic = "http://47.100.2.190/dlc/test/test.bin" 
-    url_gitee = "https://gitee.com/sign-river/File_warehouse/releases/download/test/test.bin"
+    url_gitee = "https://gitee.com/signriver/file_warehouse/releases/download/test/test.bin"
+ 
 
     print("=" * 40)
     print("开始诊断模式测速 (5秒采样)")
