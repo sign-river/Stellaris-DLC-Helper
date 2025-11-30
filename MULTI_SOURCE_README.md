@@ -26,11 +26,11 @@
 - **URL格式**: `{base_url}{dlc_id}.zip`
 - **适用场景**: 国内用户优化，网络加速
 
-#### 3. GitHub发布源
-- **标识符**: `github_release`
-- **特点**: 使用发布资产，支持文件名映射
-- **URL格式**: `{base_url}{mapped_filename}`
-- **适用场景**: 备用下载源，开源分发
+#### 4. Gitee发布源
+- **标识符**: `gitee_release`
+- **特点**: 分多个release发布，支持编号范围映射
+- **URL格式**: `{base_url}{release_tag}/{mapped_filename}`
+- **适用场景**: 备用下载源，支持分批发布
 
 ## 配置结构
 
@@ -60,6 +60,18 @@
       "format": "github_release",
       "base_url": "https://github.com/sign-river/File_warehouse/releases/download/ste4.2/",
       "mapping_file": "pairings.json"
+    },
+    {
+      "name": "gitee",
+      "enabled": true,
+      "priority": 4,
+      "format": "gitee_release",
+      "base_url": "https://gitee.com/signriver/file_warehouse/releases/download/",
+      "mapping_file": "pairings.json",
+      "releases": {
+        "ste1-26": {"min": 1, "max": 26},
+        "ste27-39": {"min": 27, "max": 39}
+      }
     }
   ]
 }
@@ -93,7 +105,8 @@
 1. 为每个DLC生成所有可用源的下载URL
 2. R2和国内云源直接使用DLC ID映射
 3. GitHub源通过映射文件转换为发布文件名
-4. 返回按优先级排序的URL列表
+4. Gitee源根据DLC编号范围选择对应的release tag，然后使用映射文件名
+5. 返回按优先级排序的URL列表
 
 ### 4. 下载执行
 1. 按优先级尝试每个下载源

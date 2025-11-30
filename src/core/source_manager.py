@@ -33,7 +33,7 @@ class SourceManager:
         """加载文件名映射配置"""
         mappings = {}
         for source in DLC_SOURCES:
-            if source.get("enabled", False) and source.get("format") == "github_release":
+            if source.get("enabled", False) and source.get("format") in ["github_release", "gitee_release"]:
                 mapping_file = source.get("mapping_file")
                 if mapping_file:
                     try:
@@ -77,10 +77,10 @@ class SourceManager:
         """
         format_type = source.get("format", "standard")
         
-        # 对于github_release格式，不需要获取index.json，直接返回成功
-        # 因为DLC列表从其他源获取，GitHub只作为下载源
-        if format_type == "github_release":
-            print(f"GitHub源 '{source.get('name')}' 配置成功（无需index.json）")
+        # 对于github_release和gitee_release格式，不需要获取index.json，直接返回成功
+        # 因为DLC列表从其他源获取，这些只作为下载源
+        if format_type in ["github_release", "gitee_release"]:
+            print(f"{format_type.upper()}源 '{source.get('name')}' 配置成功（无需index.json）")
             return {STELLARIS_APP_ID: {"dlcs": {}}}
         
         try:
@@ -217,8 +217,37 @@ class SourceManager:
                             urls.append(original_url)
             elif format_type == "gitee_release":
                 # Gitee release asset URL格式
-                # TODO: 根据实际API实现
-                pass
+                if source_name in self.mappings and "url" in dlc_info:
+                    # 从原始URL中提取文件名
+                    original_url = dlc_info["url"]
+                    filename = original_url.split('/')[-1]  # 获取文件名，如 dlc001_symbols_of_domination.zip
+                    
+                    # 使用映射表查找对应的Gitee文件名
+                    mapping = self.mappings[source_name]
+                    if filename in mapping:
+                        gitee_filename = mapping[filename]
+                        
+                        # 根据文件名中的编号选择正确的release tag
+                        # 例如：001.zip -> 1, 034.zip -> 34
+                        try:
+                            file_num = int(gitee_filename.split('.')[0])  # 提取数字部分
+                            releases = source.get("releases", {})
+                            
+                            # 找到匹配的release tag
+                            selected_tag = None
+                            for tag, range_info in releases.items():
+                                min_num = range_info.get("min", 0)
+                                max_num = range_info.get("max", 999)
+                                if min_num <= file_num <= max_num:
+                                    selected_tag = tag
+                                    break
+                            
+                            if selected_tag:
+                                gitee_url = f"{source_url}{selected_tag}/{gitee_filename}"
+                                if gitee_url not in urls:
+                                    urls.append(gitee_url)
+                        except (ValueError, IndexError) as e:
+                            print(f"警告: 无法解析Gitee文件名编号 {gitee_filename}: {e}")
             elif format_type == "github_release":
                 # GitHub release asset URL格式
                 if source_name in self.mappings and "url" in dlc_info:
