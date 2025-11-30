@@ -62,22 +62,43 @@ class DLCManager:
             # 分离主URL和备用URL
             if url_tuples:
                 main_url = url_tuples[0][0]  # 主URL
+                main_source = url_tuples[0][1]  # 主URL对应的源
                 fallback_urls = url_tuples[1:]  # 备用URL元组列表
             else:
                 main_url = ""
+                main_source = "unknown"
                 fallback_urls = []
             
             dlc_list.append({
                 "key": key,
                 "name": info.get("name", key),
                 "url": main_url,  # 主URL
+                "source": main_source,  # 主URL对应的源名称
                 "urls": fallback_urls,  # 备用URL元组列表，用于fallback
                 "size": info.get("size", "未知"),
-                "source": info.get("_source", "unknown")
+                "checksum": info.get("checksum") or info.get("sha256") or info.get("hash"),
+                "_original_source": info.get("_source", "unknown")  # 原始源信息
             })
         
         # 按DLC编号排序
         dlc_list.sort(key=self._extract_dlc_number)
+        # 构建 URL 映射表并写入缓存，便于调试
+        try:
+            url_map = self.source_manager.build_dlc_url_map(dlc_list)
+            from ..utils import PathUtils
+            import json
+            cache_path = PathUtils.get_cache_dir()
+            import os
+            os.makedirs(cache_path, exist_ok=True)
+            with open(os.path.join(cache_path, 'dlc_urls.json'), 'w', encoding='utf-8') as f:
+                json.dump(url_map, f, ensure_ascii=False, indent=2)
+            # 将 url_map 每个DLC的sources字典嵌入到对应 dlc_list 项
+            for dlc in dlc_list:
+                k = dlc.get('key')
+                if k in url_map:
+                    dlc['url_map'] = url_map[k]
+        except Exception:
+            pass
         return dlc_list
     
     @staticmethod

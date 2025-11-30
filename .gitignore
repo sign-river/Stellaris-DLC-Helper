@@ -78,3 +78,8 @@ server_stellaris_appinfo.json
 
 # 测试文件
 test_*.py
+
+# 忽略 DLC 缓存中的临时下载文件和自动生成的URL映射
+Stellaris_DLC_Cache/**/*.tmp
+Stellaris_DLC_Cache/*.tmp
+Stellaris_DLC_Cache/dlc_urls.json

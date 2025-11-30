@@ -46,6 +46,16 @@ class SourceManager:
                         print(f"警告: 无法加载映射文件 {mapping_file}: {e}")
                         mappings[source.get("name")] = {}  # 空映射
         return mappings
+
+    def get_sources_by_name(self) -> Dict[str, Dict[str, Any]]:
+        """返回按名称索引的源配置映射（只包含启用的源）"""
+        return {s.get("name"): s for s in self.sources}
+
+    def get_source_base_url(self, source_name: str) -> str:
+        """根据源名称返回其基础URL（去掉尾部斜杠）；未找到返回空字符串"""
+        sources = self.get_sources_by_name()
+        source = sources.get(source_name)
+        return source.get("url", "").rstrip("/") if source else ""
     
     def get_enabled_sources(self) -> List[Dict[str, Any]]:
         """获取所有启用的源"""
@@ -66,6 +76,44 @@ class SourceManager:
                 base_url = source.get("url", "").rstrip("/")
                 urls.append(f"{base_url}/index.json")
         return urls
+
+    def get_url_for_source(self, dlc_key: str, dlc_info: Dict[str, Any], source_name: str) -> Optional[str]:
+        """
+        返回指定DLC在指定源下可用的下载URL（如果存在），否则返回 None
+        """
+        url_tuples = self.get_download_urls_for_dlc(dlc_key, dlc_info)
+        for url, name in url_tuples:
+            if name == source_name:
+                return url
+        return None
+
+    def build_dlc_url_map(self, dlc_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        为一组 DLC 构建一个完整的 URL 映射表，格式:
+        {
+          dlc_key: {
+             "name": name, "size": size, "sources": { source_name: url }
+           }
+        }
+        """
+        mapping = {}
+        for dlc in dlc_list:
+            key = dlc.get('key')
+            if not key:
+                continue
+            sources_map = {}
+            urls = self.get_download_urls_for_dlc(key, dlc)
+            for url, name in urls:
+                sources_map[name] = url
+            mapping[key] = {
+                'name': dlc.get('name', key),
+                'size': dlc.get('size', '未知'),
+                'sources': sources_map
+            }
+            # 复制 checksum 信息到映射表中，便于调试/校验
+            if dlc.get('checksum'):
+                mapping[key]['checksum'] = dlc.get('checksum')
+        return mapping
 
     def fetch_dlc_data_from_source(self, source: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
@@ -193,8 +241,8 @@ class SourceManager:
         """
         urls = []
 
-        # 按固定优先级顺序生成下载URL：R2 -> 国内云 -> Gitee -> GitHub
-        priority_order = ["r2", "domestic_cloud", "gitee", "github"]
+        # 按固定优先级顺序生成下载URL：R2 -> GitHub -> 国内云 -> Gitee
+        priority_order = ["r2", "github", "domestic_cloud", "gitee"]
         
         # 获取所有源配置（包括禁用的）
         sources_by_name = {source.get("name"): source for source in DLC_SOURCES}
@@ -204,31 +252,31 @@ class SourceManager:
                 source = sources_by_name[source_name]
                 source_url = source.get("url", "").rstrip("/")
                 format_type = source.get("format", "standard")
-            if source_name in sources_by_name:
-                source = sources_by_name[source_name]
-                source_url = source.get("url", "").rstrip("/")
-                format_type = source.get("format", "standard")
-            source_name = source.get("name")
-            source_url = source.get("url", "").rstrip("/")
-            format_type = source.get("format", "standard")
-            source_name = source.get("name")
-            source_url = source.get("url", "").rstrip("/")
-            format_type = source.get("format", "standard")
+            else:
+                # 忽略未配置的源
+                continue
 
             if format_type == "standard":
                 # 标准格式：从国内服务器URL生成对应源的URL
                 if "url" in dlc_info and dlc_info["url"]:
-                    original_url = dlc_info["url"]
-                    
-                    # 如果是国内服务器的URL，转换为当前源的URL
-                    if original_url.startswith("http://47.100.2.190/dlc/"):
-                        relative_path = original_url[len("http://47.100.2.190/dlc/"):]
+                    original_url = dlc_info["url"].rstrip("/")
+
+                    # 尝试将已知的国内服务器基址（配置里的 domestic_cloud）替换为目标源基址
+                    domestic_base = None
+                    for s in DLC_SOURCES:
+                        if s.get("name") == "domestic_cloud":
+                            domestic_base = s.get("url", "").rstrip("/")
+                            break
+
+                    if domestic_base and original_url.startswith(domestic_base):
+                        relative_path = original_url[len(domestic_base):].lstrip('/')
                         new_url = f"{source_url}/{relative_path}"
-                        if new_url not in [url for url, _ in urls]:  # 避免重复
+                        if new_url not in [url for url, _ in urls]:
                             urls.append((new_url, source_name))
-                    # 如果是其他URL且是当前源，直接使用
+                    # 如果原始 URL 就属于当前源，直接使用（例如该 DLC 本来来自 R2）
                     elif source_name == dlc_info.get("_source"):
-                        urls.append((original_url, source_name))
+                        if original_url not in [url for url, _ in urls]:
+                            urls.append((original_url, source_name))
             elif format_type == "gitee_release":
                 # Gitee release asset URL格式
                 if "url" in dlc_info:
@@ -440,19 +488,26 @@ class SourceManager:
         # 设置静默模式
         self._silent_mode = silent
         
-        # 获取测试URL
+        # 获取启用源的配置（按名称索引）
+        sources_by_name = {source.get("name"): source for source in DLC_SOURCES}
+        # 获取测试URL：优先使用源配置中的 test_url，然后基于源基址自动构建
         test_urls = {}
         for source in DLC_SOURCES:
             if source.get("enabled", False):
                 name = source.get("name")
-                if name == "r2":
-                    test_urls[name] = "https://dlc.dlchelper.top/dlc/test/test2.bin"
-                elif name == "domestic_cloud":
-                    test_urls[name] = "http://47.100.2.190/dlc/test/test.bin"
-                elif name == "github":
-                    test_urls[name] = "https://github.com/sign-river/File_warehouse/releases/download/test/test.bin"
-                elif name == "gitee":
-                    test_urls[name] = "https://gitee.com/signriver/file_warehouse/releases/download/test/test.bin"
+                # 优先使用显式配置的 test_url
+                test_url = source.get("test_url")
+                if not test_url:
+                    base = source.get("url", "").rstrip('/')
+                    # 不同source可能使用不同的测试文件
+                    if name == "r2":
+                        test_url = f"{base}/test/test2.bin"
+                    elif name == "domestic_cloud":
+                        test_url = f"{base}/test/test.bin"
+                    else:
+                        # 对于GitHub/Gitee等release格式，不同的结构可能需要显式 test_url
+                        test_url = f"{base}/test/test.bin"
+                test_urls[name] = test_url
 
         if not silent:
             message = "开始测速选择最佳下载源..."
@@ -465,12 +520,16 @@ class SourceManager:
             # 即使silent，也要在GUI中显示开始信息
             log_callback("开始测速选择最佳下载源...")
         
-        # 按优先级顺序测试
+        # 按优先级顺序测试（与get_download_urls_for_dlc保持一致）
         priority_order = ["r2", "github", "domestic_cloud", "gitee"]
         
         for source_name in priority_order:
             if source_name in test_urls:
                 threshold = 3.0 if source_name in ["r2", "domestic_cloud"] else 2.0
+                # 允许从源配置中覆盖阈值
+                cfg = sources_by_name.get(source_name) if 'sources_by_name' in locals() else None
+                if cfg and cfg.get('threshold_mb'):
+                    threshold = cfg.get('threshold_mb')
                 ok, speed = self.measure_speed(test_urls[source_name], source_name, threshold, log_callback)
                 if ok:
                     if not silent:

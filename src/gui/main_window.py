@@ -912,6 +912,8 @@ class MainWindowCTk:
                 "key": dlc["key"],
                 "name": dlc["name"],
                 "url": dlc["url"],
+                "source": dlc.get("source", "unknown"),
+                "urls": dlc.get("urls", []),
                 "size": dlc["size"],
                 "installed": is_installed
             }
@@ -954,6 +956,30 @@ class MainWindowCTk:
                                     height=20)  # 深色文字
             
             label.pack(side="left", padx=5, pady=2)
+            # 显示每个 DLC 的主源（数据获取时确定）
+            source_display = dlc.get('source', dlc.get('_original_source', '未知'))
+            source_label = ctk.CTkLabel(item_frame, text=f"源: {source_display}", font=ctk.CTkFont(size=10), text_color="#757575")
+            source_label.pack(side="right", padx=(0, 8))
+            # 添加查看 URL 映射的按钮（调试/信息）
+            def _show_urls(key=dlc['key'], d=dlc):
+                try:
+                    urls = d.get('url_map', {})
+                    if not urls:
+                        message = "未找到 URL 映射信息（可能是旧版索引或未启用其它源）"
+                    else:
+                        message_lines = [f"{src}: {u}" for src, u in urls.items()]
+                        message = "\n".join(message_lines)
+                    checksum = d.get('checksum') or d.get('sha256') or d.get('hash')
+                    if checksum:
+                        message = f"校验哈希: {checksum}\n\n" + message
+                    # 记录到日志并显示对话框
+                    self.logger.info(f"DLC {d.get('name')} 的 URL 映射:\n{message}")
+                    messagebox.showinfo(f"{d.get('name')} - URL 映射", message)
+                except Exception as e:
+                    self.logger.log_exception("显示 URL 映射失败", e)
+
+            url_btn = ctk.CTkButton(item_frame, text="链接", width=60, height=24, corner_radius=6, command=_show_urls)
+            url_btn.pack(side="right", padx=(8, 0))
             
             self.dlc_vars.append(dlc_info)
         
@@ -1201,6 +1227,8 @@ class MainWindowCTk:
                     self.root.after(0, lambda: self.source_label.grid())
                 
                 progress_callback.update_source = update_source
+                # 为下载器提供日志记录方法（便于在下载时显示 URL / 错误信息）
+                progress_callback.log_message = lambda msg: self.logger.info(msg)
             
             import time
             import requests
@@ -1284,9 +1312,18 @@ class MainWindowCTk:
                                                     
                                                     # 停止当前下载器，让它重新开始
                                                     if hasattr(self, 'current_downloader') and self.current_downloader:
+                                                        # 停止当前下载器（但保留 session），保留当前 file 的 tmp 以便尝试续传
                                                         self.current_downloader.stop()
-                                                        # 清理未完成的临时文件
-                                                        self._cleanup_partial_downloads()
+                                                        # 尝试保留当前下载文件的 tmp
+                                                        try:
+                                                            if self.current_download_url:
+                                                                preserve_filename = self.current_download_url.split('/')[-1]
+                                                            else:
+                                                                preserve_filename = None
+                                                        except Exception:
+                                                            preserve_filename = None
+                                                        # 清理其它未完成临时文件，但保留当前文件的临时文件
+                                                        self._cleanup_partial_downloads(preserve_filename=preserve_filename)
                                                     
                                                     # 重置服务器问题标志
                                                     progress_callback.server_issue_detected = False
@@ -1334,15 +1371,29 @@ class MainWindowCTk:
             self.root.after(0, lambda: self.speed_label.configure(text="0.00 MB/s"))
             self.root.after(0, lambda: self.source_label.configure(text="下载源: 连接中..."))
             
-            # 初始化下载器
-            downloader = DLCDownloader(progress_callback)
-            self.current_downloader = downloader  # 保存下载器实例
+            # 初始化下载器将在每次尝试中创建，确保 stop/close 不会影响后续尝试
             
             for idx, dlc in enumerate(selected, 1):
                 # 检查是否需要重新选择源（在下载过程中可能因测速而改变）
                 current_source = getattr(self, 'best_download_source', 'domestic_cloud')
-                
-                try:
+                # 支持在下载过程中自动重试并切换源
+                attempt = 0
+                max_attempts = 3
+                last_exception = None
+                while attempt < max_attempts:
+                    attempt += 1
+                    # 每次尝试都创建新的 downloader，以避免 stop() 的副作用
+                    try:
+                        # 关闭并清理旧的 downloader（如存在）
+                        if hasattr(self, 'current_downloader') and self.current_downloader:
+                            try:
+                                self.current_downloader.close()
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    downloader = DLCDownloader(progress_callback)
+                    self.current_downloader = downloader  # 保存当前尝试的下载器
                     self.logger.info(f"\n{'='*50}")
                     self.logger.info(f"[{idx}/{len(selected)}] {dlc['name']}")
                     
@@ -1350,40 +1401,88 @@ class MainWindowCTk:
                     self.root.after(0, lambda name=dlc['name']: self.downloading_label.configure(text=f"正在处理: {name}"))
                     
                     # 根据当前最佳源选择URL
-                    selected_url = dlc['url']  # 默认使用原主URL
-                    selected_fallback_urls = dlc.get('urls', [])[1:] if dlc.get('urls') else []  # 默认备用URL
+                    selected_url = dlc['url']  # 默认使用主URL
+                    selected_fallback_urls = dlc.get('urls', [])  # 默认备用URL
+                    
+                    # 构建完整的URL列表：主URL + 备用URL
+                    all_urls = [(dlc['url'], dlc.get('source', 'unknown'))] + dlc.get('urls', [])
                     
                     # 优先使用当前最佳源的URL
-                    for url, source_name in [(dlc['url'], 'domestic_cloud')] + dlc.get('urls', []):
+                    for url, source_name in all_urls:
                         if source_name == current_source:
                             selected_url = url
                             # 将其他源作为备用URL
-                            selected_fallback_urls = [(u, s) for u, s in [(dlc['url'], 'domestic_cloud')] + dlc.get('urls', []) if s != current_source]
+                            selected_fallback_urls = [(u, s) for u, s in all_urls if s != current_source]
                             break
                     
                     # 设置当前下载URL
                     self.current_download_url = selected_url
                     
                     # 下载DLC
-                    self.logger.info(f"正在下载: {dlc['name']} (使用源: {self.best_download_source})...")
-                    cache_path = downloader.download_dlc(dlc['key'], selected_url, selected_fallback_urls)
-                    if os.path.exists(cache_path):
-                        self.logger.info("从本地缓存加载...")
-                    else:
-                        self.logger.info("\n下载完成")
-                    
-                    # 安装
-                    self.logger.info(f"正在安装: {dlc['name']}...")
-                    self.dlc_installer.install(cache_path, dlc['key'], dlc['name'])
-                    self.logger.success("安装成功")
-                    success += 1
-                    
-                except Exception as e:
+                    try:
+                        self.logger.info(f"正在下载: {dlc['name']} (使用源: {self.best_download_source})... URL: {selected_url}")
+                        expected_hash = dlc.get('checksum') or dlc.get('sha256') or dlc.get('hash')
+                        cache_path = downloader.download_dlc(dlc['key'], selected_url, selected_fallback_urls, expected_hash=expected_hash, primary_source_name=current_source)
+                        if os.path.exists(cache_path):
+                            self.logger.info("从本地缓存加载...")
+                        else:
+                            self.logger.info("\n下载完成")
+                        
+                        # 安装
+                        self.logger.info(f"正在安装: {dlc['name']}...")
+                        self.dlc_installer.install(cache_path, dlc['key'], dlc['name'])
+                        self.logger.success("安装成功")
+                        success += 1
+                        # 下载成功则跳出重试循环
+                        break
+                    except Exception as e:
+                        last_exception = e
+                        # 如果是停止导致的异常（通过 stop() 发起），尝试刷新最佳源并继续重试
+                        err_str = str(e)
+                        # 检测 stop 情况或连接异常
+                        if "下载已停止" in err_str or "Connection aborted" in err_str or "Read timed out" in err_str:
+                            # 重新测速选择源，如果选择了新源则尝试继续
+                            try:
+                                new_source, _ = self.dlc_manager.source_manager.get_best_download_source(
+                                    silent=True, log_callback=self.logger.info
+                                )
+                                if new_source and new_source != getattr(self, 'best_download_source', None):
+                                    self.best_download_source = new_source
+                                    self.logger.info(f"重试: 切换到新下载源: {new_source}")
+                                    # 更新 selected_url 和 fallback_urls
+                                    new_url = self.dlc_manager.source_manager.get_url_for_source(dlc['key'], dlc, new_source)
+                                    if new_url:
+                                        selected_url = new_url
+                                        selected_fallback_urls = [(u, s) for u, s in all_urls if s != new_source]
+                                        # 清理可能的残留临时文件并换源进行下一次重试
+                                        if hasattr(self, 'current_downloader') and self.current_downloader:
+                                            self.current_downloader.stop()
+                                            try:
+                                                if self.current_download_url:
+                                                    preserve_filename = self.current_download_url.split('/')[-1]
+                                                else:
+                                                    preserve_filename = None
+                                            except Exception:
+                                                preserve_filename = None
+                                            self._cleanup_partial_downloads(preserve_filename=preserve_filename)
+                                        # 继续下一次重试（attempt 增加）
+                                        continue
+                            except Exception as _e:
+                                self.logger.warning(f"重试测速选择源失败: {_e}")
+                        # 不是停止/切换导致的，或者没有找到新源则记录并进一步重试
+                        self.logger.warning(f"尝试下载第 {attempt} 次失败: {e}")
+                        if attempt >= max_attempts:
+                            raise
+                        # 小延时后重试
+                        import time
+                        time.sleep(0.8)
                     # 记录完整异常堆栈到错误日志，并在 GUI 日志中显示
                     error_str = str(e) if e else "未知错误"
-                    
+
                     # 提供更友好的错误信息
-                    if "400 Bad Request" in error_str or "URL可能已过期" in error_str:
+                    if "校验失败" in error_str or "哈希" in error_str:
+                        friendly_msg = f"下载失败: {dlc['name']} - 文件完整性校验失败，尝试其他源或联系开发者"
+                    elif "400 Bad Request" in error_str or "URL可能已过期" in error_str:
                         friendly_msg = f"下载失败: {dlc['name']} - 服务器URL配置问题，请稍后重试或联系开发者"
                     elif "网络" in error_str or "连接" in error_str:
                         friendly_msg = f"下载失败: {dlc['name']} - 网络连接问题，请检查网络设置"
@@ -1392,7 +1491,20 @@ class MainWindowCTk:
                     
                     self.logger.error(friendly_msg)
                     self.root.after(0, lambda e=e, msg=friendly_msg: self.logger.log_exception(msg, e))
-                    failed += 1
+                    # 如果循环结束但仍有异常，计入失败
+                    if attempt >= max_attempts and last_exception:
+                        e = last_exception
+                        # 记录完整异常堆栈到错误日志，并在 GUI 日志中显示
+                        error_str = str(e) if e else "未知错误"
+                        if "400 Bad Request" in error_str or "URL可能已过期" in error_str:
+                            friendly_msg = f"下载失败: {dlc['name']} - 服务器URL配置问题，请稍后重试或联系开发者"
+                        elif "网络" in error_str or "连接" in error_str:
+                            friendly_msg = f"下载失败: {dlc['name']} - 网络连接问题，请检查网络设置"
+                        else:
+                            friendly_msg = f"下载失败: {dlc['name']} - {error_str}"
+                        self.logger.error(friendly_msg)
+                        self.root.after(0, lambda e=e, msg=friendly_msg: self.logger.log_exception(msg, e))
+                        failed += 1
             
             # 完成，隐藏进度组件
             self.root.after(0, lambda: self.downloading_label.grid_remove())
@@ -1732,7 +1844,7 @@ class MainWindowCTk:
         self.speed_label.grid()
         self.logger.info("服务器连接恢复正常，已恢复进度显示")
     
-    def _cleanup_partial_downloads(self):
+    def _cleanup_partial_downloads(self, preserve_filename: str = None):
         """清理未完成的下载临时文件"""
         try:
             from ..utils import PathUtils
@@ -1740,6 +1852,10 @@ class MainWindowCTk:
             if os.path.exists(cache_dir):
                 for file in os.listdir(cache_dir):
                     if file.endswith('.tmp'):
+                        # 如果请求保留一个文件，则跳过该 .tmp
+                        if preserve_filename and file == f"{preserve_filename}.tmp":
+                            self.logger.debug(f"保留临时文件: {file}")
+                            continue
                         file_path = os.path.join(cache_dir, file)
                         try:
                             os.remove(file_path)
