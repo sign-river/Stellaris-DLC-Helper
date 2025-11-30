@@ -8,6 +8,7 @@
 import os
 import time
 import requests
+import sys
 from typing import List, Dict, Any, Optional, Tuple
 from ..config import DLC_SOURCES, REQUEST_TIMEOUT, STELLARIS_APP_ID
 
@@ -39,9 +40,39 @@ class SourceManager:
                 if mapping_file:
                     try:
                         import json
-                        mapping_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), mapping_file)
-                        with open(mapping_path, 'r', encoding='utf-8') as f:
-                            mappings[source.get("name")] = json.load(f)
+                        # 查找映射文件的候选路径，兼容开发模式和打包后的EXE
+                        candidates = []
+                        # 1. 当前工作目录
+                        candidates.append(os.path.join(os.getcwd(), mapping_file))
+                        # 2. 可执行文件所在目录
+                        try:
+                            exe_dir = os.path.dirname(sys.executable)
+                            candidates.append(os.path.join(exe_dir, mapping_file))
+                        except Exception:
+                            pass
+                        # 3. 模块文件目录的上级目录
+                        try:
+                            module_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                            candidates.append(os.path.join(module_dir, mapping_file))
+                        except Exception:
+                            pass
+                        # 4. PyInstaller临时目录
+                        meipass = getattr(sys, "_MEIPASS", None)
+                        if meipass:
+                            candidates.append(os.path.join(meipass, mapping_file))
+                        
+                        mapping_path = None
+                        for candidate in candidates:
+                            if os.path.exists(candidate):
+                                mapping_path = candidate
+                                break
+                        
+                        if mapping_path:
+                            with open(mapping_path, 'r', encoding='utf-8') as f:
+                                mappings[source.get("name")] = json.load(f)
+                        else:
+                            print(f"警告: 无法找到映射文件 {mapping_file}")
+                            mappings[source.get("name")] = {}  # 空映射
                     except Exception as e:
                         print(f"警告: 无法加载映射文件 {mapping_file}: {e}")
                         mappings[source.get("name")] = {}  # 空映射
