@@ -171,7 +171,7 @@ class MainWindowCTk:
 
         author_label = ctk.CTkLabel(
             center_inner,
-            text="唏嘘南溪",
+            text="by 唏嘘南溪",
             font=ctk.CTkFont(size=12),
             text_color="#FFFFFF"
         )
