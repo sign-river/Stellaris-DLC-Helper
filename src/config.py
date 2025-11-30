@@ -42,11 +42,10 @@ def _get_best_source_url():
     # 默认值
     return "https://dlc.dlchelper.top"
 
-# 更新服务器配置 - 支持多源
-BEST_SOURCE_URL = _get_best_source_url()
-UPDATE_URL_BASE = f"{BEST_SOURCE_URL}/update/"
+# 更新服务器配置 - 使用专用配置
+UPDATE_URL_BASE = get_config("server", "update_url_base", default="https://dlc.dlchelper.top/update/")
 UPDATE_CHECK_URL = f"{UPDATE_URL_BASE}version.json"
-APPINFO_URL = f"{BEST_SOURCE_URL}/appinfo/stellaris_appinfo.json"
+APPINFO_URL = get_config("server", "appinfo_url", default="https://dlc.dlchelper.top/appinfo/stellaris_appinfo.json")
 
 # 网络配置
 REQUEST_TIMEOUT = get_config("server", "timeout", default=30)
