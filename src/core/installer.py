@@ -44,8 +44,26 @@ class DLCInstaller:
             dlc_folder = PathUtils.get_dlc_folder(self.game_path)
             os.makedirs(dlc_folder, exist_ok=True)
             
-            # 使用ZIP文件名作为文件夹名
-            folder_name = os.path.splitext(os.path.basename(zip_path))[0]
+            # 使用 DLC 的 key + 原始名称作为目标文件夹名，例如: dlc001_symbols_of_domination
+            # 优先使用提供的 dlc_key 和 dlc_name（对 dlc_name 做 slug 化处理），以保证安装目录与 DLC 索引一致
+            def _slugify(name: str) -> str:
+                import re
+                if not name:
+                    return ""
+                # 将非字母数字替换为下划线
+                s = re.sub(r"[^0-9a-zA-Z]+", "_", name)
+                # 合并下划线并转换为小写
+                s = re.sub(r"_+", "_", s).strip("_")
+                return s.lower()
+
+            if dlc_key:
+                if dlc_name:
+                    folder_name = f"{dlc_key}_{_slugify(dlc_name)}"
+                else:
+                    folder_name = dlc_key
+            else:
+                # 作为保险回退使用 ZIP 名称（没有 dlc_key 的情况）
+                folder_name = os.path.splitext(os.path.basename(zip_path))[0]
             target_folder = os.path.join(dlc_folder, folder_name)
             
             # 如果目标文件夹已存在，先删除
