@@ -964,7 +964,9 @@ class MainWindowCTk:
                     if not urls:
                         message = "未找到 URL 映射信息（可能是旧版索引或未启用其它源）"
                     else:
-                        message_lines = [f"{src}: {u}" for src, u in urls.items()]
+                        message_lines = []
+                        for src, u in urls.items():
+                            message_lines.append(f"{src}: {u if u else 'N/A'}")
                         message = "\n".join(message_lines)
                     checksum = d.get('checksum') or d.get('sha256') or d.get('hash')
                     if checksum:

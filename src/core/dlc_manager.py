@@ -96,7 +96,8 @@ class DLCManager:
             for dlc in dlc_list:
                 k = dlc.get('key')
                 if k in url_map:
-                    dlc['url_map'] = url_map[k]
+                    # 只将 sources 映射嵌入到每个 dlc，便于 UI 直接遍历 source->url
+                    dlc['url_map'] = url_map[k].get('sources', {})
         except Exception:
             pass
         return dlc_list

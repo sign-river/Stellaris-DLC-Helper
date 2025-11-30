@@ -97,14 +97,25 @@ class SourceManager:
         }
         """
         mapping = {}
+        # 先获取当前所有可用源（包含禁用? - 这里使用启用的源以避免显示不需要的源）
+        enabled_sources = self.get_enabled_sources()
+        enabled_names = [s.get('name') for s in enabled_sources]
+
         for dlc in dlc_list:
             key = dlc.get('key')
             if not key:
                 continue
             sources_map = {}
-            urls = self.get_download_urls_for_dlc(key, dlc)
-            for url, name in urls:
-                sources_map[name] = url
+            # 为每个启用的源尝试获取 URL（如果可用），这样映射会明确包含 r2/domestic_cloud 等
+            for s_name in enabled_names:
+                try:
+                    url = self.get_url_for_source(key, dlc, s_name)
+                    if url:
+                        sources_map[s_name] = url
+                    else:
+                        sources_map[s_name] = None
+                except Exception:
+                    sources_map[s_name] = None
             mapping[key] = {
                 'name': dlc.get('name', key),
                 'size': dlc.get('size', '未知'),
@@ -257,26 +268,36 @@ class SourceManager:
                 continue
 
             if format_type == "standard":
-                # 标准格式：从国内服务器URL生成对应源的URL
+                # 标准格式：从任一已知基址生成对应源的 URL（R2/domestic/其他）
                 if "url" in dlc_info and dlc_info["url"]:
                     original_url = dlc_info["url"].rstrip("/")
 
-                    # 尝试将已知的国内服务器基址（配置里的 domestic_cloud）替换为目标源基址
-                    domestic_base = None
-                    for s in DLC_SOURCES:
-                        if s.get("name") == "domestic_cloud":
-                            domestic_base = s.get("url", "").rstrip("/")
-                            break
+                    # 尝试抽取相对路径（例如 '281990/dlc001...') 基于 '/dlc/' 路径段
+                    relative_path = None
+                    try:
+                        # look for '/dlc/' marker and take everything after it
+                        idx = original_url.find('/dlc/')
+                        if idx >= 0:
+                            relative_path = original_url[idx + len('/dlc/'):]
+                        else:
+                            # fallback: if original_url startswith source_url and contains '/281990/' pattern
+                            # try to find '/281990/' and extract after it
+                            import re
+                            m = re.search(r'/\d{6,}/', original_url)
+                            if m:
+                                relative_path = original_url[m.start() + 1:]
+                    except Exception:
+                        relative_path = None
 
-                    if domestic_base and original_url.startswith(domestic_base):
-                        relative_path = original_url[len(domestic_base):].lstrip('/')
+                    if relative_path:
                         new_url = f"{source_url}/{relative_path}"
-                        if new_url not in [url for url, _ in urls]:
+                        if new_url not in [u for u, _ in urls]:
                             urls.append((new_url, source_name))
-                    # 如果原始 URL 就属于当前源，直接使用（例如该 DLC 本来来自 R2）
-                    elif source_name == dlc_info.get("_source"):
-                        if original_url not in [url for url, _ in urls]:
-                            urls.append((original_url, source_name))
+                    else:
+                        # 如果没有找到相对路径，但当前源就是原始源，则直接使用原始 URL
+                        if source_name == dlc_info.get("_source"):
+                            if original_url not in [url for url, _ in urls]:
+                                urls.append((original_url, source_name))
             elif format_type == "gitee_release":
                 # Gitee release asset URL格式
                 if "url" in dlc_info:
