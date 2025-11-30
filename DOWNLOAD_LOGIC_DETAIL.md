@@ -15,7 +15,7 @@ Stellaris DLC Helper 实现了智能的多源下载系统，支持4个下载源�
 ### 下载流程
 
 ```
-1. 获取DLC列表 → 2. 生成多源URL → 3. 按优先级下载 → 4. 自动故障转移
+1. 从国内服务器获取DLC列表 → 2. 生成多源URL → 3. 按优先级下载 → 4. 自动故障转移
 ```
 
 ## 各下载源详细逻辑
@@ -35,9 +35,8 @@ Stellaris DLC Helper 实现了智能的多源下载系统，支持4个下载源�
 **工作逻辑**:
 
 #### 数据获取
-- **入口**: `https://dlc.dlchelper.top/dlc/index.json`
-- **格式**: 标准JSON格式，包含完整的DLC列表
-- **内容**: `{ "281990": { "dlcs": { "dlc001_xxx": {...}, ... } } }`
+- **不获取index.json**: R2源不作为DLC列表的来源
+- **仅作为下载源**: 只提供下载URL生成
 
 #### URL生成
 ```python
@@ -50,8 +49,8 @@ final_url = f"https://dlc.dlchelper.top/dlc/{relative_path}"
 
 **特点**:
 - ✅ 主力下载源，全球CDN加速
-- ✅ 包含完整的DLC元数据（名称、大小等）
-- ✅ 作为其他源的基准URL
+- ✅ 不参与DLC列表获取
+- ❌ DLC元数据从国内服务器获取
 
 ### 2. 国内云服务器 - 优先级2
 
@@ -69,8 +68,9 @@ final_url = f"https://dlc.dlchelper.top/dlc/{relative_path}"
 
 #### 数据获取
 - **入口**: `http://47.100.2.190/dlc/index.json`
-- **格式**: 与R2相同的标准JSON格式
-- **作用**: 提供国内用户优化的访问
+- **格式**: 标准JSON格式，包含完整的DLC列表
+- **内容**: `{ "281990": { "dlcs": { "dlc001_xxx": {...}, ... } } }`
+- **唯一来源**: DLC列表只从此服务器获取
 
 #### URL生成
 ```python
@@ -80,9 +80,10 @@ original_url = "https://dlc.dlchelper.top/dlc/281990/dlc001_symbols_of_dominatio
 ```
 
 **特点**:
+- ✅ DLC列表的唯一来源
 - ✅ 国内网络优化，减少国际链路延迟
-- ✅ 相同的数据格式，便于统一处理
-- ✅ 自动故障转移到R2
+- ✅ 完整的DLC元数据（名称、大小等）
+- ✅ 作为其他源的基准URL
 
 ### 3. GitHub源 - 优先级3
 

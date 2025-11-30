@@ -200,21 +200,19 @@ class SourceManager:
             format_type = source.get("format", "standard")
 
             if format_type == "standard":
-                # 标准格式：直接使用DLC信息中的URL，但替换域名部分
+                # 标准格式：从国内服务器URL生成对应源的URL
                 if "url" in dlc_info and dlc_info["url"]:
-                    # 从原始URL中提取相对路径
                     original_url = dlc_info["url"]
-                    # 替换基础URL部分
-                    # 例如：https://dlc.dlchelper.top/dlc/281990/dlc001.zip -> http://47.100.2.190/dlc/281990/dlc001.zip
-                    if original_url.startswith("https://dlc.dlchelper.top/dlc/"):
-                        relative_path = original_url[len("https://dlc.dlchelper.top/dlc/"):]
+                    
+                    # 如果是国内服务器的URL，转换为当前源的URL
+                    if original_url.startswith("http://47.100.2.190/dlc/"):
+                        relative_path = original_url[len("http://47.100.2.190/dlc/"):]
                         new_url = f"{source_url}/{relative_path}"
                         if new_url not in urls:  # 避免重复
                             urls.append(new_url)
-                    else:
-                        # 如果不是标准R2 URL，直接使用原始URL（但只对当前源）
-                        if source_name == dlc_info.get("_source"):
-                            urls.append(original_url)
+                    # 如果是其他URL且是当前源，直接使用
+                    elif source_name == dlc_info.get("_source"):
+                        urls.append(original_url)
             elif format_type == "gitee_release":
                 # Gitee release asset URL格式
                 if source_name in self.mappings and "url" in dlc_info:

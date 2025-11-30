@@ -27,7 +27,7 @@ class DLCManager:
         
     def fetch_dlc_list(self):
         """
-        从多个服务器获取DLC列表并合并
+        从国内服务器获取DLC列表
         
         返回:
             list: DLC列表，每项包含 key, name, url, size
@@ -35,28 +35,20 @@ class DLCManager:
         抛出:
             Exception: 网络错误或数据格式错误
         """
-        all_data = []
+        # 只从国内服务器获取DLC列表
+        domestic_source = self.source_manager.get_source_by_name("domestic_cloud")
+        if not domestic_source:
+            raise Exception("未找到国内云服务器配置")
         
-        # 从所有启用的源获取数据
-        enabled_sources = self.source_manager.get_enabled_sources()
-        if not enabled_sources:
-            raise Exception("没有启用的下载源")
+        data = self.source_manager.fetch_dlc_data_from_source(domestic_source)
+        if not data:
+            raise Exception("无法从国内服务器获取DLC数据")
         
-        for source in enabled_sources:
-            data = self.source_manager.fetch_dlc_data_from_source(source)
-            if data:
-                all_data.append(data)
-        
-        if not all_data:
-            raise Exception("所有下载源都无法访问")
-        
-        # 合并数据
-        merged_data = self.source_manager.merge_dlc_data(all_data)
-        
-        if STELLARIS_APP_ID not in merged_data:
+        # 处理数据
+        if STELLARIS_APP_ID not in data:
             raise Exception("服务器上暂无Stellaris的DLC数据")
         
-        stellaris_data = merged_data[STELLARIS_APP_ID]
+        stellaris_data = data[STELLARIS_APP_ID]
         dlcs = stellaris_data.get("dlcs", {})
         
         if not dlcs:
@@ -64,7 +56,7 @@ class DLCManager:
         
         dlc_list = []
         for key, info in dlcs.items():
-            # 获取所有可用的下载URL
+            # 获取所有可用的下载URL（包括所有源的备用URL）
             urls = self.source_manager.get_download_urls_for_dlc(key, info)
             
             dlc_list.append({
