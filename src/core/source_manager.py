@@ -649,7 +649,26 @@ class SourceManager:
                     candidates.append(f"{base}/test/test.bin")
 
             for candidate in candidates:
+                # 记录一次 quick-test 的尝试信息
+                try:
+                    if log_callback:
+                        log_callback(f"快速检测: {source_name} -> {candidate}")
+                    else:
+                        print(f"快速检测: {source_name} -> {candidate}")
+                except Exception:
+                    pass
+
                 ok, speed = self.measure_speed(candidate, f"{source_name}", required_speed_mb, log_callback, max_seconds=max_seconds, max_bytes=max_bytes)
+
+                # 记录此次候选的测速结果
+                try:
+                    msg = f"快速检测结果: {source_name} -> {candidate} => {speed:.2f} MB/s ({'达标' if ok else '未达标'})"
+                    if log_callback:
+                        log_callback(msg)
+                    else:
+                        print(msg)
+                except Exception:
+                    pass
                 if ok and speed > required_speed_mb:
                     return source_name, candidate, speed
         return None
