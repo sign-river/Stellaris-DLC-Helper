@@ -490,39 +490,37 @@ class SourceManager:
         
         # 获取启用源的配置（按名称索引）
         sources_by_name = {source.get("name"): source for source in DLC_SOURCES}
-        # 获取测试 URL 候选：优先使用源配置中的 test_url，若未配置则基于 source.url 构建多个候选项供测速尝试
+        # 获取测试 URL：优先使用源配置中的 test_url，若未配置则使用默认固定路径
         test_candidates = {}
         for source in DLC_SOURCES:
             if not source.get("enabled", False):
                 continue
             name = source.get("name")
+            # Use only the explicit test_url if present, otherwise fallback to fixed default
             candidates = []
-            # 优先使用显式配置的 test_url
             if source.get('test_url'):
                 candidates.append(source.get('test_url'))
-
-            base = source.get("url", "").rstrip('/')
-            fmt = source.get('format', 'standard')
-
-            if name == 'r2':
-                candidates.append(f"{base}/test/test2.bin")
-            elif name == 'domestic_cloud':
-                candidates.append(f"{base}/test/test.bin")
-            elif fmt in ['github_release', 'gitee_release']:
-                # release 格式，生成常见的几个可能 URL：
-                # 1) base/test.bin
-                # 2) base/test/test.bin
-                # 3) 如果 base 包含 /releases/download/<tag>，生成以 tag=test 的 URL： prefix + 'test/test.bin' 和 prefix + 'test.bin'
-                candidates.append(f"{base}/test.bin")
-                candidates.append(f"{base}/test/test.bin")
-                if '/releases/download/' in base:
-                    parts = base.split('/releases/download/')
-                    prefix = parts[0] + '/releases/download/'
-                    candidates.append(f"{prefix}test/test.bin")
-                    candidates.append(f"{prefix}test.bin")
             else:
-                # 其它格式的默认尝试
-                candidates.append(f"{base}/test/test.bin")
+                base = source.get("url", "").rstrip('/')
+                fmt = source.get('format', 'standard')
+                # Default per-source fixed test paths
+                if name == 'r2':
+                    candidates.append(f"{base}/test/test2.bin")
+                elif name == 'domestic_cloud':
+                    candidates.append(f"{base}/test/test.bin")
+                elif fmt in ['github_release', 'gitee_release']:
+                    # For release sources without a configured test_url, try a single logical default
+                    # NOTE: We do not attempt multiple URL patterns; the user requested fixed test paths
+                    # We'll use a safe form combining prefix + 'test/test.bin'
+                    if '/releases/download/' in base:
+                        # drop any tag and use tag 'test'
+                        parts = base.split('/releases/download/')
+                        prefix = parts[0] + '/releases/download/'
+                        candidates.append(f"{prefix}test/test.bin")
+                    else:
+                        candidates.append(f"{base}/test/test.bin")
+                else:
+                    candidates.append(f"{base}/test/test.bin")
 
             # 去重并过滤空项
             seen = set()

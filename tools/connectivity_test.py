@@ -58,12 +58,14 @@ def test_source_connectivity():
 
             elif format_type in ['github_release', 'gitee_release']:
                 # 直接测试具体的DLC文件URL，不依赖DLC列表
-                if format_type == 'github_release':
-                    # GitHub: https://github.com/sign-river/File_warehouse/releases/download/ste4.2/001.zip
-                    test_url = f"{base_url}/001.zip"
-                elif format_type == 'gitee_release':
-                    # Gitee: https://gitee.com/signriver/file_warehouse/releases/download/ste1-26/001.zip
-                    test_url = f"{base_url}/ste1-26/001.zip"
+                # Use explicit configured test_url if present, otherwise fallback to one default
+                if source.get('test_url'):
+                    test_url = source.get('test_url')
+                else:
+                    if format_type == 'github_release':
+                        test_url = f"{base_url}/001.zip"
+                    elif format_type == 'gitee_release':
+                        test_url = f"{base_url}/ste1-26/001.zip"
 
                 print(f'   测试URL: {test_url}')
 

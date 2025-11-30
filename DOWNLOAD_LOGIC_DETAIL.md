@@ -183,6 +183,16 @@ final_url = f"{base_url}/{selected_tag}/{gitee_filename}"
 
 ## 下载执行逻辑
 
+### 测试文件位置（固定）
+为避免测速失败和混淆，程序使用固定的测试文件路径来测速各下载源（这些路径不会随配置或索引改变）：
+
+- R2: https://dlc.dlchelper.top/dlc/test/test2.bin
+- 国内云: http://47.100.2.190/dlc/test/test.bin
+- GitHub: https://github.com/sign-river/File_warehouse/releases/download/test/test.bin
+- Gitee: https://gitee.com/signriver/file_warehouse/releases/download/test/test.bin
+
+程序会优先使用 `config.json` 中 `test_url` 的显式配置（若配置存在），否则才使用上述默认固定路径。
+
 ### 多源故障转移
 
 ```python
