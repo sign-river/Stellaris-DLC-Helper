@@ -8,10 +8,10 @@ Stellaris DLC Helper 支持四个下载源，为用户提供高可靠性的下�
 
 根据连通性测试结果：
 
-- ❌ **R2源**: 连接超时 (可能为临时网络问题)
+- ✅ **R2源**: 连通正常 (HTTP 200)
 - ❌ **国内云服务器**: HTTP 404 (未部署)
-- ❌ **GitHub**: HTTP 302 (release不存在)
-- ❌ **Gitee**: HTTP 404 (release不存在)
+- ✅ **GitHub**: 连通正常 (ste4.2 release 已存在，至少包含 001.zip)
+- ❌ **Gitee**: HTTP 404 (未部署)
 
 ## 部署步骤
 
@@ -68,6 +68,7 @@ scp dlc_files/*.zip user@47.100.2.190:/var/www/html/dlc/281990/
 **状态**: 配置完成，等待创建release
 **仓库**: `https://github.com/sign-river/File_warehouse`
 **Release**: `ste4.2`
+**URL格式**: `https://github.com/sign-river/File_warehouse/releases/download/ste4.2/{filename}`
 **部署要求**:
 
 #### 创建Release
@@ -75,33 +76,35 @@ scp dlc_files/*.zip user@47.100.2.190:/var/www/html/dlc/281990/
 2. 点击 "Create a new release"
 3. Tag version: `ste4.2`
 4. Release title: `Stellaris DLC Collection v4.2`
-5. 上传所有DLC文件，命名为:
-   - `001.zip` (对应 Symbols Of Domination)
-   - `002.zip` (对应 Arachnoid Portrait Pack)
-   - `003.zip` (对应 Signup Bonus)
+5. **直接上传DLC文件**，命名为:
+   - `001.zip` (对应 dlc001_symbols_of_domination.zip)
+   - `002.zip` (对应 dlc002_arachnoid.zip)
+   - `003.zip` (对应 dlc003_signup_bonus.zip)
    - ... 依此类推到 `039.zip`
 
-#### 文件映射
-根据 `pairings.json`，确保文件名正确对应。
+**注意**: GitHub上没有index.json，只存放实际的DLC压缩包文件。
 
 ### 4. Gitee源
 **状态**: 配置完成，等待创建releases
 **仓库**: `https://gitee.com/signriver/file_warehouse`
+**URL格式**: `https://gitee.com/signriver/file_warehouse/releases/download/{release_tag}/{filename}`
 **部署要求**:
 
 #### 创建两个Release
-1. **ste1-26**: 包含1-26编号的DLC
-2. **ste27-39**: 包含27-39编号的DLC
+1. **ste1-26**: 包含1-26编号的DLC文件
+2. **ste27-39**: 包含27-39编号的DLC文件
 
 #### Release 1: ste1-26
 - Tag: `ste1-26`
 - Title: `Stellaris DLC 1-26`
-- 上传文件: `001.zip` 到 `026.zip`
+- **直接上传文件**: `001.zip` 到 `026.zip`
 
 #### Release 2: ste27-39
 - Tag: `ste27-39`
 - Title: `Stellaris DLC 27-39`
-- 上传文件: `027.zip` 到 `039.zip`
+- **直接上传文件**: `027.zip` 到 `039.zip`
+
+**注意**: Gitee上没有index.json，按release分组存放DLC压缩包文件。
 
 ## 验证部署
 

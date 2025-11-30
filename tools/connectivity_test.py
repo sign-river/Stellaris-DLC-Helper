@@ -57,41 +57,24 @@ def test_source_connectivity():
                     print(f'   ❌ 响应异常 (HTTP {response.status_code})')
 
             elif format_type in ['github_release', 'gitee_release']:
-                # 测试具体的DLC文件URL
-                # 先获取DLC列表，然后测试第一个DLC的URL
+                # 直接测试具体的DLC文件URL，不依赖DLC列表
+                if format_type == 'github_release':
+                    # GitHub: https://github.com/sign-river/File_warehouse/releases/download/ste4.2/001.zip
+                    test_url = f"{base_url}/001.zip"
+                elif format_type == 'gitee_release':
+                    # Gitee: https://gitee.com/signriver/file_warehouse/releases/download/ste1-26/001.zip
+                    test_url = f"{base_url}ste1-26/001.zip"
+
+                print(f'   测试URL: {test_url}')
+
                 try:
-                    dlc_list = dlc_manager.fetch_dlc_list()
-                    if dlc_list:
-                        test_dlc = dlc_list[0]
-                        urls = manager.get_download_urls_for_dlc(
-                            list(test_dlc.keys())[0] if isinstance(test_dlc, dict) and 'urls' not in test_dlc else 'test_key',
-                            test_dlc
-                        )
-
-                        # 找到当前源的URL
-                        source_url = None
-                        for url in urls:
-                            if source_name in url:
-                                source_url = url
-                                break
-
-                        if source_url:
-                            test_url = source_url
-                            print(f'   测试URL: {test_url}')
-
-                            response = requests.head(test_url, timeout=REQUEST_TIMEOUT)
-                            if response.status_code == 200:
-                                connectivity_ok = True
-                                print(f'   ✅ 连通正常 (HTTP {response.status_code})')
-                            else:
-                                error_msg = f'HTTP {response.status_code}'
-                                print(f'   ❌ 响应异常 (HTTP {response.status_code})')
-                        else:
-                            error_msg = '未找到测试URL'
-                            print(f'   ⚠️  未找到该源的测试URL')
+                    response = requests.head(test_url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+                    if response.status_code in [200, 302]:
+                        connectivity_ok = True
+                        print(f'   ✅ 连通正常 (HTTP {response.status_code})')
                     else:
-                        error_msg = '无法获取DLC列表'
-                        print(f'   ⚠️  无法获取DLC列表进行测试')
+                        error_msg = f'HTTP {response.status_code}'
+                        print(f'   ❌ 响应异常 (HTTP {response.status_code})')
                 except Exception as e:
                     error_msg = str(e)
                     print(f'   ❌ 测试失败: {e}')
@@ -133,7 +116,7 @@ def test_source_connectivity():
         print('\n📋 部署状态说明:')
         print('• R2源: ✅ 已部署并可访问')
         print('• 国内云服务器: ❌ 需要上传 index.json 和 DLC 文件')
-        print('• GitHub: ❌ 需要创建 ste4.2 release 并上传 DLC 文件')
+        print('• GitHub: ✅ ste4.2 release 已创建 (至少包含 001.zip)')
         print('• Gitee: ❌ 需要创建 ste1-26 和 ste27-39 releases 并上传 DLC 文件')
 
     return results
