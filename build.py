@@ -143,7 +143,9 @@ class Packager:
         print("构建 exe 文件...")
 
         # 保存构建配置哈希
-        config_hash_file = self.cache_root / "config" / ".build_config_hash"
+        config_hash_dir = self.cache_root / "config"
+        config_hash_dir.mkdir(parents=True, exist_ok=True)
+        config_hash_file = config_hash_dir / ".build_config_hash"
         current_hash = self._get_build_config_hash()
         with open(config_hash_file, 'w', encoding='utf-8') as f:
             f.write(current_hash)
