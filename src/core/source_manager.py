@@ -6,6 +6,7 @@
 """
 
 import os
+import time
 import requests
 from typing import List, Dict, Any, Optional, Tuple
 from ..config import DLC_SOURCES, REQUEST_TIMEOUT, STELLARIS_APP_ID
@@ -281,3 +282,200 @@ class SourceManager:
                 pass
 
         return urls
+
+    def measure_speed(self, url, description, threshold_mb, log_callback=None):
+        """
+        测速单个URL
+        
+        参数:
+            url: 测试URL
+            description: 描述信息
+            threshold_mb: 速度阈值(MB/s)
+            log_callback: 日志回调函数，用于输出到GUI
+            
+        返回:
+            tuple: (是否达标, 速度MB/s)
+        """
+        silent = getattr(self, '_silent_mode', False)
+        
+        if not silent:
+            message = f"正在测试 [{description}] ..."
+            print(message)
+            if log_callback:
+                log_callback(message)
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            # 请求 200MB 数据
+            "Range": "bytes=0-209715199" 
+        }
+
+        try:
+            # 连接 3s 超时，读取 8s 超时
+            with requests.get(url, headers=headers, stream=True, timeout=(3.0, 8.0)) as response:
+                # 1. 检查状态码
+                if not response.ok:
+                    message = f"测试 [{description}] 失败: 服务器返回状态码 {response.status_code}"
+                    if not silent:
+                        print(f"   [X] 失败: 服务器返回状态码 {response.status_code}")
+                        if log_callback:
+                            log_callback(message)
+                    return False, 0.0
+
+                # 2. 检查 Content-Length (诊断文件是否变小了)
+                content_length = response.headers.get('Content-Length')
+                if content_length and not silent:
+                    mb_size = int(content_length) / 1024 / 1024
+                    message = f"[{description}] 服务器响应大小: {mb_size:.2f} MB"
+                    print(f"   [i] 服务器响应大小: {mb_size:.2f} MB")
+                    if log_callback:
+                        log_callback(message)
+                elif not silent:
+                    message = f"[{description}] 服务器未返回文件大小 (可能是分块传输)"
+                    print(f"   [i] 服务器未返回文件大小 (可能是分块传输)")
+                    if log_callback:
+                        log_callback(message)
+
+                total_downloaded = 0
+                start_time = time.time()
+                first_chunk = True
+                
+                # 3. 开始下载循环
+                for chunk in response.iter_content(chunk_size=64 * 1024):
+                    if not chunk: break
+                    
+                    if first_chunk:
+                        first_chunk = False
+                        start_time = time.time() # 真正的计时开始
+                        continue
+
+                    total_downloaded += len(chunk)
+                    
+                    current_time = time.time()
+                    duration = current_time - start_time
+                    
+                    # --- 停止条件诊断 ---
+                    if duration >= 5.0:
+                        if not silent:
+                            message = f"[{description}] 测速完成: 满 5 秒时间到"
+                            print("   [√] 停止原因: 满 5 秒时间到")
+                            if log_callback:
+                                log_callback(message)
+                        break
+                    
+                    if total_downloaded >= 70 * 1024 * 1024:
+                        if not silent:
+                            message = f"[{description}] 测速完成: 速度太快 (超过70MB)"
+                            print("   [√] 停止原因: 速度太快 (超过70MB)")
+                            if log_callback:
+                                log_callback(message)
+                        break
+                else:
+                    # 如果循环自然结束（即文件读完了，也没触发 break）
+                    if not silent:
+                        message = f"[{description}] 测速完成: 文件被下载完了 (文件太小?)"
+                        print("   [!] 停止原因: 文件被下载完了 (文件太小?)")
+                        if log_callback:
+                            log_callback(message)
+
+                # 4. 计算结果
+                final_duration = time.time() - start_time
+                if final_duration <= 0.001: final_duration = 0.001
+
+                speed_mb = (total_downloaded / 1024 / 1024) / final_duration
+                
+                if not silent:
+                    message = f"[{description}] 最终速度: {speed_mb:.2f} MB/s"
+                    print(f"   [i] 耗时: {final_duration:.2f}秒 | 下载量: {total_downloaded/1024/1024:.2f} MB")
+                    print(f"   >>> 最终速度: {speed_mb:.2f} MB/s", end="")
+                    if log_callback:
+                        log_callback(message)
+                
+                if speed_mb > threshold_mb:
+                    if not silent:
+                        message = f"[{description}] 达标 (>{threshold_mb} MB/s)"
+                        print(f" -> 达标 (>{threshold_mb} MB/s)\n")
+                        if log_callback:
+                            log_callback(message)
+                    return True, speed_mb
+                else:
+                    if not silent:
+                        message = f"[{description}] 未达标 (<={threshold_mb} MB/s)"
+                        print(" -> 未达标\n")
+                        if log_callback:
+                            log_callback(message)
+                    return False, speed_mb
+
+        except requests.exceptions.ConnectTimeout:
+            message = f"[{description}] 连接超时 (3秒内未连上)"
+            if not silent:
+                print("   [X] 连接超时 (3秒内未连上)\n")
+                if log_callback:
+                    log_callback(message)
+            return False, 0.0
+        except Exception as e:
+            message = f"[{description}] 发生错误: {e}"
+            if not silent:
+                print(f"   [X] 发生错误: {e}\n")
+                if log_callback:
+                    log_callback(message)
+            return False, 0.0
+
+    def get_best_download_source(self, silent=False, log_callback=None):
+        """
+        测速选择最佳下载源
+        
+        参数:
+            silent: 是否静默模式（不输出到控制台）
+            log_callback: 日志回调函数，用于输出到GUI
+            
+        返回:
+            tuple: (最佳源名称, 测试URL) 或 (None, None) 如果全部失败
+        """
+        # 设置静默模式
+        self._silent_mode = silent
+        
+        # 获取测试URL
+        test_urls = {}
+        for source in DLC_SOURCES:
+            if source.get("enabled", False):
+                name = source.get("name")
+                if name == "r2":
+                    test_urls[name] = "https://dlc.dlchelper.top/dlc/test/test.bin"
+                elif name == "domestic_cloud":
+                    test_urls[name] = "http://47.100.2.190/dlc/test/test.bin"
+                elif name == "github":
+                    test_urls[name] = "https://github.com/sign-river/File_warehouse/releases/download/test/test.bin"
+                elif name == "gitee":
+                    test_urls[name] = "https://gitee.com/signriver/file_warehouse/releases/download/test/test.bin"
+
+        if not silent:
+            message = "开始测速选择最佳下载源..."
+            print("=" * 40)
+            print(message)
+            print("=" * 40)
+            if log_callback:
+                log_callback(message)
+        
+        # 按优先级顺序测试
+        priority_order = ["r2", "domestic_cloud", "github", "gitee"]
+        
+        for source_name in priority_order:
+            if source_name in test_urls:
+                threshold = 3.0 if source_name in ["r2", "domestic_cloud"] else 2.0
+                ok, speed = self.measure_speed(test_urls[source_name], source_name, threshold, log_callback)
+                if ok:
+                    if not silent:
+                        message = f"选择下载源: {source_name} (速度: {speed:.2f} MB/s)"
+                        print(message)
+                        if log_callback:
+                            log_callback(message)
+                    return source_name, test_urls[source_name]
+
+        if not silent:
+            message = "所有源测速均未达标，使用默认源"
+            print("-" * 40)
+            print(message)
+            if log_callback:
+                log_callback(message)
+        return "domestic_cloud", test_urls.get("domestic_cloud", "http://47.100.2.190/dlc/test/test.bin")

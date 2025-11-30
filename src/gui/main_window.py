@@ -1124,6 +1124,19 @@ class MainWindowCTk:
             messagebox.showinfo("提示", "请至少选择一个DLC！")
             return
         
+        # 在开始下载前进行测速选择最佳源
+        self.logger.info("正在测速选择最佳下载源...")
+        try:
+            best_source, test_url = self.dlc_manager.source_manager.get_best_download_source(
+                silent=True, 
+                log_callback=self.logger.info
+            )
+            self.best_download_source = best_source
+            self.logger.info(f"选择下载源: {best_source}")
+        except Exception as e:
+            self.logger.warning(f"测速失败，使用默认源: {e}")
+            self.best_download_source = "domestic_cloud"
+        
         # 清除旧的下载状态文件
         self._clear_download_state()
         
@@ -1207,9 +1220,48 @@ class MainWindowCTk:
                                         # 服务器正常，重置计数
                                         progress_callback.slow_speed_count = 0
                                     else:
-                                        # 服务器有问题，切换到错误显示
+                                        # 服务器有问题，重新测速并切换源
                                         progress_callback.server_issue_detected = True
-                                        self.root.after(0, self._show_server_error)
+                                        self.logger.warning("检测到当前下载源速度异常，正在重新测速选择新源...")
+                                        
+                                        # 在后台线程中重新测速
+                                        def retest_thread():
+                                            try:
+                                                new_source, new_test_url = self.dlc_manager.source_manager.get_best_download_source(
+                                                    silent=True,
+                                                    log_callback=self.logger.info
+                                                )
+                                                if new_source != self.best_download_source:
+                                                    self.best_download_source = new_source
+                                                    self.logger.info(f"切换到新下载源: {new_source}")
+                                                    # 通知UI更新源显示
+                                                    if hasattr(progress_callback, 'update_source'):
+                                                        display_name = {
+                                                            "r2": "R2云存储",
+                                                            "domestic_cloud": "国内云服务器", 
+                                                            "gitee": "Gitee",
+                                                            "github": "GitHub"
+                                                        }.get(new_source, new_source)
+                                                        progress_callback.update_source(display_name)
+                                                    
+                                                    # 停止当前下载器，让它重新开始
+                                                    if hasattr(self, 'current_downloader') and self.current_downloader:
+                                                        self.current_downloader.stop()
+                                                        # 清理未完成的临时文件
+                                                        self._cleanup_partial_downloads()
+                                                    
+                                                    # 重置服务器问题标志
+                                                    progress_callback.server_issue_detected = False
+                                                    progress_callback.slow_speed_count = 0
+                                                else:
+                                                    # 测速结果相同，显示服务器错误
+                                                    self.root.after(0, self._show_server_error)
+                                            except Exception as e:
+                                                self.logger.error(f"重新测速失败: {e}")
+                                                self.root.after(0, self._show_server_error)
+                                        
+                                        import threading
+                                        threading.Thread(target=retest_thread, daemon=True).start()
                         else:
                             # 速度恢复正常，重置计数
                             if progress_callback.slow_speed_count > 0:
@@ -1249,6 +1301,9 @@ class MainWindowCTk:
             self.current_downloader = downloader  # 保存下载器实例
             
             for idx, dlc in enumerate(selected, 1):
+                # 检查是否需要重新选择源（在下载过程中可能因测速而改变）
+                current_source = getattr(self, 'best_download_source', 'domestic_cloud')
+                
                 try:
                     self.logger.info(f"\n{'='*50}")
                     self.logger.info(f"[{idx}/{len(selected)}] {dlc['name']}")
@@ -1256,13 +1311,24 @@ class MainWindowCTk:
                     # 更新当前下载DLC名称
                     self.root.after(0, lambda name=dlc['name']: self.downloading_label.configure(text=f"正在处理: {name}"))
                     
+                    # 根据当前最佳源选择URL
+                    selected_url = dlc['url']  # 默认使用原主URL
+                    selected_fallback_urls = dlc.get('urls', [])[1:] if dlc.get('urls') else []  # 默认备用URL
+                    
+                    # 优先使用当前最佳源的URL
+                    for url, source_name in [(dlc['url'], 'domestic_cloud')] + dlc.get('urls', []):
+                        if source_name == current_source:
+                            selected_url = url
+                            # 将其他源作为备用URL
+                            selected_fallback_urls = [(u, s) for u, s in [(dlc['url'], 'domestic_cloud')] + dlc.get('urls', []) if s != current_source]
+                            break
+                    
                     # 设置当前下载URL
-                    self.current_download_url = dlc['url']
+                    self.current_download_url = selected_url
                     
                     # 下载DLC
-                    self.logger.info(f"正在下载: {dlc['name']}...")
-                    fallback_urls = dlc.get('urls', [])[1:] if dlc.get('urls') else []  # 排除主URL
-                    cache_path = downloader.download_dlc(dlc['key'], dlc['url'], fallback_urls)
+                    self.logger.info(f"正在下载: {dlc['name']} (使用源: {self.best_download_source})...")
+                    cache_path = downloader.download_dlc(dlc['key'], selected_url, selected_fallback_urls)
                     if os.path.exists(cache_path):
                         self.logger.info("从本地缓存加载...")
                     else:
@@ -1627,3 +1693,20 @@ class MainWindowCTk:
         # 显示速度标签
         self.speed_label.grid()
         self.logger.info("服务器连接恢复正常，已恢复进度显示")
+    
+    def _cleanup_partial_downloads(self):
+        """清理未完成的下载临时文件"""
+        try:
+            from ..utils import PathUtils
+            cache_dir = PathUtils.get_dlc_cache_dir()
+            if os.path.exists(cache_dir):
+                for file in os.listdir(cache_dir):
+                    if file.endswith('.tmp'):
+                        file_path = os.path.join(cache_dir, file)
+                        try:
+                            os.remove(file_path)
+                            self.logger.info(f"清理未完成下载文件: {file}")
+                        except Exception as e:
+                            self.logger.warning(f"无法清理文件 {file}: {e}")
+        except Exception as e:
+            self.logger.error(f"清理下载文件时出错: {e}")
