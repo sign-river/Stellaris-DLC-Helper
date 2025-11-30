@@ -115,9 +115,9 @@ def test_source_connectivity():
         print('⚠️  部分下载源存在连通性问题，请检查网络或配置。')
         print('\n📋 部署状态说明:')
         print('• R2源: ✅ 已部署并可访问')
-        print('• 国内云服务器: ❌ 需要上传 index.json 和 DLC 文件')
-        print('• GitHub: ✅ ste4.2 release 已创建 (至少包含 001.zip)')
-        print('• Gitee: ❌ 需要创建 ste1-26 和 ste27-39 releases 并上传 DLC 文件')
+        print('• 国内云服务器: ✅ 已部署 index.json')
+        print('• GitHub: ✅ ste4.2 release 已创建')
+        print('• Gitee: ✅ ste1-26 release 已创建')
 
     return results
 

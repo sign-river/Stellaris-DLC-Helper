@@ -9,9 +9,9 @@ Stellaris DLC Helper 支持四个下载源，为用户提供高可靠性的下�
 根据连通性测试结果：
 
 - ✅ **R2源**: 连通正常 (HTTP 200)
-- ❌ **国内云服务器**: HTTP 404 (未部署)
-- ✅ **GitHub**: 连通正常 (ste4.2 release 已存在，至少包含 001.zip)
-- ❌ **Gitee**: HTTP 404 (未部署)
+- ✅ **国内云服务器**: 连通正常 (HTTP 200) - index.json 已部署
+- ✅ **GitHub**: 连通正常 (HTTP 200) - ste4.2 release 已存在
+- ✅ **Gitee**: 连通正常 (HTTP 200) - ste1-26 release 已存在
 
 ## 部署步骤
 
