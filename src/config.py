@@ -29,10 +29,24 @@ DLC_SOURCES = get_config("server", "sources", default=[
 DLC_SERVER_URL = DLC_SOURCES[0]["url"] if DLC_SOURCES else "https://dlc.dlchelper.top/dlc/"
 DLC_INDEX_URL = f"{DLC_SERVER_URL}index.json"
 
-# 更新服务器配置
-UPDATE_URL_BASE = get_config("server", "update_url_base", default="https://dlc.dlchelper.top/update/")
+def _get_best_source_url():
+    """获取最佳的源URL（优先选择国内云服务器）"""
+    # 优先选择国内云服务器
+    for source in DLC_SOURCES:
+        if source.get("name") == "domestic_cloud" and source.get("enabled", False):
+            return source["url"].rstrip("/")
+    # 如果没有找到，选第一个启用的源
+    for source in DLC_SOURCES:
+        if source.get("enabled", False):
+            return source["url"].rstrip("/")
+    # 默认值
+    return "https://dlc.dlchelper.top"
+
+# 更新服务器配置 - 支持多源
+BEST_SOURCE_URL = _get_best_source_url()
+UPDATE_URL_BASE = f"{BEST_SOURCE_URL}/update/"
 UPDATE_CHECK_URL = f"{UPDATE_URL_BASE}version.json"
-APPINFO_URL = get_config("server", "appinfo_url", default="https://dlc.dlchelper.top/appinfo/stellaris_appinfo.json")
+APPINFO_URL = f"{BEST_SOURCE_URL}/appinfo/stellaris_appinfo.json"
 
 # 网络配置
 REQUEST_TIMEOUT = get_config("server", "timeout", default=30)

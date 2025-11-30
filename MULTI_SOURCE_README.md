@@ -28,7 +28,7 @@
       },
       {
         "name": "domestic_cloud",
-        "url": "https://your-cloud-server.com/dlc/",
+        "url": "http://47.100.2.190/dlc/",
         "priority": 2,
         "enabled": true,
         "format": "standard"
@@ -81,6 +81,31 @@
 #### custom
 - 自定义格式
 - TODO: 根据具体需求实现
+
+## 具体配置示例
+
+### 国内云服务器
+
+```json
+{
+  "name": "domestic_cloud",
+  "url": "http://47.100.2.190/dlc/",
+  "priority": 2,
+  "enabled": true,
+  "format": "standard"
+}
+```
+
+**服务器结构**：
+- 根目录：`http://47.100.2.190/`
+- DLC目录：`http://47.100.2.190/dlc/`
+- AppInfo目录：`http://47.100.2.190/appinfo/`
+- Update目录：`http://47.100.2.190/update/`
+
+**访问示例**：
+- DLC列表：`http://47.100.2.190/dlc/index.json`
+- AppInfo：`http://47.100.2.190/appinfo/stellaris_appinfo.json`
+- 版本检查：`http://47.100.2.190/update/version.json`
 
 ## 工作原理
 
