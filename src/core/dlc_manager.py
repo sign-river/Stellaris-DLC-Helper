@@ -35,8 +35,13 @@ class DLCManager:
         抛出:
             Exception: 网络错误或数据格式错误
         """
+        import logging
+        # 打印当前 SourceManager 的 sources（DEBUG级别）以便排查运行时的源配置
+        logging.getLogger().debug(f"SourceManager.sources: {self.source_manager.sources}")
         # 只从国内服务器获取DLC列表
         domestic_source = self.source_manager.get_source_by_name("domestic_cloud")
+        # 记录 domestic_source 的值以帮助调试（DEBUG级别）
+        logging.getLogger().debug(f"domestic_source: {domestic_source}")
         if not domestic_source:
             raise Exception("未找到国内云服务器配置")
         

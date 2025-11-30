@@ -9,6 +9,7 @@ import json
 import shutil
 from pathlib import Path
 import logging
+import sys
 
 
 class ConfigLoader:
@@ -16,7 +17,8 @@ class ConfigLoader:
     
     def __init__(self):
         """初始化配置加载器"""
-        self.config_path = Path(__file__).parent.parent / "config.json"
+        # 以多个候选路径查找 config.json，兼容开发模式、打包后的 EXE、以及从当前工作目录启动的情况
+        self.config_path = self._find_config_path()
         self.example_path = Path(__file__).parent.parent / "config.json.example"
         self._config = self._load_config()
     
@@ -47,10 +49,50 @@ class ConfigLoader:
                 "font4": ["Microsoft YaHei UI", 10]
             }
         }
+
+    def _find_config_path(self):
+        """按优先级查找配置文件的路径，返回 Path（可能不存在）。
+
+        优先级：当前工作目录、可执行文件目录、模块文件目录、PyInstaller 的 _MEIPASS。
+        """
+        candidates = []
+        # 1. 当前工作目录
+        candidates.append(Path.cwd() / "config.json")
+
+        # 2. 可执行文件所在目录（对于打包 exe 很重要）
+        try:
+            exe_dir = Path(sys.executable).parent
+            candidates.append(exe_dir / "config.json")
+        except Exception:
+            pass
+
+        # 3. 当前模块的上级目录（原来的实现）
+        try:
+            module_dir = Path(__file__).parent.parent
+            candidates.append(module_dir / "config.json")
+        except Exception:
+            pass
+
+        # 4. PyInstaller 临时目录（如果存在）
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "config.json")
+
+        # 记录候选路径并返回第一个存在的，如果都不存在则返回第一个候选（cwd）作为默认写入位置
+        for p in candidates:
+            logging.debug(f"候选配置路径: {p} (exists={p.exists()})")
+            if p.exists():
+                logging.info(f"使用配置文件: {p}")
+                return p
+
+        # 如果都不存在，返回第一个候选（cwd）用于创建
+        default = candidates[0] if candidates else Path(__file__).parent.parent / "config.json"
+        logging.info(f"未找到配置文件，默认使用路径: {default}")
+        return default
     
     def _load_config(self):
         """加载配置文件"""
-        # 尝试加载 config.json
+        # 尝试加载 config.json，self.config_path 由 _find_config_path() 选出
         if self.config_path.exists():
             try:
                 with open(self.config_path, 'r', encoding='utf-8') as f:
@@ -61,10 +103,16 @@ class ConfigLoader:
                 logging.warning(f"⚠ 警告: 加载配置文件失败，使用默认配置: {e}")
                 return self._get_default_config()
         else:
-            # 如果不存在，从 config.json.example 复制
-            if self.example_path.exists():
+            # 如果不存在，从 config.json.example 复制（先尝试在 self.config_path 的目录内）
+            possible_example = self.example_path
+            if not possible_example.exists():
+                # 尝试在 _MEIPASS 中查找示例文件
+                meipass = getattr(sys, "_MEIPASS", None)
+                if meipass:
+                    possible_example = Path(meipass) / "config.json.example"
+            if possible_example.exists():
                 try:
-                    shutil.copy(self.example_path, self.config_path)
+                    shutil.copy(possible_example, self.config_path)
                     logging.info(f"✓ 已从示例配置创建 config.json")
                     logging.info(f"  请根据需要修改: {self.config_path}")
                     with open(self.config_path, 'r', encoding='utf-8') as f:
