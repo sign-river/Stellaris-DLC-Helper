@@ -184,4 +184,14 @@ rmdir /s Stellaris_DLC_Cache\venv\build_venv
 rmdir /s Stellaris_DLC_Cache\build
 rmdir /s dist
 rmdir /s Stellaris-DLC-Helper
+
+## 中文路径兼容性说明
+
+如果要将打包后的文件分发给其他用户并允许他们把程序放到包含中文（或其他非 ASCII 字符）的路径中，请注意以下事项：
+
+- 推荐在打包和测试时，使用同样的目标环境（操作系统版本、语言、杀毒软件）进行验证，尤其当目标机器包含非 ASCII 的用户目录（例如 C:\Users\中文用户名\）时。
+- PyInstaller 及其依赖库通常支持 Unicode 路径，但某些第三方扩展或旧版本库在 Windows 上可能存在兼容性问题；确保 PyInstaller 升级到较新的稳定版本（>= 5.x）可降低风险。
+- 在构建过程中，尽量避免使用包含中文的构建路径（即源代码所在目录）；但最终 exe 运行在中文路径下通常是可以的（已在本项目的示例测试中验证）。
+- 如果用户在中文路径下运行后遇到问题，建议他们尝试将程序移动到仅包含 ASCII 字符的路径或使用 `tools/test_unicode_paths.py` 在开发环境中复现问题并提交 Issue。
+
 ```

@@ -68,7 +68,10 @@ class PathUtils:
         返回:
             str: 日志文件路径
         """
-        path_hash = hashlib.md5(game_path.encode()).hexdigest()[:12]
+        # Ensure consistent encoding for hashing to avoid locale differences
+        # Normalize the path to avoid differences caused by relative components or case
+        path_normalized = os.path.normcase(os.path.abspath(game_path))
+        path_hash = hashlib.md5(path_normalized.encode('utf-8')).hexdigest()[:12]
         return os.path.join(PathUtils.get_log_dir(), f"operations_{path_hash}.json")
     
     @staticmethod
