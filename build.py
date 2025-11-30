@@ -204,6 +204,21 @@ class Packager:
                 str(helper_script)
             ]
             subprocess.run(helper_cmd, check=True, cwd=str(self.project_root))
+            # 多路径匹配：PyInstaller 可能生成 dist/updater_helper.exe 或 dist/updater_helper/updater_helper.exe
+            # 通过 glob 搜索任何下层目录以找到最可能的 exe
+            import glob
+            helper_candidates = list(self.dist_path.glob('**/updater_helper.exe'))
+            if not helper_candidates:
+                # 没找到 helper 在 dist 中，尝试当前目录下的 dist/updater_helper.exe (fallback)
+                fallback = self.dist_path / 'updater_helper.exe'
+                if fallback.exists():
+                    helper_candidates = [fallback]
+            if helper_candidates:
+                # 保留第一个匹配路径
+                helper_exe_path = helper_candidates[0]
+                print(f"找到并构建 helper: {helper_exe_path}")
+            else:
+                print('未在 dist 中找到 updater_helper.exe，构建可能失败')
         print("exe 构建完成")
 
     def organize_files(self):
@@ -245,9 +260,17 @@ class Packager:
         libraries_path.mkdir(exist_ok=True)
 
         # 如果存在 helper exe，则复制到 release 根目录
-        helper_exe = self.dist_path / "updater_helper.exe"
-        if helper_exe.exists():
+        # 复制 helper_exe：支持 dist 下不同的生成路径
+        from glob import glob
+        helper_candidates = list(self.dist_path.glob('**/updater_helper.exe'))
+        if helper_candidates:
+            helper_exe = helper_candidates[0]
             shutil.copy2(str(helper_exe), str(self.final_path / "updater_helper.exe"))
+        else:
+            # 检查 fallback
+            fallback = self.dist_path / 'updater_helper.exe'
+            if fallback.exists():
+                shutil.copy2(str(fallback), str(self.final_path / "updater_helper.exe"))
 
         # 创建 README.txt
         readme_content = f"""Stellaris DLC Helper v{VERSION}

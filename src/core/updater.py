@@ -165,11 +165,6 @@ class AutoUpdater:
                 headers['Range'] = f'bytes={existing_size}-'
                 mode = 'ab'
                 downloaded_size = existing_size
-                # 更新界面进度为已下载
-                try:
-                    progress_callback(downloaded_size, total_size)
-                except Exception:
-                    pass
             else:
                 mode = 'wb'
                 downloaded_size = 0
@@ -195,6 +190,13 @@ class AutoUpdater:
                 if existing_size > 0 and total_size > 0 and existing_size >= total_size:
                     self.logger.info("发现已完整下载的更新包（通过大小判断）: {download_path}")
                     return download_path
+            except Exception:
+                pass
+
+            # 在知道 total_size 后，若已有已下载的部分，更新进度回调显示当前进度
+            try:
+                if existing_size > 0:
+                    progress_callback(existing_size, total_size)
             except Exception:
                 pass
 
