@@ -15,18 +15,21 @@ from pathlib import Path
 class Logger:
     """日志管理类"""
     
-    def __init__(self, log_widget=None):
+    def __init__(self, log_widget=None, root=None):
         """
         初始化日志管理器
         
             参数:
             log_widget: Tkinter ScrolledText 组件
+            root: Tkinter根窗口，用于线程安全的GUI更新
         """
         self.log_widget = log_widget
+        self.root = root
         
-    def set_widget(self, log_widget):
+    def set_widget(self, log_widget, root=None):
         """设置日志组件"""
         self.log_widget = log_widget
+        self.root = root
         
     def log(self, message, level="INFO"):
         """
@@ -38,7 +41,19 @@ class Logger:
         """
         if self.log_widget:
             timestamp = datetime.now().strftime("%H:%M:%S")
-            self.log_widget.insert("end", f"[{timestamp}] {message}\n")
+            formatted_message = f"[{timestamp}] {message}\n"
+            
+            # 如果有root，使用after确保在主线程中更新GUI
+            if self.root:
+                self.root.after(0, lambda: self._insert_log(formatted_message))
+            else:
+                # 直接插入（用于主线程调用）
+                self._insert_log(formatted_message)
+    
+    def _insert_log(self, message):
+        """实际插入日志到GUI组件"""
+        if self.log_widget:
+            self.log_widget.insert("end", message)
             self.log_widget.see("end")
             
     def info(self, message):

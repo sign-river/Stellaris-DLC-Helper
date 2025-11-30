@@ -77,7 +77,7 @@ class MainWindowCTk:
         self.dlc_downloader = None
         self.dlc_installer = None
         self.patch_manager = None
-        self.logger = Logger()
+        self.logger = Logger(root=self.root)
         
         # 初始化UI
         self.init_ui()
@@ -658,7 +658,7 @@ class MainWindowCTk:
         self.log_text.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
         
         # 设置日志组件
-        self.logger.set_widget(self.log_text)
+        self.logger.set_widget(self.log_text, self.root)
         
     # ========== 以下是业务逻辑方法，将逐步从旧版本迁移 ==========
     
@@ -1027,6 +1027,11 @@ class MainWindowCTk:
 
     def start_execute(self):
         """开始执行：先应用补丁（如有需要），再下载选中的DLC"""
+        # 检查是否已经在执行中，防止重复点击
+        if self.is_downloading:
+            self.logger.warning("操作已在进行中，请等待完成后再操作")
+            return
+            
         # 确保游戏路径已设置
         if not self.game_path:
             messagebox.showwarning("警告", "请先选择游戏路径！")
@@ -1119,10 +1124,19 @@ class MainWindowCTk:
     
     def start_download(self):
         """开始下载"""
+        # 检查是否已经在下载中，防止重复点击
+        if self.is_downloading:
+            self.logger.warning("下载已在进行中，请等待完成后再操作")
+            return
+            
         selected = [d for d in self.dlc_vars if d["var"].get()]
         if not selected:
             messagebox.showinfo("提示", "请至少选择一个DLC！")
             return
+        
+        # 设置下载状态
+        self.is_downloading = True
+        self.execute_btn.configure(text="⏸️ 暂停下载", state="normal")
         
         # 在后台线程中进行测速选择最佳源
         def speed_test_thread():
