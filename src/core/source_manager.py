@@ -243,7 +243,7 @@ class SourceManager:
                                     break
                             
                             if selected_tag:
-                                gitee_url = f"{source_url}{selected_tag}/{gitee_filename}"
+                                gitee_url = f"{source_url}/{selected_tag}/{gitee_filename}"
                                 if gitee_url not in urls:
                                     urls.append(gitee_url)
                         except (ValueError, IndexError) as e:
