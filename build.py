@@ -173,6 +173,33 @@ class Packager:
             print("未找到spec文件，使用基本PyInstaller命令...")
             # Windows下使用分号分隔路径
             separator = ";" if os.name == 'nt' else ":"
+            # 获取 tcl/tk 数据目录（修复 tkinter 打包问题）
+            import tkinter
+            import sys
+            tcl_dir = None
+            tk_dir = None
+            try:
+                # 尝试获取 tcl/tk 目录
+                tkinter_path = Path(tkinter.__file__).parent
+                tcl_candidates = [
+                    tkinter_path / "tcl",
+                    tkinter_path.parent / "tcl",
+                    Path(sys.base_prefix) / "tcl"
+                ]
+                for candidate in tcl_candidates:
+                    if candidate.exists():
+                        # 查找 tcl8.x 和 tk8.x 目录
+                        tcl_versions = list(candidate.glob("tcl8*"))
+                        tk_versions = list(candidate.glob("tk8*"))
+                        if tcl_versions:
+                            tcl_dir = tcl_versions[0]
+                        if tk_versions:
+                            tk_dir = tk_versions[0]
+                        if tcl_dir and tk_dir:
+                            break
+            except Exception as e:
+                print(f"警告：无法自动检测 tcl/tk 目录: {e}")
+            
             pyinstaller_cmd = [
                 str(python_exe), "-m", "PyInstaller",
                 "--onefile",  # 打包成单个exe文件
@@ -199,6 +226,14 @@ class Packager:
                 "--hidden-import", "charset_normalizer",
                 str(self.project_root / "main.py")  # 主入口文件
             ]
+            
+            # 添加 tcl/tk 数据目录（修复 tkinter 打包问题）
+            if tcl_dir and tcl_dir.exists():
+                pyinstaller_cmd.extend(["--add-data", f"{tcl_dir}{separator}tcl"])
+                print(f"添加 Tcl 数据目录: {tcl_dir}")
+            if tk_dir and tk_dir.exists():
+                pyinstaller_cmd.extend(["--add-data", f"{tk_dir}{separator}tk"])
+                print(f"添加 Tk 数据目录: {tk_dir}")
 
         # 在项目根目录运行 PyInstaller，确保 os.getcwd() 返回正确路径
         subprocess.run(pyinstaller_cmd, check=True, cwd=str(self.project_root))

@@ -389,14 +389,21 @@ class AutoUpdater:
         try:
             self.logger.info("开始应用更新...")
 
+            # 获取程序根目录（exe 模式和开发模式不同）
+            import sys
+            is_frozen = getattr(sys, 'frozen', False)
+            if is_frozen:
+                # exe 模式：程序根目录是 exe 所在目录
+                app_root = Path(sys.executable).parent
+            else:
+                # 开发模式：src/core/updater.py 的上三级
+                app_root = Path(__file__).parent.parent.parent
+            
+            self.logger.info(f"程序根目录: {app_root}")
+
             # 创建备份
-            if not self._create_backup():
+            if not self._create_backup(app_root):
                 return False
-
-    
-
-            # 获取程序根目录
-            app_root = Path(__file__).parent.parent.parent
 
             # 解压更新包到临时目录
             extract_dir = self.temp_dir / "extracted"
@@ -446,7 +453,13 @@ class AutoUpdater:
         try:
             self.logger.info("开始回滚...")
 
-            app_root = Path(__file__).parent.parent.parent
+            # 获取程序根目录
+            import sys
+            is_frozen = getattr(sys, 'frozen', False)
+            if is_frozen:
+                app_root = Path(sys.executable).parent
+            else:
+                app_root = Path(__file__).parent.parent.parent
 
             # 查找最新的备份
             # 按修改时间排序，选择最新的备份
@@ -467,7 +480,7 @@ class AutoUpdater:
             self.logger.error(f"回滚失败: {e}")
             return False
 
-    def _create_backup(self) -> bool:
+    def _create_backup(self, app_root: Path) -> bool:
         """创建当前版本的备份"""
         try:
             self.backup_dir.mkdir(parents=True, exist_ok=True)
@@ -475,7 +488,6 @@ class AutoUpdater:
             # 清理旧备份，只保留最近3个
             self._cleanup_old_backups()
 
-            app_root = Path(__file__).parent.parent.parent
             # 兼容性：如果 PathUtils 没有 get_timestamp 方法，则使用 datetime 生成安全时间戳
             try:
                 timestamp = PathUtils.get_timestamp()
@@ -485,13 +497,14 @@ class AutoUpdater:
             backup_name = f"backup_{self.current_version}_{timestamp}"
             backup_path = self.backup_dir / backup_name
 
-            # 复制需要备份的文件
+            # 复制需要备份的文件（只备份实际存在的）
             files_to_backup = [
                 "Stellaris-DLC-Helper.exe",
-                "src",
+                "updater_helper.exe",
+                "config.json",
+                "pairings.json",
                 "patches",
                 "assets",
-                "config",
                 "libraries"
             ]
 
