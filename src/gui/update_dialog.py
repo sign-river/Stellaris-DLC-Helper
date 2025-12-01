@@ -27,7 +27,8 @@ class UpdateDialog(ctk.CTkToplevel):
         self.logger = logging.getLogger(__name__)
 
         self.title("发现新版本")
-        self.geometry("500x400")
+        # 适当增高窗口以容纳日志文本及底部按钮
+        self.geometry("520x460")
         self.resizable(False, False)
 
         # 设置模态
@@ -78,7 +79,8 @@ class UpdateDialog(ctk.CTkToplevel):
 
         # 版本信息
         info_frame = ctk.CTkFrame(self)
-        info_frame.pack(fill="x", padx=20, pady=(0, 20))
+        # 将 info_frame 放在顶部并允许在垂直方向上扩展，使底部按钮保持可见
+        info_frame.pack(side="top", fill="both", expand=True, padx=20, pady=(0, 20))
 
         current_label = ctk.CTkLabel(
             info_frame,
@@ -113,7 +115,8 @@ class UpdateDialog(ctk.CTkToplevel):
         # 更新日志文本（直接在本窗口显示）
         if self.update_info.update_log_url:
             self.log_textbox = ctk.CTkTextbox(info_frame, width=440, height=120)
-            self.log_textbox.pack(pady=(0, 10))
+            # 文本框应在 info_frame 内占据剩余空间，但不要推挤底部按钮
+            self.log_textbox.pack(fill='both', expand=True, pady=(0, 10))
             self.log_textbox.insert("0.0", "正在加载更新日志...")
             # 异步加载日志并填充
             def load_log_thread():
