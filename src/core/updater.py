@@ -654,7 +654,12 @@ class AutoUpdater:
                 args = [str(helper_path), '--batch', str(batch_path)]
                 if owner_pid:
                     args += ['--pid', str(owner_pid)]
-                subprocess.Popen(args, cwd=str(app_root))
+                # Windows: 隐藏窗口
+                import sys
+                creationflags = 0
+                if sys.platform == 'win32':
+                    creationflags = 0x08000000  # CREATE_NO_WINDOW
+                subprocess.Popen(args, cwd=str(app_root), creationflags=creationflags)
             except Exception as e:
                 self.logger.warning(f"启动 updater_helper (batch) 失败: {e}")
             try:
@@ -693,8 +698,12 @@ class AutoUpdater:
         except Exception:
             pass
 
-        # 启动脚本（新窗口）
-        subprocess.Popen(['cmd', '/c', 'start', '""', str(script_path)], cwd=str(first_dst.parent))
+        # 启动脚本（隐藏窗口）
+        import sys
+        creationflags = 0
+        if sys.platform == 'win32':
+            creationflags = 0x08000000  # CREATE_NO_WINDOW
+        subprocess.Popen(['cmd', '/c', str(script_path)], cwd=str(first_dst.parent), creationflags=creationflags)
 
     def cleanup_temp_files(self) -> None:
         """清理临时文件"""

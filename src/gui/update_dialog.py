@@ -51,6 +51,14 @@ class UpdateDialog(ctk.CTkToplevel):
         
         self.resizable(False, False)
 
+        # 设置图标
+        try:
+            icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "tea_Gray.ico"
+            if icon_path.exists():
+                self.iconbitmap(str(icon_path))
+        except Exception as e:
+            self.logger.warning(f"设置窗口图标失败: {e}")
+
         # 设置模态
         self.grab_set()
         self.focus_set()
@@ -457,7 +465,11 @@ class UpdateDialog(ctk.CTkToplevel):
                 exe_path = sys.executable
                 self.logger.info(f"exe 模式：启动新进程后退出: {exe_path}")
                 # 启动新进程（不等待）
-                subprocess.Popen([exe_path], cwd=os.path.dirname(exe_path))
+                # Windows: 隐藏窗口
+                creationflags = 0
+                if sys.platform == 'win32':
+                    creationflags = 0x08000000  # CREATE_NO_WINDOW
+                subprocess.Popen([exe_path], cwd=os.path.dirname(exe_path), creationflags=creationflags)
                 # 短暂延迟确保新进程启动
                 import time
                 time.sleep(0.5)
