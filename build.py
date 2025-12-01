@@ -100,8 +100,12 @@ class Packager:
         for dep in deps:
             # 提取包名（去掉版本要求）
             package_name = dep.split()[0].split('>=')[0].split('==')[0].split('<')[0].split('>')[0]
+            
+            # 特殊处理：Pillow 包名是 Pillow，但导入名是 PIL
+            import_name = 'PIL' if package_name.lower() == 'pillow' else package_name
+            
             try:
-                result = subprocess.run([str(python_exe), "-c", f"import {package_name}; print('OK')"],
+                result = subprocess.run([str(python_exe), "-c", f"import {import_name}; print('OK')"],
                                       capture_output=True, text=True, timeout=5)
                 if result.returncode != 0:
                     missing_deps.append(dep)
