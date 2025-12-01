@@ -586,16 +586,25 @@ class AutoUpdater:
 
         # 优先尝试使用 updater_helper.exe（更可靠），否则降级为批处理脚本
         helper_path = app_root / 'updater_helper.exe'
-        # 如果 helper 存在，优先使用 helper 处理所有替换，按序调用 helper 来处理每个替换
+        # 如果 helper 存在，优先使用 helper 处理所有替换，写入 batch.json 并一次性调用 helper
         if helper_path.exists():
-            for new_exe, dst_exe in new_dst_pairs:
-                args = [str(helper_path), '--new', str(new_exe.resolve()), '--dst', str(dst_exe.resolve())]
+            try:
+                batch_path = app_root / f'apply_update_batch_{int(time.time())}.json'
+                batch_list = []
+                for new_exe, dst_exe in new_dst_pairs:
+                    batch_list.append({
+                        'new': str(new_exe.resolve()),
+                        'dst': str(dst_exe.resolve())
+                    })
+                import json
+                with open(batch_path, 'w', encoding='utf-8') as bf:
+                    json.dump(batch_list, bf, ensure_ascii=False, indent=2)
+                args = [str(helper_path), '--batch', str(batch_path)]
                 if owner_pid:
                     args += ['--pid', str(owner_pid)]
-                try:
-                    subprocess.Popen(args, cwd=str(app_root))
-                except Exception as e:
-                    self.logger.warning(f"启动 updater_helper 失败: {e}")
+                subprocess.Popen(args, cwd=str(app_root))
+            except Exception as e:
+                self.logger.warning(f"启动 updater_helper (batch) 失败: {e}")
             try:
                 self.exe_replacement_pending = True
             except Exception:

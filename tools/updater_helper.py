@@ -52,12 +52,14 @@ def wait_for_file_unlock(path: str):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--pid', type=int, default=None, help='PID to wait for')
-    parser.add_argument('--new', required=True, help='New file path')
-    parser.add_argument('--dst', required=True, help='Destination path')
+    parser.add_argument('--new', required=False, help='New file path (单文件替换)')
+    parser.add_argument('--dst', required=False, help='Destination path (单文件替换)')
+    parser.add_argument('--batch', required=False, help='批量替换文件的 JSON 列表路径')
     args = parser.parse_args()
 
-    new = os.path.abspath(args.new)
-    dst = os.path.abspath(args.dst)
+    new = os.path.abspath(args.new) if args.new else None
+    dst = os.path.abspath(args.dst) if args.dst else None
+    batch = os.path.abspath(args.batch) if args.batch else None
 
     try:
         if args.pid:
@@ -66,19 +68,46 @@ def main():
             # fallback: wait for file unlock
             wait_for_file_unlock(dst)
 
-        # Move new into place
-        for attempt in range(10):
-            try:
-                # Replace (atomic if same filesystem)
-                if os.path.exists(dst):
-                    os.remove(dst)
-                shutil.move(new, dst)
-                break
-            except Exception as e:
-                time.sleep(1)
-        # Start the new exe
+        # 如果传入了批处理文件，则按序替换
+        if batch and os.path.exists(batch):
+            import json
+            with open(batch, 'r', encoding='utf-8') as fh:
+                pairs = json.load(fh)
+            for p in pairs:
+                newp = os.path.abspath(p.get('new'))
+                dstp = os.path.abspath(p.get('dst'))
+                for attempt in range(10):
+                    try:
+                        if os.path.exists(dstp):
+                            os.remove(dstp)
+                        shutil.move(newp, dstp)
+                        break
+                    except Exception:
+                        time.sleep(1)
+        elif new and dst:
+            # 单文件替换
+            for attempt in range(10):
+                try:
+                    if os.path.exists(dst):
+                        os.remove(dst)
+                    shutil.move(new, dst)
+                    break
+                except Exception:
+                    time.sleep(1)
+        # 启动第一个被替换的目标（如果是 exe）以恢复运行
         try:
-            subprocess.Popen([dst])
+            # 如果批处理存在，尝试启动第一个目标
+            first_dest = None
+            if batch and os.path.exists(batch):
+                import json
+                with open(batch, 'r', encoding='utf-8') as fh:
+                    pairs = json.load(fh)
+                if pairs:
+                    first_dest = os.path.abspath(pairs[0].get('dst'))
+            elif dst:
+                first_dest = dst
+            if first_dest and os.path.exists(first_dest):
+                subprocess.Popen([first_dest])
         except Exception:
             pass
 
