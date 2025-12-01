@@ -555,9 +555,18 @@ class AutoUpdater:
         - 在循环结束后，如果替换队列不为空，则调用替换脚本/Helper 执行顺序替换
         """
         scheduled_replacements = []
+        # 获取程序根目录名称，避免复制同名子目录导致嵌套
+        target_dir_name = target_dir.name
+        
         for item in source_dir.iterdir():
             src = source_dir / item.name
             dst = target_dir / item.name
+            
+            # 跳过与程序根目录同名的子目录，防止创建嵌套结构
+            if src.is_dir() and item.name == target_dir_name:
+                self.logger.warning(f"跳过与程序根目录同名的子目录: {item.name}")
+                continue
+            
             # 防止路径穿越：确保目标路径位于 target_dir 下
             if not str(dst.resolve()).startswith(str(target_dir.resolve()) + os.sep):
                 self.logger.warning(f"尝试写入目标目录以外的路径，跳过: {dst}")
