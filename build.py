@@ -182,6 +182,13 @@ class Packager:
                 "--add-data", f"{self.project_root}/config.json{separator}config.json",  # 添加config.json文件
                 "--add-data", f"{self.project_root}/pairings.json{separator}pairings.json",  # 添加pairings.json文件
                 "--add-data", f"{self.project_root}/assets{separator}assets",  # 添加assets目录
+                # Pillow 的 C 扩展和插件在部分环境下不会被自动收集，显式收集以避免 _imaging 缺失
+                "--collect-all", "PIL",
+                # 收集 customtkinter 的主题与资源（blue.json 等）
+                "--collect-all", "customtkinter",
+                # 网络请求栈在一文件模式下常见缺失：明确收集 idna/charset_normalizer 子模块
+                "--collect-submodules", "idna",
+                "--collect-submodules", "charset_normalizer",
                 "--hidden-import", "customtkinter",
                 "--hidden-import", "PIL",
                 "--hidden-import", "PIL.Image",
@@ -374,9 +381,8 @@ class Packager:
             # 更新version.json中的checksum
             self._update_version_checksum(sha256_hash)
 
-            # 清理中间文件
-            print("清理中间文件...")
-            self._cleanup_intermediate_files()
+            # 跳过清理中间文件，保留 dist/ 与发布目录用于本地验证
+            print("跳过清理中间文件，保留 dist/ 与发布目录用于验证")
 
             return zip_path, zip_size, sha256_hash
 

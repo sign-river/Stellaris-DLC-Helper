@@ -568,12 +568,27 @@ class AutoUpdater:
         # 如果有待替换的文件，生成替换脚本/调用 helper 统一处理
         if scheduled_replacements:
             try:
-                self._create_replace_script(scheduled_replacements, owner_pid=os.getpid())
+                import sys
+                # 仅在 exe 模式下才使用替换脚本
+                is_frozen = getattr(sys, 'frozen', False)
+                if is_frozen:
+                    self._create_replace_script(scheduled_replacements, owner_pid=os.getpid())
+                else:
+                    # 开发环境下直接尝试覆盖（可能需要手动重启）
+                    self.logger.warning("开发环境检测到待替换文件，请手动重启程序")
+                    for new_file, dst_file in scheduled_replacements:
+                        self.logger.info(f"待替换: {new_file} -> {dst_file}")
             except Exception as e:
                 self.logger.warning(f"创建统一替换脚本失败: {e}")
 
     def _create_replace_script(self, new_dst_pairs, owner_pid: int = None) -> None:
         """创建 Windows 批处理脚本用于等待主程序退出再替换 exe 并重启（或使用 helper exe）。"""
+        import sys
+        # 仅在 exe 模式下使用此方法
+        if not getattr(sys, 'frozen', False):
+            self.logger.warning("_create_replace_script 仅在 exe 模式下使用")
+            return
+        
         # 使用第一个替换目标的 parent 作为默认目录
         first_dst = new_dst_pairs[0][1]
         try:

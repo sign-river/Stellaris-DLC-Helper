@@ -297,6 +297,8 @@ class UpdateDialog(ctk.CTkToplevel):
                 success = self.updater.apply_update(zip_path)
 
                 if success:
+                    # 创建更新成功标记文件
+                    self._create_update_marker()
                     self.after(0, self._show_success)
                 else:
                     self.after(0, lambda: self._show_error("安装失败"))
@@ -321,9 +323,12 @@ class UpdateDialog(ctk.CTkToplevel):
         )
         success_label.pack(pady=(30, 10))
 
+        import sys
+        is_frozen = getattr(sys, 'frozen', False)
+        
         message_text = "程序已成功更新到最新版本。\n请重启程序以应用更改。"
-        # 如果 exe 的替换被延期(写为 *.new)，提示用户退出以完成替换
-        if hasattr(self.updater, 'exe_replacement_pending') and self.updater.exe_replacement_pending:
+        # 如果 exe 的替换被延期(写为 *.new)，提示用户退出以完成替换（仅在 exe 模式下）
+        if is_frozen and hasattr(self.updater, 'exe_replacement_pending') and self.updater.exe_replacement_pending:
             message_text = '更新已准备好，但需要重新启动以完成替换（会在退出后自动应用）。\n请点击"立即重启"以退出并完成更新。'
 
         message_label = ctk.CTkLabel(
@@ -393,13 +398,34 @@ class UpdateDialog(ctk.CTkToplevel):
 
             import sys
             import os
-            # 如果 exe 替换已排程（在 apply_update 中写入 .new 并创建替换脚本），直接退出主进程以便批处理替换
-            if hasattr(self.updater, 'exe_replacement_pending') and self.updater.exe_replacement_pending:
+            import subprocess
+            
+            # 判断是否为打包后的 exe 模式
+            is_frozen = getattr(sys, 'frozen', False)
+            
+            # 如果 exe 替换已排程（在 apply_update 中写入 .new 并创建替换脚本），且是 exe 模式，直接退出主进程以便批处理替换
+            if is_frozen and hasattr(self.updater, 'exe_replacement_pending') and self.updater.exe_replacement_pending:
                 # 触发退出，让替换批处理接管并重启
+                self.logger.info("exe 替换已排程，退出以完成替换")
                 os._exit(0)
-
-            python = sys.executable
-            os.execl(python, python, *sys.argv)
+            
+            # 在 exe 模式下，使用 subprocess.Popen 启动新进程然后退出
+            # 这样可以避免 PyInstaller 临时目录 _MEI 的问题
+            if is_frozen:
+                exe_path = sys.executable
+                self.logger.info(f"exe 模式：启动新进程后退出: {exe_path}")
+                # 启动新进程（不等待）
+                subprocess.Popen([exe_path], cwd=os.path.dirname(exe_path))
+                # 短暂延迟确保新进程启动
+                import time
+                time.sleep(0.5)
+                # 退出当前进程
+                os._exit(0)
+            else:
+                # 开发环境：直接重启当前进程
+                python = sys.executable
+                self.logger.info(f"开发环境：重启程序: {python} {sys.argv}")
+                os.execl(python, python, *sys.argv)
         except Exception as e:
             self.logger.error(f"重启失败: {e}")
             messagebox.showerror("错误", f"重启失败: {e}")
@@ -423,6 +449,28 @@ class UpdateDialog(ctk.CTkToplevel):
         except Exception as e:
             self.logger.error(f"保存下载状态失败: {e}")
 
+    def _create_update_marker(self):
+        """创建更新完成标记文件"""
+        try:
+            import json
+            from ..utils import PathUtils
+            from ..config import VERSION as CURRENT_VERSION
+            
+            marker_file = PathUtils.get_cache_dir() / "update_completed.json"
+            marker_data = {
+                "old_version": self.updater.current_version,
+                "new_version": self.update_info.latest_version,
+                "timestamp": self._get_timestamp(),
+                "success": True
+            }
+            
+            with open(marker_file, 'w', encoding='utf-8') as f:
+                json.dump(marker_data, f, indent=2, ensure_ascii=False)
+            
+            self.logger.info(f"已创建更新标记文件: {marker_file}")
+        except Exception as e:
+            self.logger.error(f"创建更新标记文件失败: {e}")
+    
     @staticmethod
     def _get_timestamp():
         """获取当前时间戳"""

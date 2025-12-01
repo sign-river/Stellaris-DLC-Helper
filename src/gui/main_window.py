@@ -97,6 +97,9 @@ class MainWindowCTk:
         # 自动检测游戏路径并加载DLC列表
         self.root.after(100, self.auto_detect_and_load)
 
+        # 检查是否刚刚完成更新
+        self.root.after(500, self._check_recent_update)
+
         # 延迟检查更新（避免启动时卡顿）
         self.root.after(2000, self._auto_check_update)
         
@@ -1977,6 +1980,45 @@ class MainWindowCTk:
                 self.root.after(0, lambda: self.remove_patch_btn.configure(state="normal"))
         
         threading.Thread(target=remove_thread, daemon=True).start()
+    
+    def _check_recent_update(self):
+        """检查是否刚刚完成更新，如果是则显示提示"""
+        try:
+            import json
+            from ..utils import PathUtils
+            
+            # 检查更新标记文件
+            update_marker = PathUtils.get_cache_dir() / "update_completed.json"
+            if update_marker.exists():
+                try:
+                    with open(update_marker, 'r', encoding='utf-8') as f:
+                        marker_data = json.load(f)
+                    
+                    old_version = marker_data.get('old_version', '未知')
+                    new_version = marker_data.get('new_version', VERSION)
+                    update_time = marker_data.get('timestamp', '')
+                    
+                    # 显示更新成功提示
+                    message = f"✅ 更新成功！\n\n"
+                    message += f"原版本：{old_version}\n"
+                    message += f"当前版本：{new_version}\n\n"
+                    message += f"程序已成功更新到最新版本。"
+                    
+                    messagebox.showinfo("更新成功", message)
+                    
+                    # 删除标记文件
+                    update_marker.unlink()
+                    
+                except Exception as e:
+                    self.logger.log_exception("读取更新标记失败", e)
+                    # 仍然删除标记文件
+                    try:
+                        update_marker.unlink()
+                    except:
+                        pass
+        except Exception as e:
+            # 静默失败，不影响程序正常启动
+            pass
     
     def _auto_check_update(self):
         """自动检查更新（启动时调用）"""
