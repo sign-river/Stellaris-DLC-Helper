@@ -495,10 +495,11 @@ class UpdateDialog(ctk.CTkToplevel):
         """创建更新完成标记文件"""
         try:
             import json
+            import os
             from ..utils import PathUtils
             from ..config import VERSION as CURRENT_VERSION
             
-            marker_file = PathUtils.get_cache_dir() / "update_completed.json"
+            marker_file = os.path.join(PathUtils.get_cache_dir(), "update_completed.json")
             marker_data = {
                 "old_version": self.updater.current_version,
                 "new_version": self.update_info.latest_version,

@@ -110,10 +110,14 @@ def main():
                 subprocess.Popen([first_dest])
         except Exception:
             pass
+        
+        # 完成任务后立即退出，避免挂在后台
+        sys.exit(0)
 
     except Exception as e:
         # Last resort: if we couldn't complete, print error and exit
         print(f"Updater helper error: {e}")
+        sys.exit(1)
 
 
 if __name__ == '__main__':

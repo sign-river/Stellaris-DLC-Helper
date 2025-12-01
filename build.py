@@ -145,7 +145,7 @@ class Packager:
                 print('补充构建 updater_helper.exe...')
                 helper_cmd = [
                     str(python_exe), '-m', 'PyInstaller',
-                    '--onefile', '--name', 'updater_helper',
+                    '--onefile', '--windowed', '--name', 'updater_helper',
                     str(helper_script)
                 ]
                 subprocess.run(helper_cmd, check=True, cwd=str(self.project_root))
@@ -320,9 +320,9 @@ class Packager:
 
 使用说明：
 1. 运行 Stellaris-DLC-Helper.exe
-2. 选择您的 Stellaris 游戏目录
-3. 选择要下载的 DLC
-4. 点击"一键解锁"开始下载和安装
+2. 选择您的 Stellaris 游戏目录（默认自动检测）
+3. 选择要下载的 DLC（默认全部勾选）
+4. 点击"一键解锁"开始下载和安装（没别的需求的话你只需要干这个）
 
 注意事项：
 - 请确保网络连接正常
