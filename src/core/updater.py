@@ -520,11 +520,16 @@ class AutoUpdater:
             self.logger.warning(f"清理旧备份时出错: {e}")
 
     def _replace_files(self, target_dir: Path, source_dir: Path) -> None:
-        """替换文件"""
+        """替换文件
+        替换策略：
+        - 将解压目录中的文件复制到目标目录
+        - 如果复制失败（例如文件被占用），则将新文件复制为 {filename}.new 并将其排入替换队列
+        - 在循环结束后，如果替换队列不为空，则调用替换脚本/Helper 执行顺序替换
+        """
+        scheduled_replacements = []
         for item in source_dir.iterdir():
             src = source_dir / item.name
             dst = target_dir / item.name
-
             # 防止路径穿越：确保目标路径位于 target_dir 下
             if not str(dst.resolve()).startswith(str(target_dir.resolve()) + os.sep):
                 self.logger.warning(f"尝试写入目标目录以外的路径，跳过: {dst}")
@@ -532,66 +537,91 @@ class AutoUpdater:
 
             try:
                 if src.is_dir():
+                    # 若存在同名目录，直接替换
                     if dst.exists():
                         shutil.rmtree(dst)
                     shutil.copytree(src, dst)
                 else:
                     dst.parent.mkdir(parents=True, exist_ok=True)
-                    # 若要替换的是 exe 文件，Windows 下可能无法直接覆盖正在运行的文件
-                    if dst.suffix.lower() == '.exe':
+                    try:
+                        shutil.copy2(src, dst)
+                    except (PermissionError, OSError) as e:
+                        # 无法覆盖时，写入 .new 并排程替换
                         try:
-                            shutil.copy2(src, dst)
-                        except (PermissionError, OSError):
-                            # 写入临时 new 文件，并创建替换脚本在程序退出后完成替换
                             tmp_new = target_dir / (dst.name + '.new')
                             shutil.copy2(src, tmp_new)
-                            self.logger.info(f"程序正在运行，已将新 exe 写为临时文件: {tmp_new}")
-                            try:
-                                self._create_replace_script(tmp_new, dst, owner_pid=os.getpid())
-                            except Exception as e:
-                                self.logger.warning(f"创建替换脚本失败: {e}")
-                    else:
-                        shutil.copy2(src, dst)
+                            scheduled_replacements.append((tmp_new, dst))
+                            self.logger.info(f"文件被占用，已写入临时 new 并计划替换: {tmp_new} -> {dst}")
+                        except Exception as ex:
+                            self.logger.warning(f"写入临时 new 失败 {src} -> {tmp_new}: {ex}")
             except Exception as e:
-                self.logger.warning(f"替换文件失败 {src} -> {dst}: {e}")
+                # 如果整个复制出错（例如权限、IO 等问题），尝试写入 .new 作为回退
+                self.logger.debug(f"复制文件时异常，尝试写入 .new 作为回退: {src} -> {dst}: {e}")
+                try:
+                    tmp_new = target_dir / (dst.name + '.new')
+                    shutil.copy2(src, tmp_new)
+                    scheduled_replacements.append((tmp_new, dst))
+                    self.logger.info(f"已将新文件写为临时 new 并计划替换: {tmp_new} -> {dst}")
+                except Exception as ex:
+                    self.logger.warning(f"回退：写入临时 new 失败 {src} -> {tmp_new}: {ex}")
 
-    def _create_replace_script(self, new_exe: Path, dst_exe: Path, owner_pid: int = None) -> None:
+        # 如果有待替换的文件，生成替换脚本/调用 helper 统一处理
+        if scheduled_replacements:
+            try:
+                self._create_replace_script(scheduled_replacements, owner_pid=os.getpid())
+            except Exception as e:
+                self.logger.warning(f"创建统一替换脚本失败: {e}")
+
+    def _create_replace_script(self, new_dst_pairs, owner_pid: int = None) -> None:
         """创建 Windows 批处理脚本用于等待主程序退出再替换 exe 并重启（或使用 helper exe）。"""
+        # 使用第一个替换目标的 parent 作为默认目录
+        first_dst = new_dst_pairs[0][1]
         try:
             # 使用随机或时间戳生成脚本名
-            script_path = dst_exe.parent / f"apply_update_{int(time.time())}.bat"
+            script_path = first_dst.parent / f"apply_update_{int(time.time())}.bat"
         except Exception:
-            script_path = dst_exe.parent / f"apply_update.bat"
+            script_path = first_dst.parent / f"apply_update.bat"
 
-        new_exe_abs = str(new_exe.resolve())
-        dst_exe_abs = str(dst_exe.resolve())
-        app_root = dst_exe.parent
+        app_root = first_dst.parent
 
         # 优先尝试使用 updater_helper.exe（更可靠），否则降级为批处理脚本
         helper_path = app_root / 'updater_helper.exe'
+        # 如果 helper 存在，优先使用 helper 处理所有替换，按序调用 helper 来处理每个替换
         if helper_path.exists():
-            args = [str(helper_path), '--new', new_exe_abs, '--dst', dst_exe_abs]
-            if owner_pid:
-                args += ['--pid', str(owner_pid)]
-            subprocess.Popen(args, cwd=str(app_root))
+            for new_exe, dst_exe in new_dst_pairs:
+                args = [str(helper_path), '--new', str(new_exe.resolve()), '--dst', str(dst_exe.resolve())]
+                if owner_pid:
+                    args += ['--pid', str(owner_pid)]
+                try:
+                    subprocess.Popen(args, cwd=str(app_root))
+                except Exception as e:
+                    self.logger.warning(f"启动 updater_helper 失败: {e}")
             try:
                 self.exe_replacement_pending = True
             except Exception:
                 pass
             return
 
-        bat_content = (
-            '@echo off\r\n'
-            ':wait_loop\r\n'
-            f'tasklist /FI "PID eq {owner_pid}" 2>NUL | find "{owner_pid}" >NUL\r\n' if owner_pid else f'tasklist /FI "IMAGENAME eq {dst_exe.name}" 2>NUL | find /I "{dst_exe.name}" >NUL\r\n'
-            'IF %ERRORLEVEL%==0 (\r\n'
-            '    timeout /T 1 /NOBREAK >nul\r\n'
-            '    goto :wait_loop\r\n'
-            ')\r\n'
-            f'move /Y "{new_exe_abs}" "{dst_exe_abs}"\r\n'
-            f'start "" "{dst_exe_abs}"\r\n'
-            'del "%~f0"\r\n'
-        )
+        bat_content = '@echo off\r\n'
+        bat_content += ':wait_loop\r\n'
+        if owner_pid:
+            bat_content += f'tasklist /FI "PID eq {owner_pid}" 2>NUL | find "{owner_pid}" >NUL\r\n'
+        else:
+            # 如果没有 pid，则等待旧 exe 不再出现在进程列表（基于镜像名称）
+            bat_content += f'tasklist /FI "IMAGENAME eq {first_dst.name}" 2>NUL | find /I "{first_dst.name}" >NUL\r\n'
+        bat_content += 'IF %ERRORLEVEL%==0 (\r\n'
+        bat_content += '    timeout /T 1 /NOBREAK >nul\r\n'
+        bat_content += '    goto :wait_loop\r\n'
+        bat_content += ')\r\n'
+        # 在等待主程序退出后，按序将所有 new 文件替换到目标位置并尝试启动主 exe
+        for new_exe, dst_exe in new_dst_pairs:
+            new_exe_abs = str(Path(new_exe).resolve())
+            dst_exe_abs = str(Path(dst_exe).resolve())
+            bat_content += f'move /Y "{new_exe_abs}" "{dst_exe_abs}"\r\n'
+        # 启动目标 exe（第一个替换目标若为 exe）
+        first_dst_abs = str(first_dst.resolve())
+        bat_content += f'start "" "{first_dst_abs}"\r\n'
+        bat_content += 'del "%~f0"\r\n'
 
         with open(script_path, 'w', encoding='utf-8') as f:
             f.write(bat_content)
@@ -603,7 +633,7 @@ class AutoUpdater:
             pass
 
         # 启动脚本（新窗口）
-        subprocess.Popen(['cmd', '/c', 'start', '""', str(script_path)], cwd=str(dst_exe.parent))
+        subprocess.Popen(['cmd', '/c', 'start', '""', str(script_path)], cwd=str(first_dst.parent))
 
     def cleanup_temp_files(self) -> None:
         """清理临时文件"""
