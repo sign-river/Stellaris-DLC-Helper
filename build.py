@@ -243,7 +243,7 @@ class Packager:
             print('正在构建 updater_helper.exe...')
             helper_cmd = [
                 str(python_exe), '-m', 'PyInstaller',
-                '--onefile', '--name', 'updater_helper',
+                '--onefile', '--windowed', '--name', 'updater_helper',
                 str(helper_script)
             ]
             subprocess.run(helper_cmd, check=True, cwd=str(self.project_root))
