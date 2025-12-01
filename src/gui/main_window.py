@@ -79,6 +79,10 @@ class MainWindowCTk:
         self.patch_manager = None
         self.logger = Logger(root=self.root)
         
+        # 初始化统一错误处理器
+        from ..utils import set_gui_logger
+        set_gui_logger(self.logger)
+        
         # 初始化UI
         self.init_ui()
         
