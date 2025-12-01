@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-更新对话框模块
-提供更新检查、下载和安装的用户界面
+更新/公告对话框模块
+提供更新检查、下载和安装的用户界面，同时支持显示系统公告
 """
 
 import customtkinter as ctk
@@ -12,23 +12,43 @@ import webbrowser
 from pathlib import Path
 from typing import Optional, Callable
 import logging
+import sys
+import os
+import subprocess
+import json
+import time
 
 from ..core.updater import AutoUpdater, UpdateInfo
 
 
 class UpdateDialog(ctk.CTkToplevel):
-    """更新对话框"""
+    """更新/公告对话框"""
 
-    def __init__(self, parent, update_info: UpdateInfo):
+    def __init__(self, parent, update_info: Optional[UpdateInfo] = None, announcement: str = ""):
         super().__init__(parent)
 
         self.update_info = update_info
+        self.announcement = announcement
         self.updater = AutoUpdater()
         self.logger = logging.getLogger(__name__)
 
-        self.title("发现新版本")
-        # 适当增高窗口以容纳日志文本及底部按钮
-        self.geometry("520x460")
+        # 根据是否有更新设置标题
+        if update_info and update_info.has_update(self.updater.current_version):
+            self.title(f"发现新版本 {update_info.latest_version}")
+        else:
+            self.title("系统公告")
+        
+        # 根据内容调整窗口高度
+        if update_info and update_info.has_update(self.updater.current_version) and announcement:
+            # 有更新 + 有公告：更高
+            self.geometry("520x600")
+        elif announcement:
+            # 只有公告：中等高度
+            self.geometry("520x420")
+        else:
+            # 只有更新：原高度
+            self.geometry("520x460")
+        
         self.resizable(False, False)
 
         # 设置模态
@@ -36,7 +56,8 @@ class UpdateDialog(ctk.CTkToplevel):
         self.focus_set()
 
         # 禁用主窗口的下载功能
-        self._disable_main_window_download()
+        if update_info and update_info.has_update(self.updater.current_version):
+            self._disable_main_window_download()
 
         self._create_widgets()
         self._center_window(parent)
@@ -69,109 +90,146 @@ class UpdateDialog(ctk.CTkToplevel):
 
     def _create_widgets(self):
         """创建界面组件"""
-        # 标题
-        title_label = ctk.CTkLabel(
-            self,
-            text=f"发现新版本 {self.update_info.latest_version}",
-            font=ctk.CTkFont(size=16, weight="bold")
-        )
-        title_label.pack(pady=(20, 10))
+        # 判断是否有更新
+        has_update = self.update_info and self.update_info.has_update(self.updater.current_version)
+        
+        # 如果有更新，显示更新部分
+        if has_update:
+            # 标题
+            title_label = ctk.CTkLabel(
+                self,
+                text=f"发现新版本 {self.update_info.latest_version}",
+                font=ctk.CTkFont(size=16, weight="bold")
+            )
+            title_label.pack(pady=(20, 10))
 
-        # 版本信息
-        info_frame = ctk.CTkFrame(self)
-        # 将 info_frame 放在顶部并允许在垂直方向上扩展，使底部按钮保持可见
-        info_frame.pack(side="top", fill="both", expand=True, padx=20, pady=(0, 20))
+            # 版本信息
+            info_frame = ctk.CTkFrame(self)
+            info_frame.pack(side="top", fill="both", expand=True, padx=20, pady=(0, 10))
 
-        current_label = ctk.CTkLabel(
-            info_frame,
-            text=f"当前版本: {self.updater.current_version}",
-            font=ctk.CTkFont(size=12)
-        )
-        current_label.pack(anchor="w", padx=15, pady=(10, 5))
-
-        latest_label = ctk.CTkLabel(
-            info_frame,
-            text=f"最新版本: {self.update_info.latest_version}",
-            font=ctk.CTkFont(size=12)
-        )
-        latest_label.pack(anchor="w", padx=15, pady=(0, 5))
-
-        if self.update_info.release_date:
-            date_label = ctk.CTkLabel(
+            current_label = ctk.CTkLabel(
                 info_frame,
-                text=f"发布日期: {self.update_info.release_date}",
+                text=f"当前版本: {self.updater.current_version}",
                 font=ctk.CTkFont(size=12)
             )
-            date_label.pack(anchor="w", padx=15, pady=(0, 5))
+            current_label.pack(anchor="w", padx=15, pady=(10, 5))
 
-        if self.update_info.file_size:
-            size_label = ctk.CTkLabel(
+            latest_label = ctk.CTkLabel(
                 info_frame,
-                text=f"文件大小: {self.update_info.file_size}",
+                text=f"最新版本: {self.update_info.latest_version}",
                 font=ctk.CTkFont(size=12)
             )
-            size_label.pack(anchor="w", padx=15, pady=(0, 10))
+            latest_label.pack(anchor="w", padx=15, pady=(0, 5))
 
-        # 更新日志文本（直接在本窗口显示）
-        if self.update_info.update_log_url:
-            self.log_textbox = ctk.CTkTextbox(info_frame, width=440, height=120)
-            # 文本框应在 info_frame 内占据剩余空间，但不要推挤底部按钮
-            self.log_textbox.pack(fill='both', expand=True, pady=(0, 10))
-            self.log_textbox.insert("0.0", "正在加载更新日志...")
-            # 异步加载日志并填充
-            def load_log_thread():
-                try:
-                    url = getattr(self.update_info, 'update_log_url', None)
-                    self.logger.debug(f"尝试加载更新日志 URL: {url}")
-                    content = self.updater.fetch_update_log(self.update_info)
-                    if content:
-                        self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", content)))
-                    else:
-                        self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", "无法加载更新日志或日志为空（请检查网络）。")))
-                except Exception as e:
-                    self.logger.warning(f"加载更新日志失败: {e}")
-                    self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", f"加载日志失败: {e}")))
+            if self.update_info.release_date:
+                date_label = ctk.CTkLabel(
+                    info_frame,
+                    text=f"发布日期: {self.update_info.release_date}",
+                    font=ctk.CTkFont(size=12)
+                )
+                date_label.pack(anchor="w", padx=15, pady=(0, 5))
 
-            threading.Thread(target=load_log_thread, daemon=True).start()
-        else:
-            # 显示占位文本，让用户知道没有日志
-            self.log_textbox = ctk.CTkTextbox(info_frame, width=440, height=120)
-            self.log_textbox.pack(pady=(0, 10))
-            self.log_textbox.insert("0.0", "更新日志不可用")
+            if self.update_info.file_size:
+                size_label = ctk.CTkLabel(
+                    info_frame,
+                    text=f"文件大小: {self.update_info.file_size}",
+                    font=ctk.CTkFont(size=12)
+                )
+                size_label.pack(anchor="w", padx=15, pady=(0, 10))
 
-        # 强制更新提示
-        if self.update_info.is_force_update(self.updater.current_version):
-            force_label = ctk.CTkLabel(
-                info_frame,
-                text="⚠️ 此更新为强制更新，必须安装才能继续使用",
-                text_color="red",
-                font=ctk.CTkFont(size=12, weight="bold")
+            # 更新日志文本
+            if self.update_info.update_log_url:
+                log_height = 80 if self.announcement else 120
+                self.log_textbox = ctk.CTkTextbox(info_frame, width=440, height=log_height)
+                self.log_textbox.pack(fill='both', expand=True, pady=(0, 10))
+                self.log_textbox.insert("0.0", "正在加载更新日志...")
+                
+                def load_log_thread():
+                    try:
+                        url = getattr(self.update_info, 'update_log_url', None)
+                        self.logger.debug(f"尝试加载更新日志 URL: {url}")
+                        content = self.updater.fetch_update_log(self.update_info)
+                        if content:
+                            self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", content)))
+                        else:
+                            self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", "无法加载更新日志或日志为空（请检查网络）。")))
+                    except Exception as e:
+                        self.logger.warning(f"加载更新日志失败: {e}")
+                        self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", f"加载日志失败: {e}")))
+
+                threading.Thread(target=load_log_thread, daemon=True).start()
+
+            # 强制更新提示
+            if self.update_info.is_force_update(self.updater.current_version):
+                force_label = ctk.CTkLabel(
+                    info_frame,
+                    text="⚠️ 此更新为强制更新，必须安装才能继续使用",
+                    text_color="red",
+                    font=ctk.CTkFont(size=12, weight="bold")
+                )
+                force_label.pack(pady=(0, 10))
+
+        # 如果有公告，显示公告部分
+        if self.announcement:
+            # 公告标题
+            announcement_title = ctk.CTkLabel(
+                self,
+                text="📢 系统公告",
+                font=ctk.CTkFont(size=16 if not has_update else 14, weight="bold"),
+                text_color="#FF6B00" if not has_update else "#1976D2"
             )
-            force_label.pack(pady=(0, 10))
+            announcement_title.pack(pady=(20 if not has_update else 10, 10))
+
+            # 公告内容框
+            announcement_frame = ctk.CTkFrame(self)
+            announcement_frame.pack(side="top", fill="both", expand=True, padx=20, pady=(0, 10))
+
+            announcement_height = 240 if not has_update else 140
+            announcement_textbox = ctk.CTkTextbox(
+                announcement_frame, 
+                width=440, 
+                height=announcement_height,
+                wrap="word"
+            )
+            announcement_textbox.pack(fill='both', expand=True, padx=10, pady=10)
+            announcement_textbox.insert("0.0", self.announcement)
+            announcement_textbox.configure(state="disabled")  # 只读
 
         # 按钮区域
         button_frame = ctk.CTkFrame(self, fg_color="transparent")
         button_frame.pack(side="bottom", fill="x", padx=20, pady=(0, 20))
 
-        # 稍后提醒按钮（强制/非强制更新均显示，但强制更新时会提示确认）
-        # 注意: 强制更新仍会在界面中显示“稍后提醒”，以便用户有明确选择权，但点击时会弹出警告提示。
-        later_button = ctk.CTkButton(
-            button_frame,
-            text="稍后提醒",
-            command=self._remind_later
-        )
-        later_button.pack(side="left", padx=(0, 10))
+        if has_update:
+            # 有更新时显示更新相关按钮
+            later_button = ctk.CTkButton(
+                button_frame,
+                text="稍后提醒",
+                command=self._remind_later
+            )
+            later_button.pack(side="left", padx=(0, 10))
 
-        # 立即更新按钮
-        update_button = ctk.CTkButton(
-            button_frame,
-            text="立即更新",
-            command=self._start_update
-        )
-        update_button.pack(side="right")
+            update_button = ctk.CTkButton(
+                button_frame,
+                text="立即更新",
+                command=self._start_update
+            )
+            update_button.pack(side="right")
+        else:
+            # 只有公告时显示关闭按钮
+            close_button = ctk.CTkButton(
+                button_frame,
+                text="知道了",
+                command=self._close_announcement
+            )
+            close_button.pack(side="right")
 
         # 绑定关闭事件
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _close_announcement(self):
+        """关闭公告"""
+        self._enable_main_window_download()
+        self.destroy()
 
     def _center_window(self, parent):
         """居中窗口"""
@@ -479,7 +537,7 @@ class UpdateDialog(ctk.CTkToplevel):
 
     def _on_close(self):
         """窗口关闭事件"""
-        if self.update_info.is_force_update(self.updater.current_version):
+        if self.update_info and self.update_info.is_force_update(self.updater.current_version):
             # 温和提示: 强制更新时也允许关闭，但先询问用户是否确认关闭更新
             res = messagebox.askokcancel(
                 "重要提示",

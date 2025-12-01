@@ -18,14 +18,14 @@ import logging
 import hashlib
 import os
 import re
-from ..config import REQUEST_TIMEOUT, VERSION, UPDATE_CHECK_URL, CHUNK_SIZE
+from ..config import REQUEST_TIMEOUT, VERSION, UPDATE_CHECK_URL, ANNOUNCEMENT_URL, CHUNK_SIZE
 from ..utils import PathUtils
 
 
 class UpdateInfo:
     """更新信息类"""
 
-    def __init__(self, data: dict):
+    def __init__(self, data: dict, announcement: str = ""):
         self.latest_version = data.get("latest_version", "")
         self.force_update = data.get("force_update", False)
         self.update_url = data.get("update_url", "")
@@ -34,6 +34,7 @@ class UpdateInfo:
         self.release_date = data.get("release_date", "")
         self.file_size = data.get("file_size", "")
         self.checksum = data.get("checksum", "")
+        self.announcement = announcement  # 公告内容
 
     def has_update(self, current_version: str) -> bool:
         """检查是否有更新"""
@@ -82,32 +83,62 @@ class AutoUpdater:
         self.backup_dir = Path(PathUtils.get_cache_dir()) / "backup"
         self.exe_replacement_pending = False
 
-    def check_for_updates(self, callback: Callable[[Optional[UpdateInfo]], None]) -> None:
+    def fetch_announcement(self, timeout: int = 10) -> str:
+        """获取公告内容"""
+        try:
+            self.logger.info(f"获取公告: {ANNOUNCEMENT_URL}")
+            response = requests.get(ANNOUNCEMENT_URL, timeout=timeout)
+            response.raise_for_status()
+            announcement = response.text.strip()
+            self.logger.debug(f"公告内容长度: {len(announcement)}")
+            return announcement
+        except Exception as e:
+            self.logger.warning(f"获取公告失败: {e}")
+            return ""
+
+    def check_for_updates(self, callback: Callable[[Optional[UpdateInfo], str], None]) -> None:
         """
-        检查更新（异步）
+        检查更新（异步），同时获取公告
 
         参数:
-            callback: 回调函数，参数为 UpdateInfo 或 None（检查失败）
+            callback: 回调函数，参数为 (UpdateInfo 或 None, 公告内容)
         """
         def _check():
             try:
                 self.logger.info("开始检查更新...")
-                response = requests.get(UPDATE_CHECK_URL, timeout=self.UPDATE_CHECK_TIMEOUT)
-                response.raise_for_status()
-
-                data = response.json()
-                update_info = UpdateInfo(data)
+                
+                # 并行获取更新信息和公告
+                update_info = None
+                announcement = ""
+                
+                # 获取更新信息
+                try:
+                    response = requests.get(UPDATE_CHECK_URL, timeout=self.UPDATE_CHECK_TIMEOUT)
+                    response.raise_for_status()
+                    data = response.json()
+                except Exception as e:
+                    self.logger.warning(f"获取更新信息失败: {e}")
+                    data = {}
+                
+                # 获取公告
+                announcement = self.fetch_announcement()
+                
+                # 创建 UpdateInfo（即使没有更新也创建，用于传递公告）
+                update_info = UpdateInfo(data, announcement)
 
                 if update_info.has_update(self.current_version):
                     self.logger.info(f"发现新版本: {update_info.latest_version}")
-                    callback(update_info)
+                    callback(update_info, announcement)
                 else:
                     self.logger.info("当前已是最新版本")
-                    callback(None)
+                    # 即使没有更新，如果有公告也要传递
+                    callback(None, announcement)
 
             except Exception as e:
                 self.logger.error(f"检查更新失败: {e}")
-                callback(None)
+                # 失败时也尝试获取公告
+                announcement = self.fetch_announcement()
+                callback(None, announcement)
 
         thread = threading.Thread(target=_check, daemon=True)
         thread.start()

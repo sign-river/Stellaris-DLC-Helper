@@ -2022,11 +2022,15 @@ class MainWindowCTk:
     
     def _auto_check_update(self):
         """自动检查更新（启动时调用）"""
-        def on_update_check_complete(update_info):
+        def on_update_check_complete(update_info, announcement):
+            # 如果有强制更新或有公告，显示对话框
             if update_info and update_info.is_force_update(VERSION):
-                # 强制更新，显示对话框
-                UpdateDialog(self.root, update_info)
-            # 非强制更新不显示弹窗，避免打扰用户
+                # 强制更新，显示对话框（无论是否有公告）
+                UpdateDialog(self.root, update_info, announcement)
+            elif announcement:
+                # 没有强制更新但有公告，显示公告对话框
+                UpdateDialog(self.root, None, announcement)
+            # 非强制更新且无公告时不显示弹窗，避免打扰用户
 
         updater = AutoUpdater()
         updater.check_for_updates(on_update_check_complete)
@@ -2037,15 +2041,15 @@ class MainWindowCTk:
         self.update_btn.configure(state="disabled", text="🔄 检查中...")
         self.root.update()
 
-        def on_update_check_complete(update_info):
+        def on_update_check_complete(update_info, announcement):
             self.update_btn.configure(state="normal", text="🔄 检查更新")
 
-            if update_info:
-                # 有更新，显示更新对话框
-                UpdateDialog(self.root, update_info)
+            if update_info or announcement:
+                # 有更新或有公告，显示对话框
+                UpdateDialog(self.root, update_info, announcement)
             else:
-                # 没有更新或检查失败
-                messagebox.showinfo("检查更新", "当前已是最新版本")
+                # 没有更新且没有公告
+                messagebox.showinfo("检查更新", "当前已是最新版本，也没有新的系统公告")
 
         # 创建更新器并检查更新
         updater = AutoUpdater()

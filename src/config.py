@@ -45,6 +45,7 @@ def _get_best_source_url():
 # 更新服务器配置 - 使用专用配置
 UPDATE_URL_BASE = get_config("server", "update_url_base", default="https://dlc.dlchelper.top/update/")
 UPDATE_CHECK_URL = f"{UPDATE_URL_BASE}version.json"
+ANNOUNCEMENT_URL = f"{UPDATE_URL_BASE}announcement.txt"
 APPINFO_URL = get_config("server", "appinfo_url", default="https://dlc.dlchelper.top/appinfo/stellaris_appinfo.json")
 
 # 网络配置
