@@ -185,6 +185,7 @@ class Packager:
                 "--hidden-import", "customtkinter",
                 "--hidden-import", "PIL",
                 "--hidden-import", "PIL.Image",
+                "--hidden-import", "PIL._imaging",
                 "--hidden-import", "PIL.ImageTk",
                 "--hidden-import", "unicodedata",
                 "--hidden-import", "idna",
