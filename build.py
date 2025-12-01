@@ -316,7 +316,7 @@ class Packager:
             if fallback.exists():
                 shutil.copy2(str(fallback), str(self.final_path / "updater_helper.exe"))
 
-        # 创建 README.txt
+        # 创建 使用说明.txt
         readme_content = f"""Stellaris DLC Helper v{VERSION}
 
 使用说明：
@@ -332,7 +332,7 @@ class Packager:
 
 技术支持：https://github.com/sign-river/Stellaris-DLC-Helper
 """
-        readme_path = self.final_path / "README.txt"
+        readme_path = self.final_path / "使用说明.txt"
         with open(readme_path, 'w', encoding='utf-8') as f:
             f.write(readme_content)
 
