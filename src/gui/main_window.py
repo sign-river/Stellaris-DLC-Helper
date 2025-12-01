@@ -684,6 +684,58 @@ class MainWindowCTk:
         )
         label.pack(side="left")
         
+        # 设置按钮（最先添加，这样pack side="right"时会在最右边）
+        try:
+            set_icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "set.png"
+            if set_icon_path.exists():
+                set_image = Image.open(set_icon_path)
+                set_photo = ctk.CTkImage(light_image=set_image, dark_image=set_image, size=(20, 20))
+                settings_btn = ctk.CTkButton(
+                    log_title_frame,
+                    image=set_photo,
+                    text="",
+                    fg_color="#42A5F5",
+                    hover_color="#1E88E5",
+                    width=28,
+                    height=28,
+                    corner_radius=6,
+                    command=self._open_settings
+                )
+                settings_btn.pack(side="right")
+            else:
+                # 降级为文字按钮
+                settings_btn = ctk.CTkButton(
+                    log_title_frame,
+                    text="⚙️",
+                    font=ctk.CTkFont(size=14),
+                    text_color="#FFFFFF",
+                    fg_color="#42A5F5",
+                    hover_color="#1E88E5",
+                    width=28,
+                    height=28,
+                    corner_radius=6,
+                    command=self._open_settings
+                )
+                settings_btn.pack(side="right")
+        except Exception as e:
+            import logging
+            logging.warning(f"加载设置图标失败: {e}")
+        
+        # 导出日志按钮
+        export_log_btn = ctk.CTkButton(
+            log_title_frame,
+            text="💾 导出日志",
+            command=self._export_log,
+            width=100,
+            height=28,
+            font=ctk.CTkFont(size=12),
+            corner_radius=6,
+            fg_color="#42A5F5",
+            hover_color="#1E88E5",
+            text_color="#FFFFFF"
+        )
+        export_log_btn.pack(side="right", padx=(0, 10))
+        
         # 复制日志按钮
         copy_log_btn = ctk.CTkButton(
             log_title_frame,
@@ -697,7 +749,7 @@ class MainWindowCTk:
             hover_color="#1E88E5",
             text_color="#FFFFFF"
         )
-        copy_log_btn.pack(side="right")
+        copy_log_btn.pack(side="right", padx=(0, 10))
         
         # 日志文本框
         self.log_text = ctk.CTkTextbox(
@@ -1760,6 +1812,20 @@ class MainWindowCTk:
                         else:
                             self.logger.info("\n下载完成")
                         
+                        # 验证下载文件完整性
+                        if os.path.exists(cache_path):
+                            file_size = os.path.getsize(cache_path)
+                            size_mb = file_size / (1024 * 1024)
+                            self.logger.info(f"文件大小: {size_mb:.2f} MB")
+                            
+                            # 如果文件太小，可能下载不完整
+                            if file_size < 1024:  # 小于1KB
+                                raise Exception(f"下载文件异常：文件大小仅 {file_size} 字节，可能下载不完整")
+                            
+                            # 显示哈希验证信息（如果有期望哈希）
+                            if expected_hash:
+                                self.logger.info(f"✓ 文件完整性校验通过 (SHA256)")
+                        
                         # 安装
                         self.logger.info(f"正在安装: {dlc['name']}...")
                         self.dlc_installer.install(cache_path, dlc['key'], dlc['name'])
@@ -2149,6 +2215,92 @@ class MainWindowCTk:
             from ..utils import handle_error
             handle_error("复制日志失败", exc=e)
             messagebox.showerror("错误", f"复制失败:\n{str(e)}")
+    
+    def _export_log(self):
+        """导出操作日志到文件"""
+        try:
+            from tkinter import filedialog
+            from datetime import datetime
+            import json
+            
+            # 获取日志文本内容
+            log_content = self.log_text.get("1.0", "end-1c")
+            
+            if not log_content.strip():
+                messagebox.showinfo("提示", "日志内容为空")
+                return
+            
+            # 生成默认文件名
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            default_filename = f"stellaris_dlc_log_{timestamp}.txt"
+            
+            # 选择保存位置
+            file_path = filedialog.asksaveasfilename(
+                title="导出日志",
+                defaultextension=".txt",
+                initialfile=default_filename,
+                filetypes=[
+                    ("文本文件", "*.txt"),
+                    ("JSON文件", "*.json"),
+                    ("所有文件", "*.*")
+                ]
+            )
+            
+            if not file_path:
+                return  # 用户取消
+            
+            # 导出日志
+            if file_path.endswith('.json'):
+                # 导出为JSON格式，包含系统信息
+                import platform
+                from ..config import VERSION
+                
+                log_data = {
+                    "version": VERSION,
+                    "export_time": datetime.now().isoformat(),
+                    "system_info": {
+                        "os": platform.system(),
+                        "os_version": platform.version(),
+                        "python_version": platform.python_version(),
+                        "architecture": platform.machine()
+                    },
+                    "log_content": log_content
+                }
+                
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(log_data, f, indent=2, ensure_ascii=False)
+            else:
+                # 导出为文本格式
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(f"Stellaris DLC Helper - 操作日志\n")
+                    f.write(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write("="*80 + "\n\n")
+                    f.write(log_content)
+            
+            self.logger.success(f"日志已导出到: {file_path}")
+            messagebox.showinfo("成功", f"日志已导出到:\n{file_path}")
+            
+        except Exception as e:
+            from ..utils import handle_error
+            handle_error("导出日志失败", exc=e)
+            messagebox.showerror("错误", f"导出失败:\n{str(e)}")
+    
+    def _open_settings(self):
+        """打开设置对话框"""
+        try:
+            from .settings_dialog import SettingsDialog
+            
+            # 创建设置对话框，传入logger以便错误能显示在主窗口
+            settings = SettingsDialog(
+                self.root, 
+                source_manager=self.dlc_manager.source_manager if self.dlc_manager else None,
+                main_logger=self.logger
+            )
+            
+        except Exception as e:
+            from ..utils import handle_error
+            handle_error("打开设置失败", exc=e)
+            messagebox.showerror("错误", f"打开设置失败:\n{str(e)}")
     
     def _check_recent_update(self):
         """检查是否刚刚完成更新，如果是则显示提示"""

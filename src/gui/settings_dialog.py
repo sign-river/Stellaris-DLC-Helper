@@ -1,0 +1,315 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+设置对话框模块
+提供应用程序设置界面，包括源管理等功能
+"""
+
+import customtkinter as ctk
+from tkinter import messagebox
+import threading
+from pathlib import Path
+from typing import Optional
+import logging
+
+
+class SettingsDialog(ctk.CTkToplevel):
+    """设置对话框"""
+
+    def __init__(self, parent, source_manager=None, main_logger=None):
+        super().__init__(parent)
+
+        self.source_manager = source_manager
+        self.main_logger = main_logger  # 主窗口的日志记录器
+        self.logger = logging.getLogger(__name__)
+
+        self.title("设置")
+        self.geometry("700x500")
+        self.resizable(False, False)
+
+        # 设置图标
+        try:
+            icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "tea_Gray.ico"
+            if icon_path.exists():
+                self.iconbitmap(str(icon_path))
+        except Exception as e:
+            self.logger.warning(f"设置窗口图标失败: {e}")
+
+        # 设置模态
+        self.grab_set()
+        self.focus_set()
+
+        self._create_widgets()
+        self._center_window(parent)
+
+    def _center_window(self, parent):
+        """居中显示窗口"""
+        self.update_idletasks()
+        
+        # 获取父窗口位置和大小
+        parent_x = parent.winfo_x()
+        parent_y = parent.winfo_y()
+        parent_width = parent.winfo_width()
+        parent_height = parent.winfo_height()
+        
+        # 计算居中位置
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = parent_x + (parent_width - width) // 2
+        y = parent_y + (parent_height - height) // 2
+        
+        self.geometry(f"+{x}+{y}")
+
+    def _create_widgets(self):
+        """创建界面组件"""
+        # 主容器
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # 标题
+        title_label = ctk.CTkLabel(
+            main_frame,
+            text="⚙️ 设置",
+            font=ctk.CTkFont(size=24, weight="bold"),
+            text_color="#1976D2"
+        )
+        title_label.pack(pady=(0, 20))
+
+        # 选项卡
+        self.tabview = ctk.CTkTabview(main_frame, height=350)
+        self.tabview.pack(fill="both", expand=True)
+
+        # 添加选项卡
+        self.tabview.add("源管理")
+        # 可以添加更多选项卡
+        # self.tabview.add("常规设置")
+        # self.tabview.add("高级选项")
+
+        # 创建源管理内容
+        self._create_source_management_tab()
+
+        # 底部按钮
+        button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        button_frame.pack(fill="x", pady=(20, 0))
+
+        close_btn = ctk.CTkButton(
+            button_frame,
+            text="关闭",
+            command=self.destroy,
+            width=120,
+            height=40,
+            font=ctk.CTkFont(size=14),
+            corner_radius=8,
+            fg_color="#42A5F5",
+            hover_color="#1E88E5",
+            text_color="#FFFFFF"
+        )
+        close_btn.pack(side="right")
+
+    def _create_source_management_tab(self):
+        """创建源管理选项卡内容"""
+        tab = self.tabview.tab("源管理")
+
+        # 说明文字
+        info_label = ctk.CTkLabel(
+            tab,
+            text="管理下载源，测试各源的连接速度",
+            font=ctk.CTkFont(size=12),
+            text_color="#666666"
+        )
+        info_label.pack(pady=(10, 20))
+
+        # 源列表框架
+        sources_frame = ctk.CTkScrollableFrame(
+            tab,
+            height=200,
+            fg_color="#FAFAFA",
+            corner_radius=8
+        )
+        sources_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        # 获取源列表 - 从config导入DLC_SOURCES
+        from ..config import DLC_SOURCES
+        sources = DLC_SOURCES if DLC_SOURCES else []
+            
+        for i, source in enumerate(sources):
+            source_frame = ctk.CTkFrame(sources_frame, fg_color="#FFFFFF", corner_radius=6)
+            source_frame.pack(fill="x", padx=5, pady=5)
+
+            # 源信息
+            info_frame = ctk.CTkFrame(source_frame, fg_color="transparent")
+            info_frame.pack(side="left", fill="x", expand=True, padx=10, pady=10)
+
+            name_label = ctk.CTkLabel(
+                info_frame,
+                text=f"📡 {source.get('name', '未知源')}",
+                font=ctk.CTkFont(size=14, weight="bold"),
+                anchor="w"
+            )
+            name_label.pack(anchor="w")
+
+            url_label = ctk.CTkLabel(
+                info_frame,
+                text=source.get('url', ''),
+                font=ctk.CTkFont(size=10),
+                text_color="#666666",
+                anchor="w"
+            )
+            url_label.pack(anchor="w")
+
+            status_label = ctk.CTkLabel(
+                info_frame,
+                text=f"优先级: {source.get('priority', 'N/A')} | 状态: {'✓ 启用' if source.get('enabled', True) else '✗ 禁用'}",
+                font=ctk.CTkFont(size=10),
+                text_color="#888888",
+                anchor="w"
+            )
+            status_label.pack(anchor="w")
+
+            # 速度标签（用于显示测速结果）
+            speed_label = ctk.CTkLabel(
+                source_frame,
+                text="",
+                font=ctk.CTkFont(size=11),
+                text_color="#1976D2",
+                width=100
+            )
+            speed_label.pack(side="right", padx=10)
+
+            # 保存引用以便更新
+            source_frame.speed_label = speed_label
+            source_frame.source_data = source
+
+        # 按钮框架
+        button_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        button_frame.pack(fill="x", padx=10, pady=10)
+
+        # 测速所有源按钮
+        test_all_btn = ctk.CTkButton(
+            button_frame,
+            text="🚀 测速所有源",
+            command=self._test_all_sources,
+            width=140,
+            height=36,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            corner_radius=8,
+            fg_color="#4CAF50",
+            hover_color="#45a049",
+            text_color="#FFFFFF"
+        )
+        test_all_btn.pack(side="left", padx=5)
+
+        # 刷新按钮
+        refresh_btn = ctk.CTkButton(
+            button_frame,
+            text="🔄 刷新",
+            command=self._refresh_sources,
+            width=100,
+            height=36,
+            font=ctk.CTkFont(size=13),
+            corner_radius=8,
+            fg_color="#42A5F5",
+            hover_color="#1E88E5",
+            text_color="#FFFFFF"
+        )
+        refresh_btn.pack(side="left", padx=5)
+
+        # 保存引用
+        self.sources_frame = sources_frame
+        self.test_all_btn = test_all_btn
+
+    def _test_all_sources(self):
+        """测试所有源的速度"""
+        if not self.source_manager:
+            messagebox.showwarning("警告", "源管理器未初始化")
+            return
+
+        # 禁用按钮
+        self.test_all_btn.configure(state="disabled", text="⏳ 测速中...")
+
+        def test_thread():
+            try:
+                # 获取所有源
+                from ..config import DLC_SOURCES
+                sources = DLC_SOURCES if DLC_SOURCES else []
+                
+                # 记录测速开始
+                if self.main_logger:
+                    self.main_logger.info(f"开始测速，共 {len(sources)} 个源")
+                
+                tested_count = 0
+                for widget in self.sources_frame.winfo_children():
+                    if hasattr(widget, 'source_data') and hasattr(widget, 'speed_label'):
+                        source = widget.source_data
+                        speed_label = widget.speed_label
+                        source_name = source.get('name', '未知源')
+                        
+                        tested_count += 1
+                        
+                        # 更新状态
+                        self.after(0, lambda l=speed_label: l.configure(text="测速中..."))
+                        
+                        # 记录测速进度
+                        if self.main_logger:
+                            self.main_logger.info(f"正在测速: {source_name}")
+                        
+                        # 测试速度
+                        try:
+                            from ..core.speed_test import test_speed
+                            test_url = source.get('test_url', '')
+                            
+                            if test_url:
+                                speed = test_speed(test_url, timeout=10)
+                                if speed > 0:
+                                    speed_mb = speed / (1024 * 1024)
+                                    speed_text = f"✓ {speed_mb:.2f} MB/s"
+                                    color = "#4CAF50"
+                                    if self.main_logger:
+                                        self.main_logger.info(f"{source_name}: {speed_mb:.2f} MB/s")
+                                else:
+                                    speed_text = "✗ 超时"
+                                    color = "#F44336"
+                                    if self.main_logger:
+                                        self.main_logger.warning(f"{source_name}: 超时")
+                            else:
+                                speed_text = "⚠ 无测试URL"
+                                color = "#FF9800"
+                                if self.main_logger:
+                                    self.main_logger.warning(f"{source_name}: 无测试URL")
+                            
+                            self.after(0, lambda l=speed_label, t=speed_text, c=color: (
+                                l.configure(text=t, text_color=c)
+                            ))
+                        except Exception as e:
+                            error_msg = str(e)
+                            if self.main_logger:
+                                self.main_logger.error(f"{source_name} 测速失败: {error_msg}")
+                            self.after(0, lambda l=speed_label: l.configure(
+                                text=f"✗ 错误",
+                                text_color="#F44336"
+                            ))
+                
+                if self.main_logger:
+                    self.main_logger.info(f"测速完成，共测试 {tested_count} 个源")
+                
+                self.after(0, lambda: messagebox.showinfo("完成", f"源测速已完成\n共测试 {tested_count} 个源"))
+                
+            except Exception as e:
+                error_msg = str(e)
+                # 记录错误到日志
+                import logging
+                logging.error(f"源测速失败: {error_msg}", exc_info=True)
+                # 如果有主窗口logger，也记录到那里
+                if self.main_logger:
+                    self.main_logger.error(f"源测速失败: {error_msg}")
+                self.after(0, lambda msg=error_msg: messagebox.showerror("错误", f"测速失败:\n{msg}"))
+            finally:
+                self.after(0, lambda: self.test_all_btn.configure(state="normal", text="🚀 测速所有源"))
+
+        threading.Thread(target=test_thread, daemon=True).start()
+
+    def _refresh_sources(self):
+        """刷新源列表"""
+        # 重新创建源管理选项卡
+        self._create_source_management_tab()
+        messagebox.showinfo("完成", "源列表已刷新")
