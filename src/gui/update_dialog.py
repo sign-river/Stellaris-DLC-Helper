@@ -196,14 +196,20 @@ class UpdateDialog(ctk.CTkToplevel):
             later_button = ctk.CTkButton(
                 button_frame,
                 text="稍后提醒",
-                command=self._remind_later
+                command=self._remind_later,
+                height=40,
+                text_color="white",
+                font=("Microsoft YaHei UI", 13)
             )
             later_button.pack(side="left", padx=(0, 10))
 
             update_button = ctk.CTkButton(
                 button_frame,
                 text="立即更新",
-                command=self._start_update
+                command=self._start_update,
+                height=40,
+                text_color="white",
+                font=("Microsoft YaHei UI", 13)
             )
             update_button.pack(side="right")
         else:
@@ -211,7 +217,10 @@ class UpdateDialog(ctk.CTkToplevel):
             close_button = ctk.CTkButton(
                 button_frame,
                 text="知道了",
-                command=self._close_announcement
+                command=self._close_announcement,
+                height=40,
+                text_color="white",
+                font=("Microsoft YaHei UI", 13)
             )
             close_button.pack(side="right")
 
