@@ -235,6 +235,10 @@ class UpdateDialog(ctk.CTkToplevel):
 
     def _close_announcement(self):
         """关闭公告"""
+        try:
+            self.grab_release()  # 释放模态锁
+        except Exception:
+            pass
         self._enable_main_window_download()
         self.destroy()
 
@@ -272,16 +276,28 @@ class UpdateDialog(ctk.CTkToplevel):
                 )
                 if res:
                     # 仅关闭更新对话框，不重新打开
+                    try:
+                        self.grab_release()  # 释放模态锁
+                    except Exception:
+                        pass
                     self._enable_main_window_download()
                     self.destroy()
                 else:
                     # 取消关闭，继续保留更新对话
                     return
             else:
+                try:
+                    self.grab_release()  # 释放模态锁
+                except Exception:
+                    pass
                 self._enable_main_window_download()
                 self.destroy()
         except Exception as e:
             self.logger.warning(f"处理稍后提醒时出错: {e}")
+            try:
+                self.grab_release()  # 释放模态锁
+            except Exception:
+                pass
             try:
                 self._enable_main_window_download()
             except Exception:
@@ -558,5 +574,9 @@ class UpdateDialog(ctk.CTkToplevel):
             if not res:
                 return
 
+        try:
+            self.grab_release()  # 释放模态锁
+        except Exception:
+            pass
         self._enable_main_window_download()
         self.destroy()

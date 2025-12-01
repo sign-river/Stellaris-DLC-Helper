@@ -133,6 +133,26 @@ class MainWindowCTk:
         header_frame.grid(row=0, column=0, sticky="ew")
         header_frame.grid_propagate(False)
         
+        # 左上角图标
+        try:
+            icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "tea_Gray.png"
+            if icon_path.exists():
+                icon_image = Image.open(icon_path)
+                # 调整图标大小
+                icon_image = icon_image.resize((80, 80), Image.Resampling.LANCZOS)
+                icon_photo = ctk.CTkImage(light_image=icon_image, dark_image=icon_image, size=(80, 80))
+                icon_label = ctk.CTkLabel(
+                    header_frame,
+                    image=icon_photo,
+                    text=""
+                )
+                icon_label.place(x=40, y=25)  # 固定在左上角
+                # 保存引用避免被垃圾回收
+                self._header_icon = icon_label
+        except Exception as e:
+            import logging
+            logging.warning(f"加载左上角图标失败: {e}")
+        
         # 主标题 - 放大字号，纯白色
         title_label = ctk.CTkLabel(
             header_frame,
