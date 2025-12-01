@@ -41,7 +41,7 @@ class MainWindowCTk:
         
         # 设置窗口图标
         try:
-            icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "ico.ico"
+            icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "tea_Gray.ico"
             if icon_path.exists():
                 self.root.iconbitmap(str(icon_path))
         except Exception as e:

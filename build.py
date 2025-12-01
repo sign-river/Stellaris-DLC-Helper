@@ -205,6 +205,7 @@ class Packager:
                 "--onefile",  # 打包成单个exe文件
                 "--windowed",  # 不显示控制台窗口
                 "--name", "Stellaris-DLC-Helper",
+                "--icon", f"{self.project_root}/assets/images/tea_Gray.ico",  # 程序图标
                 "--add-data", f"{self.project_root}/src{separator}src",  # 添加src目录
                 "--add-data", f"{self.project_root}/config.json{separator}config.json",  # 添加config.json文件
                 "--add-data", f"{self.project_root}/pairings.json{separator}pairings.json",  # 添加pairings.json文件
