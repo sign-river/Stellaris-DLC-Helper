@@ -5,127 +5,212 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub release](https://img.shields.io/github/v/release/sign-river/Stellaris-DLC-Helper)](https://github.com/sign-river/Stellaris-DLC-Helper/releases)
 
-> 专为群星(Stellaris)设计的轻量级DLC管理工具 | 云端下载 | 智能缓存 | 操作可还原
+> 轻量级 DLC 管理工具 | 多源下载 | 智能缓存 | 自动更新
 
 ---
 
-## ✨ 功能特性
+## ✨ 核心功能
 
-- 🎮 **专注群星** - 针对Stellaris游戏优化，无需输入AppID
-- ☁️ **云端下载** - 从远程服务器直接下载DLC文件
-- 💾 **智能缓存** - 本地缓存已下载的DLC，避免重复下载
-- 🔍 **自动检测** - 识别已安装的DLC，智能去重
-- 📝 **操作记录** - 记录所有操作，支持精确还原
-- 🎨 **纯中文界面** - 简洁易用的图形界面
-- 🔄 **一键还原** - 随时恢复游戏原始状态
+- 🎮 **一键解锁** - 自动检测游戏路径，一键下载安装所有DLC
+- ☁️ **多源下载** - R2、GitHub、国内云、Gitee四源智能切换
+- 💾 **智能缓存** - 本地缓存已下载DLC，秒速安装
+- 🔄 **自动更新** - 内置更新检查，支持静默升级
+- 📝 **操作日志** - 完整记录所有操作，支持导出
+- 🎨 **现代界面** - CustomTkinter现代化UI，清爽易用
+- ⚙️ **源管理** - 可视化源配置，实时测速优选
+- 🔒 **补丁管理** - CreamAPI补丁自动应用与还原
 
 ---
 
 ## 📦 快速开始
 
-### 下载使用
+### 方式一：直接运行（推荐）
 
-1. 前往 [Releases](https://github.com/sign-river/Stellaris-DLC-Helper/releases/latest) 页面
-2. 下载 `Stellaris.DLC.Helper.v1.0.0.zip`
-3. 解压到任意位置
-4. 运行 `Stellaris-DLC-Helper.exe`
+1. 前往 [Releases](https://github.com/sign-river/Stellaris-DLC-Helper/releases/latest) 下载最新版
+2. 解压到任意目录
+3. 运行 `Stellaris-DLC-Helper.exe`
+4. 点击"一键解锁"即可
 
-### 使用步骤
+### 方式二：源码运行
 
-1. **选择游戏目录** - 点击"浏览"按钮，选择Stellaris游戏根目录
-2. **查看可用DLC** - 程序自动加载服务器上的DLC列表
-3. **下载安装DLC** - 勾选所需DLC，点击"下载并安装选中的DLC"
-4. **还原游戏** - 如需移除DLC，点击"还原游戏"按钮
+```bash
+# 克隆仓库
+git clone https://github.com/sign-river/Stellaris-DLC-Helper.git
+cd Stellaris-DLC-Helper
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 运行程序
+python main.py
+```
+
+---
+
+## 💡 使用说明
+
+1. **自动检测** - 程序启动后自动检测Steam游戏路径
+2. **选择DLC** - 查看可用DLC列表（默认全选）
+3. **一键解锁** - 点击"一键解锁"按钮，自动下载、安装DLC和应用补丁
+4. **源管理** - 点击设置按钮可测速选择最快下载源
+5. **还原游戏** - 需要时可一键还原到原始状态
 
 ---
 
 ## 💻 系统要求
 
 - **操作系统**: Windows 7/8/10/11 (64位)
-- **网络**: 需要互联网连接下载DLC
-- **磁盘空间**: 约50MB可用空间
-- **Python版本** (源码运行): Python 3.7+
+- **运行环境**: 无需Python，开箱即用
+- **网络**: 需要互联网连接
+- **磁盘空间**: 约100MB可用空间
 
 ---
 
-## ⚠️ 重要说明
+## 🔧 主要特性
 
-### 关于DLC来源
+### 多源下载系统
+- **R2 (Cloudflare)** - 全球CDN加速，默认源
+- **GitHub Release** - 官方托管，稳定可靠
+- **国内云服务器** - 国内访问优化
+- **Gitee Release** - 备用源
 
-本工具提供的DLC文件仅供学习和测试使用。
+程序自动选择最快源，支持实时测速和手动切换。
 
-**推荐获取方式：**
-1. **Steam官方购买** - 支持游戏开发者
-2. **CS.RIN.RU论坛** - [Steam Content Sharing](https://cs.rin.ru/forum/viewforum.php?f=22)
+### 完整性校验
+- SHA256哈希验证
+- 断点续传支持
+- 损坏文件自动重下载
 
-### 法律声明
-
-- ⚠️ 本工具仅供个人学习研究使用
-- ⚠️ 请在下载后24小时内删除
-- ⚠️ 如果你喜欢这个游戏，请购买正版支持开发者
-- ⚠️ 使用本工具造成的任何后果由使用者自行承担
+### 操作日志
+- 记录所有DLC操作
+- 支持导出查看
+- 精确还原支持
 
 ---
 
-## 🧭 关于中文路径
+## ⚠️ 免责声明
 
-从 v1.0.0 开始，我们已在包含中文字符的安装路径下进行了测试，程序在这些路径下通常能正常运行（包括缓存、日志记录、DLC解压/安装等核心功能）。
+本工具仅供学习和研究使用：
 
-不过，仍有一些潜在兼容性因素需要注意：
-- 某些旧版 Windows 或第三方工具/脚本可能不完全支持 Unicode 路径
-- 部分杀毒软件或系统策略可能在带中文路径时拦截写/读操作
-- ZIP 文件内部路径编码（例如由旧工具打包的 ZIP）仍可能导致文件名乱码
+- ✅ 本工具为开源免费项目
+- ✅ 如付费获得请立即退款
+- ⚠️ 仅供个人学习测试使用
+- ⚠️ 请在24小时内删除
+- ⚠️ 喜欢游戏请购买正版支持开发者
+- ⚠️ 使用本工具的后果由使用者自行承担
 
-如果你遇到路径相关的异常：
-1. 请尝试将程序或游戏目录移动到不包含非 ASCII 字符的位置再试
-2. 如为杀软误报，请尝试临时关闭或加入白名单
-3. 欢迎在 GitHub 提交 issue，或使用 `tools/test_unicode_paths.py` 在本地复现并提供错误信息
+**推荐正版渠道：**
+- Steam官方商店
+- 各大正版游戏平台
 
 ---
 
 ## 🔒 隐私与安全
 
-- 仅连接到DLC服务器：`https://dlc.dlchelper.top`
-- 不收集任何用户数据
-- 所有操作在本地完成
-- 代码完全开源，可自行审查
+- ✅ 代码完全开源，可自行审查
+- ✅ 不收集任何用户数据
+- ✅ 所有操作在本地完成
+- ✅ 仅连接到DLC下载服务器
+- ✅ 无后门，无广告，无捆绑
 
 ---
 
 ## 📝 更新日志
 
-### v1.0.0 (2025-11-30)
-- 🎉 首次发布
-- ✨ 基础DLC下载和安装功能
-- 💾 本地缓存系统
-- 🔄 操作记录与还原功能
-- 🎨 纯中文图形界面
-- 🌐 多源下载支持（R2、GitHub、国内云服务器、Gitee）
-- 🔧 提高中文路径兼容性
-- 🧪 新增测试脚本用于验证功能
+查看完整更新日志：[CHANGELOG.md](docs/发行说明.md)
+
+### 最新版本
+
+**v1.0.0** (2025-12-01)
+- 🎉 首次正式发布
+- ✨ 现代化UI（CustomTkinter）
+- 🌐 多源下载系统（4个源自动切换）
+- 💾 智能缓存与断点续传
+- 🔄 自动更新功能
+- ⚙️ 可视化源管理与测速
+- 📝 完整操作日志系统
+- 🔒 完整性校验（SHA256）
+- 🎨 中文路径完全支持
+
+---
+
+## 🛠️ 开发相关
+
+### 项目结构
+
+```
+Stellaris-DLC-Helper/
+├── src/                  # 源代码
+│   ├── core/            # 核心功能
+│   ├── gui/             # 界面模块
+│   └── utils/           # 工具函数
+├── docs/                # 文档
+├── tools/               # 测试工具
+├── patches/             # 补丁文件
+└── assets/              # 资源文件
+```
+
+### 开发者指南
+
+详细文档请查看：
+- [开发者指南](docs/开发者指南.md) - 完整开发文档
+- [打包指南](docs/打包指南.md) - 构建发布流程
+- [部署指南](docs/部署指南.md) - 服务器部署说明
+
+### 打包构建
+
+```bash
+# 安装打包依赖
+pip install -r requirements-build.txt
+
+# 执行打包
+python build.py
+
+# 快速模式（跳过压缩）
+python build.py --fast
+```
+
+---
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+1. Fork 本项目
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 提交 Pull Request
+
+---
+
+## 📞 联系方式
+
+- **问题反馈**: [GitHub Issues](https://github.com/sign-river/Stellaris-DLC-Helper/issues)
+- **QQ交流群**: 1051774780
+- **B站视频**: [使用教程](https://www.bilibili.com/video/BV12pbrzSEQY/)
 
 ---
 
 ## 📄 许可证
 
-本项目采用 [MIT License](LICENSE) 开源。
+本项目采用 [MIT License](LICENSE) 开源协议。
 
 ---
 
-## 📮 联系方式
+## ⭐ Star History
 
-- **GitHub Issues**: [提交问题](https://github.com/sign-river/Stellaris-DLC-Helper/issues)
-- **项目地址**: https://github.com/sign-river/Stellaris-DLC-Helper
+如果这个项目对你有帮助，请点个 Star 支持一下！
 
----
-
-**⭐ 如果觉得有用，请给项目点个Star！**
+[![Star History Chart](https://api.star-history.com/svg?repos=sign-river/Stellaris-DLC-Helper&type=Date)](https://star-history.com/#sign-river/Stellaris-DLC-Helper&Date)
 
 ---
 
-## 🛠 开发者文档
+<div align="center">
 
-开发者维护、部署和打包指南已整合为 `docs/开发者指南.md`（中文）。
-- 包含：打包说明、部署步骤、源码结构、测试工具、调试与清理操作等。
-- 如需贡献或了解实现细节，请先阅读 `docs/开发者指南.md`。
+**Made with ❤️ by [唏嘘南溪](https://github.com/sign-river)**
+
+该程序为免费开源项目 | 如付费获得请立即退款
+
+</div>
 
