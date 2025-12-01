@@ -148,9 +148,11 @@ class SettingsDialog(ctk.CTkToplevel):
             )
             name_label.pack(anchor="w")
 
+            # 显示测试URL（如果有）或基础URL
+            display_url = source.get('test_url', '') or source.get('url', '')
             url_label = ctk.CTkLabel(
                 info_frame,
-                text=source.get('url', ''),
+                text=display_url,
                 font=ctk.CTkFont(size=10),
                 text_color="#666666",
                 anchor="w"

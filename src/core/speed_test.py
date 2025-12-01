@@ -1,6 +1,49 @@
 import requests
 import time
 
+def test_speed(url, timeout=10):
+    """
+    简单的速度测试函数，返回每秒下载的字节数
+    
+    参数:
+        url: 测试URL
+        timeout: 超时时间（秒）
+        
+    返回:
+        float: 速度（字节/秒），失败返回0
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+    
+    try:
+        start_time = time.time()
+        total_downloaded = 0
+        
+        with requests.get(url, headers=headers, stream=True, timeout=(7.0, timeout)) as response:
+            if not response.ok:
+                return 0
+            
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    break
+                
+                total_downloaded += len(chunk)
+                elapsed = time.time() - start_time
+                
+                # 超时或下载足够数据就停止
+                if elapsed >= timeout or total_downloaded >= 70 * 1024 * 1024:
+                    break
+        
+        final_duration = time.time() - start_time
+        if final_duration <= 0.001:
+            final_duration = 0.001
+        
+        return total_downloaded / final_duration
+        
+    except Exception:
+        return 0
+
 def measure_speed(url, description, threshold_mb):
     print(f"正在测试 [{description}] ... ")
     

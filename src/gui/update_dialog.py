@@ -38,6 +38,9 @@ class UpdateDialog(ctk.CTkToplevel):
         else:
             self.title("系统公告")
         
+        # 先隐藏窗口，避免闪烁
+        self.withdraw()
+        
         # 根据内容调整窗口高度
         if update_info and update_info.has_update(self.updater.current_version):
             # 有更新时的高度
@@ -69,6 +72,9 @@ class UpdateDialog(ctk.CTkToplevel):
 
         self._create_widgets()
         self._center_window(parent)
+        
+        # 居中完成后再显示窗口
+        self.deiconify()
 
     def _disable_main_window_download(self):
         """禁用主窗口的下载功能"""
