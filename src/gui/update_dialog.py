@@ -130,6 +130,11 @@ class UpdateDialog(ctk.CTkToplevel):
                     self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", f"加载日志失败: {e}")))
 
             threading.Thread(target=load_log_thread, daemon=True).start()
+        else:
+            # 显示占位文本，让用户知道没有日志
+            self.log_textbox = ctk.CTkTextbox(info_frame, width=440, height=120)
+            self.log_textbox.pack(pady=(0, 10))
+            self.log_textbox.insert("0.0", "更新日志不可用")
 
         # 强制更新提示
         if self.update_info.is_force_update(self.updater.current_version):
