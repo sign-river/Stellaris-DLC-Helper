@@ -39,15 +39,15 @@ class UpdateDialog(ctk.CTkToplevel):
             self.title("系统公告")
         
         # 根据内容调整窗口高度
-        if update_info and update_info.has_update(self.updater.current_version) and announcement:
-            # 有更新 + 有公告：更高
-            self.geometry("520x600")
+        if update_info and update_info.has_update(self.updater.current_version):
+            # 有更新时的高度
+            self.geometry("520x460")
         elif announcement:
             # 只有公告：中等高度
             self.geometry("520x420")
         else:
-            # 只有更新：原高度
-            self.geometry("520x460")
+            # 默认高度
+            self.geometry("520x400")
         
         self.resizable(False, False)
 
@@ -137,27 +137,12 @@ class UpdateDialog(ctk.CTkToplevel):
                 )
                 size_label.pack(anchor="w", padx=15, pady=(0, 10))
 
-            # 更新日志文本
-            if self.update_info.update_log_url:
-                log_height = 80 if self.announcement else 120
-                self.log_textbox = ctk.CTkTextbox(info_frame, width=440, height=log_height)
-                self.log_textbox.pack(fill='both', expand=True, pady=(0, 10))
-                self.log_textbox.insert("0.0", "正在加载更新日志...")
-                
-                def load_log_thread():
-                    try:
-                        url = getattr(self.update_info, 'update_log_url', None)
-                        self.logger.debug(f"尝试加载更新日志 URL: {url}")
-                        content = self.updater.fetch_update_log(self.update_info)
-                        if content:
-                            self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", content)))
-                        else:
-                            self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", "无法加载更新日志或日志为空（请检查网络）。")))
-                    except Exception as e:
-                        self.logger.warning(f"加载更新日志失败: {e}")
-                        self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", f"加载日志失败: {e}")))
-
-                threading.Thread(target=load_log_thread, daemon=True).start()
+            # 更新信息文本框（使用公告内容填充）
+            if self.announcement:
+                self.info_textbox = ctk.CTkTextbox(info_frame, width=440, height=120, wrap="word")
+                self.info_textbox.pack(fill='both', expand=True, pady=(0, 10))
+                self.info_textbox.insert("0.0", self.announcement)
+                self.info_textbox.configure(state="disabled")  # 只读
 
             # 强制更新提示
             if self.update_info.is_force_update(self.updater.current_version):
@@ -169,26 +154,25 @@ class UpdateDialog(ctk.CTkToplevel):
                 )
                 force_label.pack(pady=(0, 10))
 
-        # 如果有公告，显示公告部分
-        if self.announcement:
+        # 如果只有公告没有更新，显示公告
+        if self.announcement and not has_update:
             # 公告标题
             announcement_title = ctk.CTkLabel(
                 self,
                 text="📢 系统公告",
-                font=ctk.CTkFont(size=16 if not has_update else 14, weight="bold"),
-                text_color="#FF6B00" if not has_update else "#1976D2"
+                font=ctk.CTkFont(size=16, weight="bold"),
+                text_color="#FF6B00"
             )
-            announcement_title.pack(pady=(20 if not has_update else 10, 10))
+            announcement_title.pack(pady=(20, 10))
 
             # 公告内容框
             announcement_frame = ctk.CTkFrame(self)
             announcement_frame.pack(side="top", fill="both", expand=True, padx=20, pady=(0, 10))
 
-            announcement_height = 240 if not has_update else 140
             announcement_textbox = ctk.CTkTextbox(
                 announcement_frame, 
                 width=440, 
-                height=announcement_height,
+                height=240,
                 wrap="word"
             )
             announcement_textbox.pack(fill='both', expand=True, padx=10, pady=10)

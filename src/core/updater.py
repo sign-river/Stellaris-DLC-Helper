@@ -29,7 +29,6 @@ class UpdateInfo:
         self.latest_version = data.get("latest_version", "")
         self.force_update = data.get("force_update", False)
         self.update_url = data.get("update_url", "")
-        self.update_log_url = data.get("update_log", "")
         self.min_version = data.get("min_version", "")
         self.release_date = data.get("release_date", "")
         self.file_size = data.get("file_size", "")
@@ -467,21 +466,6 @@ class AutoUpdater:
         except Exception as e:
             self.logger.error(f"回滚失败: {e}")
             return False
-
-    def fetch_update_log(self, update_info: UpdateInfo, timeout: int = 10) -> Optional[str]:
-        """获取更新日志内容（文本）"""
-        if not update_info or not update_info.update_log_url:
-            return None
-        try:
-            url = update_info.update_log_url
-            self.logger.info(f"获取更新日志: {url}")
-            r = requests.get(url, timeout=timeout)
-            r.raise_for_status()
-            self.logger.debug(f"更新日志 HTTP {r.status_code} 长度 {len(r.content)}")
-            return r.text
-        except Exception as e:
-            self.logger.warning(f"获取更新日志失败: {e}")
-            return None
 
     def _create_backup(self) -> bool:
         """创建当前版本的备份"""
