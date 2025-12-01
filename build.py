@@ -357,14 +357,17 @@ class Packager:
             if zip_path.exists():
                 zip_path.unlink()
 
-            # 创建压缩包
+            # 创建压缩包（将文件放到 Stellaris-DLC-Helper 顶层文件夹中）
             print(f"正在压缩到: {zip_name}")
             compression = zipfile.ZIP_STORED if self.fast_mode else zipfile.ZIP_DEFLATED
+            top_folder = "Stellaris-DLC-Helper"
             with zipfile.ZipFile(zip_path, 'w', compression) as zipf:
                 for root, dirs, files in os.walk(self.final_path):
                     for file in files:
                         file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, self.final_path)
+                        # 在 ZIP 中添加顶层文件夹
+                        rel_path = os.path.relpath(file_path, self.final_path)
+                        arcname = os.path.join(top_folder, rel_path)
                         zipf.write(file_path, arcname)
 
             # 计算文件大小和哈希
