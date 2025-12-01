@@ -681,4 +681,5 @@ class AutoUpdater:
                 shutil.rmtree(self.temp_dir)
             self.logger.info("临时文件清理完成")
         except Exception as e:
-            self.logger.warning(f"清理临时文件失败: {e}")
+            # 临时目录可能还在被占用（如 PyInstaller 的 _MEI 目录），静默忽略
+            self.logger.debug(f"清理临时文件失败（可忽略）: {e}")
