@@ -142,10 +142,118 @@ class AutoUpdater:
             # 支持续传：如果已存在部分下载文件，尝试使用 Range 请求继续
             headers = {}
             existing_size = 0
+            # 如果服务器支持 Range 或者已有部分文件，则设置 Range header
             if download_path.exists():
                 existing_size = download_path.stat().st_size
                 # 如果已下载的文件与清单中 checksum 匹配，直接返回（不重复下载）
                 if update_info.checksum:
+                    try:
+                        sha256_hash = hashlib.sha256()
+                        with open(download_path, 'rb') as fh:
+                            for block in iter(lambda: fh.read(4096), b""):
+                                sha256_hash.update(block)
+                        got_hash = sha256_hash.hexdigest()
+                        expected = update_info.checksum.strip().lower()
+                        if got_hash == expected:
+                            self.logger.info(f"发现已完整下载的更新包: {download_path}")
+                            return download_path
+                    except Exception:
+                        # 如果计算失败，继续下载/续传
+                        existing_size = download_path.stat().st_size
+            # 如果已有部分文件，试图判断服务器是否支持 Range，并校验远程文件大小
+            mode = 'wb'
+            downloaded_size = 0
+            if existing_size > 0:
+                # 尝试使用 HEAD 获取远程文件信息，以确认是否支持续传
+                try:
+                    head = requests.head(update_info.update_url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+                    head.raise_for_status()
+                    accept_ranges = head.headers.get('accept-ranges', '').lower()
+                    remote_size = None
+                    if head.headers.get('content-length'):
+                        try:
+                            remote_size = int(head.headers.get('content-length'))
+                        except Exception:
+                            remote_size = None
+                    # 记录服务器返回信息
+                    self.logger.debug(f"远程文件接受续传: {accept_ranges}, 大小: {remote_size}")
+                    # 如果远程文件大小已知并且本地已下载大小 >= 远端大小，尝试通过 checksum 判断是否完整
+                    if remote_size is not None and existing_size >= remote_size:
+                        if update_info.checksum:
+                            try:
+                                sha256_hash = hashlib.sha256()
+                                with open(download_path, 'rb') as fh:
+                                    for block in iter(lambda: fh.read(4096), b""):
+                                        sha256_hash.update(block)
+                                got_hash = sha256_hash.hexdigest()
+                                expected = update_info.checksum.strip().lower()
+                                if got_hash == expected:
+                                    self.logger.info(f"发现已完整下载的更新包: {download_path}")
+                                    return download_path
+                            except Exception:
+                                pass
+                        # 如果文件大小超过或等于远端但校验不通过，删除本地文件并从头开始
+                        try:
+                            download_path.unlink()
+                            existing_size = 0
+                        except Exception:
+                            pass
+                    # 若远端支持字节范围，则准备续传
+                    if accept_ranges == 'bytes' and remote_size is not None and existing_size > 0:
+                        headers['Range'] = f'bytes={existing_size}-'
+                        mode = 'ab'
+                        downloaded_size = existing_size
+                    else:
+                        # 未知是否支持续传，仍尝试以 head 检测到的不支持续传为准，从头下载
+                        mode = 'wb'
+                        downloaded_size = 0
+                except Exception:
+                    # 如果 HEAD 请求失败或解析出错，就以 GET 的方式尝试续传（原有逻辑），设置 Range 并处理可能的 416
+                    headers['Range'] = f'bytes={existing_size}-'
+                    mode = 'ab'
+                    downloaded_size = existing_size
+            # 发起请求（支持续传）。若 server 返回 416（Range Not Satisfiable），尝试删除本地续传文件并重试完整下载
+            # 尝试请求与写入，遇到 416 时自动重试一次（删除本地部分文件后从头开始）
+            attempts = 0
+            max_attempts = 2
+            response = None
+            last_exception = None
+            while attempts < max_attempts:
+                try:
+                    response = requests.get(update_info.update_url, stream=True, timeout=REQUEST_TIMEOUT, headers=headers)
+                    response.raise_for_status()
+                    break
+                except requests.exceptions.HTTPError as he:
+                    last_exception = he
+                    status_code = None
+                    try:
+                        status_code = he.response.status_code
+                    except Exception:
+                        status_code = None
+                    if status_code == 416 and existing_size > 0:
+                        self.logger.warning("服务器返回 416，续传不可用或本地文件与远端不一致，删除本地部分文件并重试")
+                        try:
+                            download_path.unlink()
+                        except Exception:
+                            pass
+                        headers.pop('Range', None)
+                        mode = 'wb'
+                        downloaded_size = 0
+                        existing_size = 0
+                        # 改变条件，继续下一次重试
+                        attempts += 1
+                        continue
+                    else:
+                        raise
+                except Exception as e:
+                    last_exception = e
+                    raise
+            if response is None:
+                # 如果超过重试但仍然没有 response，则抛出最后的异常
+                if last_exception:
+                    raise last_exception
+                else:
+                    raise RuntimeError("无法获取更新包，未知错误")
                     try:
                         sha256_hash = hashlib.sha256()
                         with open(download_path, 'rb') as fh:
