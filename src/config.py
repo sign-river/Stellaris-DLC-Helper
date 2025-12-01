@@ -46,7 +46,7 @@ def _get_best_source_url():
 UPDATE_URL_BASE = get_config("server", "update_url_base", default="https://dlc.dlchelper.top/update/")
 UPDATE_CHECK_URL = f"{UPDATE_URL_BASE}version.json"
 ANNOUNCEMENT_URL = f"{UPDATE_URL_BASE}announcement.txt"
-APPINFO_URL = get_config("server", "appinfo_url", default="https://dlc.dlchelper.top/appinfo/stellaris_appinfo.json")
+APPINFO_URL = "http://47.100.2.190/appinfo/stellaris_appinfo.json"
 
 # 网络配置
 REQUEST_TIMEOUT = get_config("server", "timeout", default=30)

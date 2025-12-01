@@ -11,6 +11,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 import logging
+import os
 
 
 class SettingsDialog(ctk.CTkToplevel):
@@ -27,11 +28,12 @@ class SettingsDialog(ctk.CTkToplevel):
         self.geometry("700x500")
         self.resizable(False, False)
 
-        # 设置图标
+        # 设置窗口图标
         try:
-            icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "tea_Gray.ico"
-            if icon_path.exists():
-                self.iconbitmap(str(icon_path))
+            from ..utils.path_utils import PathUtils
+            icon_path = PathUtils.get_resource_path("assets/images/tea_Gray.ico")
+            if os.path.exists(icon_path):
+                self.iconbitmap(icon_path)
         except Exception as e:
             self.logger.warning(f"设置窗口图标失败: {e}")
 

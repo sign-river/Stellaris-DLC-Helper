@@ -424,8 +424,9 @@ class Packager:
             # 更新version.json中的checksum
             self._update_version_checksum(sha256_hash)
 
-            # 跳过清理中间文件，保留 dist/ 与发布目录用于本地验证
-            print("跳过清理中间文件，保留 dist/ 与发布目录用于验证")
+            # 清理中间文件
+            print("清理中间文件...")
+            self._cleanup_intermediate_files()
 
             return zip_path, zip_size, sha256_hash
 
@@ -517,6 +518,12 @@ class Packager:
         """清理打包过程中的中间文件"""
         try:
             # 删除构建目录
+            build_path = self.project_root / "build"
+            if build_path.exists():
+                shutil.rmtree(build_path)
+                print("已删除 build/ 目录")
+            
+            # 删除dist目录
             if self.dist_path.exists():
                 shutil.rmtree(self.dist_path)
                 print("已删除 dist/ 目录")
@@ -529,6 +536,11 @@ class Packager:
             if spec_file.exists():
                 spec_file.unlink()
                 print("已删除 Stellaris-DLC-Helper.spec 文件")
+            
+            helper_spec_file = self.project_root / "updater_helper.spec"
+            if helper_spec_file.exists():
+                helper_spec_file.unlink()
+                print("已删除 updater_helper.spec 文件")
 
             # 删除解压后的目录
             if self.final_path.exists():
@@ -568,7 +580,7 @@ class Packager:
             print("生成的文件：")
             zip_name = f"Stellaris-DLC-Helper-v{VERSION}.zip"
             print(f"  📦 {zip_name}")
-            print("  💡 中间文件已清理（保留虚拟环境以加速下次打包）")
+            print("  💡 中间文件已清理（仅保留虚拟环境以加速下次打包）")
 
         except Exception as e:
             print(f"打包失败: {e}")

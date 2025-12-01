@@ -128,3 +128,29 @@ class PathUtils:
         返回: YYYYmmddHHMMSS 格式字符串
         """
         return datetime.now().strftime("%Y%m%d%H%M%S")
+    
+    @staticmethod
+    def get_resource_path(relative_path: str) -> str:
+        """
+        获取资源文件的绝对路径，兼容开发环境和打包后的exe
+        
+        参数:
+            relative_path: 相对于项目根目录的资源路径，如 "assets/images/icon.png"
+        
+        返回:
+            str: 资源文件的绝对路径
+        """
+        if getattr(sys, 'frozen', False):
+            # 打包后的exe：优先查找exe同级目录，其次查找_MEIPASS临时目录
+            exe_dir = os.path.dirname(sys.executable)
+            exe_resource = os.path.join(exe_dir, relative_path)
+            if os.path.exists(exe_resource):
+                return exe_resource
+            
+            # 如果exe同级目录没有，尝试_MEIPASS临时目录
+            base_path = getattr(sys, '_MEIPASS', exe_dir)
+            return os.path.join(base_path, relative_path)
+        else:
+            # 开发环境：相对于项目根目录
+            base_dir = PathUtils.get_base_dir()
+            return os.path.join(base_dir, relative_path)

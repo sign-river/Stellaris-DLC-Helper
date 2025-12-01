@@ -41,9 +41,10 @@ class MainWindowCTk:
         
         # 设置窗口图标
         try:
-            icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "tea_Gray.ico"
-            if icon_path.exists():
-                self.root.iconbitmap(str(icon_path))
+            from ..utils.path_utils import PathUtils
+            icon_path = PathUtils.get_resource_path("assets/images/tea_Gray.ico")
+            if os.path.exists(icon_path):
+                self.root.iconbitmap(icon_path)
         except Exception as e:
             import logging
             logging.warning(f"设置窗口图标失败: {e}")
@@ -135,8 +136,8 @@ class MainWindowCTk:
         
         # 左上角图标
         try:
-            icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "tea_Gray.png"
-            if icon_path.exists():
+            icon_path = PathUtils.get_resource_path("assets/images/tea_Gray.png")
+            if os.path.exists(icon_path):
                 icon_image = Image.open(icon_path)
                 # 调整图标大小
                 icon_image = icon_image.resize((80, 80), Image.Resampling.LANCZOS)
@@ -236,8 +237,8 @@ class MainWindowCTk:
 
         # GitHub图标按钮
         try:
-            github_icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "github.png"
-            if github_icon_path.exists():
+            github_icon_path = PathUtils.get_resource_path("assets/images/github.png")
+            if os.path.exists(github_icon_path):
                 github_image = Image.open(github_icon_path)
                 github_photo = ctk.CTkImage(light_image=github_image, dark_image=github_image, size=(20, 20))
                 github_btn = ctk.CTkButton(
@@ -300,8 +301,8 @@ class MainWindowCTk:
 
         # B站图标按钮
         try:
-            bilibili_icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "bilibili.png"
-            if bilibili_icon_path.exists():
+            bilibili_icon_path = PathUtils.get_resource_path("assets/images/bilibili.png")
+            if os.path.exists(bilibili_icon_path):
                 bilibili_image = Image.open(bilibili_icon_path)
                 bilibili_photo = ctk.CTkImage(light_image=bilibili_image, dark_image=bilibili_image, size=(20, 20))
                 bilibili_btn = ctk.CTkButton(
@@ -706,8 +707,8 @@ class MainWindowCTk:
         
         # 设置按钮（最先添加，这样pack side="right"时会在最右边）
         try:
-            set_icon_path = Path(__file__).parent.parent.parent / "assets" / "images" / "set.png"
-            if set_icon_path.exists():
+            set_icon_path = PathUtils.get_resource_path("assets/images/set.png")
+            if os.path.exists(set_icon_path):
                 set_image = Image.open(set_icon_path)
                 set_photo = ctk.CTkImage(light_image=set_image, dark_image=set_image, size=(20, 20))
                 settings_btn = ctk.CTkButton(
