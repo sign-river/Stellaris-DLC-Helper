@@ -255,18 +255,7 @@ class AutoUpdater:
             if not self._create_backup():
                 return False
 
-            def fetch_update_log(self, update_info: UpdateInfo, timeout: int = 10) -> Optional[str]:
-                """获取更新日志内容（文本）"""
-                if not update_info or not update_info.update_log_url:
-                    return None
-                try:
-                    self.logger.info(f"获取更新日志: {update_info.update_log_url}")
-                    r = requests.get(update_info.update_log_url, timeout=timeout)
-                    r.raise_for_status()
-                    return r.text
-                except Exception as e:
-                    self.logger.warning(f"获取更新日志失败: {e}")
-                    return None
+    
 
             # 获取程序根目录
             app_root = Path(__file__).parent.parent.parent
@@ -339,6 +328,21 @@ class AutoUpdater:
         except Exception as e:
             self.logger.error(f"回滚失败: {e}")
             return False
+
+    def fetch_update_log(self, update_info: UpdateInfo, timeout: int = 10) -> Optional[str]:
+        """获取更新日志内容（文本）"""
+        if not update_info or not update_info.update_log_url:
+            return None
+        try:
+            url = update_info.update_log_url
+            self.logger.info(f"获取更新日志: {url}")
+            r = requests.get(url, timeout=timeout)
+            r.raise_for_status()
+            self.logger.debug(f"更新日志 HTTP {r.status_code} 长度 {len(r.content)}")
+            return r.text
+        except Exception as e:
+            self.logger.warning(f"获取更新日志失败: {e}")
+            return None
 
     def _create_backup(self) -> bool:
         """创建当前版本的备份"""

@@ -118,6 +118,8 @@ class UpdateDialog(ctk.CTkToplevel):
             # 异步加载日志并填充
             def load_log_thread():
                 try:
+                    url = getattr(self.update_info, 'update_log_url', None)
+                    self.logger.debug(f"尝试加载更新日志 URL: {url}")
                     content = self.updater.fetch_update_log(self.update_info)
                     if content:
                         self.after(0, lambda: (self.log_textbox.delete("0.0", "end"), self.log_textbox.insert("0.0", content)))
@@ -141,7 +143,7 @@ class UpdateDialog(ctk.CTkToplevel):
 
         # 按钮区域
         button_frame = ctk.CTkFrame(self, fg_color="transparent")
-        button_frame.pack(fill="x", padx=20, pady=(0, 20))
+        button_frame.pack(side="bottom", fill="x", padx=20, pady=(0, 20))
 
         # 稍后提醒按钮（强制/非强制更新均显示，但强制更新时会提示确认）
         # 注意: 强制更新仍会在界面中显示“稍后提醒”，以便用户有明确选择权，但点击时会弹出警告提示。
