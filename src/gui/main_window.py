@@ -603,7 +603,22 @@ class MainWindowCTk:
             hover_color="#1E88E5",
             text_color="#FFFFFF"
         )
-        self.remove_patch_btn.pack(side="left")
+        self.remove_patch_btn.pack(side="left", padx=(0, 10))
+        
+        # 清理缓存按钮（次要 - 浅蓝）
+        self.clear_cache_btn = ctk.CTkButton(
+            left_btn_container,
+            text="🗑️ 清理缓存",
+            command=self._clear_cache,
+            width=130,
+            height=45,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            corner_radius=8,
+            fg_color="#42A5F5",
+            hover_color="#1E88E5",
+            text_color="#FFFFFF"
+        )
+        self.clear_cache_btn.pack(side="left")
         
         # 右侧按钮组(前进/执行区)
         right_btn_container = ctk.CTkFrame(button_frame, fg_color="transparent")
@@ -655,14 +670,34 @@ class MainWindowCTk:
         log_frame.grid_columnconfigure(0, weight=1)
         log_frame.grid_rowconfigure(1, weight=1)
         
+        # 标题栏（包含标题和复制按钮）
+        log_title_frame = ctk.CTkFrame(log_frame, fg_color="transparent")
+        log_title_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 10))
+        log_title_frame.grid_columnconfigure(0, weight=1)
+        
         # 标题
         label = ctk.CTkLabel(
-            log_frame,
+            log_title_frame,
             text="📋 操作日志",
             font=ctk.CTkFont(size=16, weight="bold"),
             text_color="#1976D2"  # 主色调蓝色
         )
-        label.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
+        label.pack(side="left")
+        
+        # 复制日志按钮
+        copy_log_btn = ctk.CTkButton(
+            log_title_frame,
+            text="📋 复制日志",
+            command=self._copy_log,
+            width=100,
+            height=28,
+            font=ctk.CTkFont(size=12),
+            corner_radius=6,
+            fg_color="#42A5F5",
+            hover_color="#1E88E5",
+            text_color="#FFFFFF"
+        )
+        copy_log_btn.pack(side="right")
         
         # 日志文本框
         self.log_text = ctk.CTkTextbox(
@@ -682,6 +717,51 @@ class MainWindowCTk:
         self.logger.set_widget(self.log_text, self.root)
 
     # --------------------- UI helpers: re-test spinner ---------------------
+    def _show_friendly_error(self, error_type: str, exception: Exception, context: str = ""):
+        """
+        显示友好的错误提示
+        
+        参数:
+            error_type: 错误类型 ('network', 'disk', 'permission', 'file', 'unknown')
+            exception: 异常对象
+            context: 错误上下文描述
+        """
+        error_messages = {
+            'network': {
+                'title': '网络连接失败',
+                'message': '无法连接到服务器\n\n可能的原因：\n• 网络连接不稳定\n• 服务器暂时不可用\n• 防火墙阻止了连接\n\n建议：\n• 检查网络连接\n• 稍后重试\n• 尝试切换下载源'
+            },
+            'disk': {
+                'title': '磁盘空间不足',
+                'message': '磁盘空间不足，无法完成操作\n\n建议：\n• 清理磁盘空间\n• 更换安装目录\n• 使用「清理缓存」功能释放空间'
+            },
+            'permission': {
+                'title': '权限不足',
+                'message': '没有足够的权限执行此操作\n\n建议：\n• 以管理员身份运行程序\n• 检查文件/文件夹权限\n• 确保文件未被其他程序占用'
+            },
+            'file': {
+                'title': '文件操作失败',
+                'message': '文件操作失败\n\n可能的原因：\n• 文件被其他程序占用\n• 文件损坏\n• 路径包含特殊字符\n\n建议：\n• 关闭相关程序后重试\n• 检查文件路径'
+            },
+            'unknown': {
+                'title': '操作失败',
+                'message': '操作执行失败'
+            }
+        }
+        
+        error_info = error_messages.get(error_type, error_messages['unknown'])
+        
+        # 构建完整错误消息
+        full_message = error_info['message']
+        if context:
+            full_message = f"{context}\n\n{full_message}"
+        
+        # 添加详细错误信息（可选）
+        if str(exception):
+            full_message += f"\n\n详细信息：\n{str(exception)}"
+        
+        messagebox.showerror(error_info['title'], full_message)
+    
     def _start_retest_ui(self, text: str = "正在测速..."):
         """开始显示测速/暂停状态，并启动文本动画（spinner）。"""
         try:
@@ -1984,6 +2064,91 @@ class MainWindowCTk:
                 self.root.after(0, lambda: self.remove_patch_btn.configure(state="normal"))
         
         threading.Thread(target=remove_thread, daemon=True).start()
+    
+    def _clear_cache(self):
+        """清理DLC缓存"""
+        try:
+            from ..utils import PathUtils
+            import shutil
+            from pathlib import Path
+            
+            # 获取缓存目录
+            cache_dir = Path(PathUtils.get_cache_dir())
+            dlc_cache_dir = cache_dir / "dlc"
+            
+            if not dlc_cache_dir.exists():
+                messagebox.showinfo("提示", "缓存目录不存在或已经是空的")
+                return
+            
+            # 计算缓存大小
+            total_size = 0
+            file_count = 0
+            for item in dlc_cache_dir.rglob("*"):
+                if item.is_file():
+                    total_size += item.stat().st_size
+                    file_count += 1
+            
+            if file_count == 0:
+                messagebox.showinfo("提示", "缓存目录是空的")
+                return
+            
+            # 转换为易读的大小
+            size_mb = total_size / (1024 * 1024)
+            size_str = f"{size_mb:.1f} MB" if size_mb < 1024 else f"{size_mb/1024:.2f} GB"
+            
+            # 确认清理
+            result = messagebox.askyesno(
+                "确认清理缓存",
+                f"即将清理DLC缓存目录\n\n"
+                f"文件数量: {file_count}\n"
+                f"占用空间: {size_str}\n\n"
+                f"清理后下次下载DLC需要重新从服务器获取。\n"
+                f"是否继续？"
+            )
+            
+            if not result:
+                return
+            
+            # 执行清理
+            self.logger.info(f"开始清理缓存: {file_count}个文件, {size_str}")
+            
+            try:
+                shutil.rmtree(dlc_cache_dir)
+                dlc_cache_dir.mkdir(parents=True, exist_ok=True)
+                self.logger.success(f"缓存清理成功！释放空间: {size_str}")
+                messagebox.showinfo("成功", f"缓存清理完成！\n释放空间: {size_str}")
+            except Exception as e:
+                from ..utils import handle_error
+                handle_error(f"清理缓存失败", exc=e)
+                messagebox.showerror("错误", f"清理缓存失败:\n{str(e)}")
+                
+        except Exception as e:
+            from ..utils import handle_error
+            handle_error("获取缓存信息失败", exc=e)
+            messagebox.showerror("错误", f"操作失败:\n{str(e)}")
+    
+    def _copy_log(self):
+        """复制操作日志到剪贴板"""
+        try:
+            # 获取日志文本内容
+            log_content = self.log_text.get("1.0", "end-1c")
+            
+            if not log_content.strip():
+                messagebox.showinfo("提示", "日志内容为空")
+                return
+            
+            # 复制到剪贴板
+            self.root.clipboard_clear()
+            self.root.clipboard_append(log_content)
+            self.root.update()  # 更新剪贴板
+            
+            self.logger.success("日志已复制到剪贴板")
+            messagebox.showinfo("成功", "日志内容已复制到剪贴板！")
+            
+        except Exception as e:
+            from ..utils import handle_error
+            handle_error("复制日志失败", exc=e)
+            messagebox.showerror("错误", f"复制失败:\n{str(e)}")
     
     def _check_recent_update(self):
         """检查是否刚刚完成更新，如果是则显示提示"""
