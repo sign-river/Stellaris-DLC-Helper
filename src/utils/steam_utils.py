@@ -3,13 +3,21 @@
 """
 Steam 工具模块
 用于自动检测 Steam 游戏路径
+
+注意: 此模块使用 Windows 注册表进行路径检测，仅支持 Windows 系统
 """
 
 import os
 import re
-import winreg
+import platform
 from pathlib import Path
 from typing import Optional, List
+
+# Windows 专属模块，仅在 Windows 系统导入
+if platform.system() == "Windows":
+    import winreg
+else:
+    winreg = None
 
 from ..config import STELLARIS_APP_ID
 
@@ -26,7 +34,14 @@ class SteamUtils:
         
         返回:
             Steam 安装路径，如果未找到返回 None
+        
+        注意:
+            此方法仅在 Windows 系统可用
         """
+        # 检查是否为 Windows 系统
+        if platform.system() != "Windows" or winreg is None:
+            return None
+        
         try:
             # 尝试 64 位注册表
             key = winreg.OpenKey(

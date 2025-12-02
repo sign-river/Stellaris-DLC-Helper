@@ -5,6 +5,8 @@ Updater helper script
 Used by application to reliably replace a running exe with a new file and restart it.
 This script waits for the specified pid to exit (if provided), then moves the new file to the destination, starts it and exits.
 If no pid is provided, falls back to waiting for the old file to be unlocked (poll-and-move).
+
+Note: This script is designed for Windows systems only.
 """
 
 import argparse
@@ -13,11 +15,22 @@ import sys
 import time
 import shutil
 import subprocess
-import ctypes
+import platform
+
+# Windows 专属模块，仅在 Windows 系统导入
+if platform.system() == "Windows":
+    import ctypes
+else:
+    ctypes = None
 
 
 def wait_for_pid(pid: int):
     """Wait for process with PID to exit using Windows API"""
+    if platform.system() != "Windows" or ctypes is None:
+        # 非 Windows 系统的简单等待（实际上此工具不应在非 Windows 系统运行）
+        time.sleep(5)
+        return
+    
     # SYNCHRONIZE access right is 0x00100000
     SYNCHRONIZE = 0x00100000
     PROCESS_QUERY_INFORMATION = 0x0400

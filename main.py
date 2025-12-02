@@ -9,17 +9,65 @@ Stellaris DLC Helper - CustomTkinter 版本
 项目地址: https://github.com/sign-river/Stellaris-DLC-Helper
 """
 
-import customtkinter as ctk
+import sys
+import platform
 import logging
-from src.utils.logging_setup import configure_basic_logging, get_default_log_file_path
+
+# 尽早初始化日志系统，确保所有错误都能被记录
+try:
+    from src.utils.logging_setup import configure_basic_logging, get_default_log_file_path
+    configure_basic_logging(log_to_file=True)
+    logger = logging.getLogger(__name__)
+except Exception as e:
+    # 如果日志初始化失败，至少配置基础的控制台输出
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
+    logger = logging.getLogger(__name__)
+    logger.warning(f"日志系统初始化失败: {e}")
+
+# 检查操作系统
+if platform.system() != "Windows":
+    error_msg = f"不支持的操作系统: {platform.system()} {platform.release()}"
+    logger.error(error_msg)
+    logger.error("本工具目前仅实现了 Windows 平台的补丁功能")
+    
+    print("="*60)
+    print("错误: 此程序仅支持 Windows 操作系统")
+    print("="*60)
+    print(f"检测到当前系统: {platform.system()} {platform.release()}")
+    print("\n本工具目前仅实现了 Windows 平台的补丁功能。")
+    print("\n如需支持其他系统，请在项目 GitHub 页面提交 Issue 或贡献代码:")
+    print("https://github.com/sign-river/Stellaris-DLC-Helper/issues")
+    print("="*60)
+    
+    # 尝试显示图形化错误提示
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(
+            "不支持的操作系统",
+            f"此程序仅支持 Windows 操作系统\n\n"
+            f"检测到当前系统: {platform.system()} {platform.release()}\n\n"
+            f"本工具目前仅实现了 Windows 平台的补丁功能。"
+        )
+        root.destroy()
+    except Exception as e:
+        logger.warning(f"显示图形界面错误提示失败: {e}")
+    
+    sys.exit(1)
+
+import customtkinter as ctk
 from src.gui.main_window import MainWindowCTk
 
 
 def main():
     """主函数"""
-    # Configure basic logging for console and file (before creating UI)
-    configure_basic_logging(log_to_file=True)
-    logging.getLogger().info(f"日志文件路径: {get_default_log_file_path()}")
+    # 日志系统已在模块顶部初始化
+    try:
+        logger.info(f"日志文件路径: {get_default_log_file_path()}")
+    except:
+        pass
 
     root = ctk.CTk()
     app = MainWindowCTk(root)
