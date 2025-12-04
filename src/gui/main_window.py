@@ -465,7 +465,8 @@ class MainWindowCTk:
         header_frame.grid_columnconfigure(5, weight=0, minsize=10)   # 间隔
         header_frame.grid_columnconfigure(6, weight=0, minsize=120)  # 下载源显示
         header_frame.grid_columnconfigure(7, weight=0, minsize=10)   # 间隔
-        header_frame.grid_columnconfigure(8, weight=0, minsize=80)   # 全选按钮
+        header_frame.grid_columnconfigure(8, weight=0, minsize=40)   # 刷新按钮
+        header_frame.grid_columnconfigure(9, weight=0, minsize=80)   # 全选按钮
         
         # 第0列：DLC列表标题
         label = ctk.CTkLabel(
@@ -544,7 +545,46 @@ class MainWindowCTk:
         self.server_status_label.grid(row=0, column=3, sticky="ew", padx=(10, 10))
         self.server_status_label.grid_remove()  # 初始隐藏
         
-        # 第8列：全选按钮
+        # 第8列：刷新按钮（图标）
+        try:
+            refresh_icon_path = PathUtils.get_resource_path("assets/images/refresh.png")
+            if os.path.exists(refresh_icon_path):
+                refresh_image = Image.open(refresh_icon_path)
+                refresh_photo = ctk.CTkImage(light_image=refresh_image, dark_image=refresh_image, size=(20, 20))
+                self.refresh_btn = ctk.CTkButton(
+                    header_frame,
+                    image=refresh_photo,
+                    text="",
+                    fg_color="#42A5F5",
+                    hover_color="#1E88E5",
+                    width=32,
+                    height=32,
+                    corner_radius=6,
+                    command=self._refresh_all_status
+                )
+            else:
+                self.refresh_btn = ctk.CTkButton(
+                    header_frame,
+                    text="⟳",
+                    width=32,
+                    height=32,
+                    corner_radius=6,
+                    command=self._refresh_all_status
+                )
+        except Exception:
+            # 降级为文本按钮
+            self.refresh_btn = ctk.CTkButton(
+                header_frame,
+                text="⟳",
+                width=32,
+                height=32,
+                corner_radius=6,
+                command=self._refresh_all_status
+            )
+        # 使刷新按钮与旁边的“全选”按钮在高度上保持一致，并在两者之间增加间距
+        self.refresh_btn.grid(row=0, column=8, sticky="e", padx=(0, 8), pady=(0, 0))
+
+        # 第9列：全选按钮
         self.select_all_btn = ctk.CTkButton(
             header_frame,
             text="全选",
@@ -557,7 +597,8 @@ class MainWindowCTk:
             hover_color="#1E88E5",
             text_color="#FFFFFF"
         )
-        self.select_all_btn.grid(row=0, column=8, sticky="e")
+        # 让全选按钮紧贴右侧，不添加额外外边距
+        self.select_all_btn.grid(row=0, column=9, sticky="e", padx=(0, 0), pady=(0, 0))
         
         # 滚动框架（用于显示DLC列表）
         self.dlc_scrollable_frame = ctk.CTkScrollableFrame(
@@ -941,6 +982,26 @@ class MainWindowCTk:
                 self.logger.debug("下载状态文件已清除")
         except Exception as e:
             self.logger.warning(f"清除下载状态文件失败: {e}")
+
+    def _refresh_all_status(self):
+        """刷新所有状态：重新检测 DLC 列表、补丁状态和下载状态等"""
+        try:
+            self.logger.info("手动刷新：开始重新检测DLC和补丁状态...")
+            # 重新加载 DLC 列表（会在后台线程中完成并调用 display_dlc_list）
+            self._auto_load_dlc_list()
+            # 重新检查补丁状态并更新 UI
+            try:
+                self._check_patch_status()
+            except Exception:
+                pass
+            # 检查是否有待恢复的下载状态
+            try:
+                self._check_pending_download_state()
+            except Exception:
+                pass
+            self.logger.info("手动刷新：已触发所有检测任务")
+        except Exception as e:
+            self.logger.log_exception("刷新状态失败", e)
     
     def _auto_load_dlc_list(self):
         """自动加载DLC列表（内部方法，不弹窗提示）"""
@@ -1668,7 +1729,9 @@ class MainWindowCTk:
                     downloader = DLCDownloader(progress_callback)
                     self.current_downloader = downloader  # 保存当前尝试的下载器
                     self.logger.info(f"\n{'='*50}")
-                    self.logger.info(f"[{idx}/{len(selected)}] {dlc['name']}")
+                    # 在 DLC 名称后显示预估/已知文件大小（如有）
+                    display_size = dlc.get('size') or '未知'
+                    self.logger.info(f"[{idx}/{len(selected)}] {dlc['name']} ({display_size})")
                     
                     # 更新当前下载DLC名称
                     self.root.after(0, lambda name=dlc['name']: self.downloading_label.configure(text=f"正在处理: {name}"))
