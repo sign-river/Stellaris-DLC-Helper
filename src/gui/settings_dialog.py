@@ -83,12 +83,14 @@ class SettingsDialog(ctk.CTkToplevel):
 
         # 添加选项卡
         self.tabview.add("源管理")
+        self.tabview.add("配置管理")
         # 可以添加更多选项卡
         # self.tabview.add("常规设置")
         # self.tabview.add("高级选项")
 
-        # 创建源管理内容
+        # 创建选项卡内容
         self._create_source_management_tab()
+        self._create_config_tab()
 
         # 底部按钮
         button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
@@ -120,57 +122,7 @@ class SettingsDialog(ctk.CTkToplevel):
             text_color="#666666"
         )
         info_label.pack(pady=(10, 20))
-
-        # 显示当前生效的 config.json 路径（只读，方便用户复制或打开）
-        try:
-            from .. import config_loader
-            cfg_path = getattr(config_loader, '_loader').config_path
-        except Exception:
-            cfg_path = "(未找到)"
-
-        cfg_frame = ctk.CTkFrame(tab, fg_color="#FFFFFF", corner_radius=6)
-        cfg_frame.pack(fill="x", padx=10, pady=(0, 12))
-
-        cfg_label = ctk.CTkLabel(
-            cfg_frame,
-            text="当前生效的 config.json:",
-            font=ctk.CTkFont(size=11),
-            text_color="#333333"
-        )
-        cfg_label.pack(side="left", padx=(8, 8), pady=8)
-
-        self.config_path_entry = ctk.CTkEntry(
-            cfg_frame,
-            width=380,
-            height=28,
-            font=ctk.CTkFont(size=11),
-            state="normal"
-        )
-        try:
-            self.config_path_entry.insert(0, str(cfg_path))
-            self.config_path_entry.configure(state="readonly")
-        except Exception:
-            self.config_path_entry.insert(0, "(未找到)")
-            self.config_path_entry.configure(state="readonly")
-        self.config_path_entry.pack(side="left", padx=(0, 8), pady=8)
-
-        copy_btn = ctk.CTkButton(
-            cfg_frame,
-            text="复制",
-            width=60,
-            height=28,
-            command=self._copy_config_path
-        )
-        copy_btn.pack(side="left", padx=(0, 6), pady=8)
-
-        open_btn = ctk.CTkButton(
-            cfg_frame,
-            text="打开目录",
-            width=90,
-            height=28,
-            command=self._open_config_in_explorer
-        )
-        open_btn.pack(side="left", padx=(0, 8), pady=8)
+        # （配置路径已移至“配置管理”选项卡）
 
         # 源列表框架
         sources_frame = ctk.CTkScrollableFrame(
@@ -395,3 +347,68 @@ class SettingsDialog(ctk.CTkToplevel):
         # 重新创建源管理选项卡
         self._create_source_management_tab()
         messagebox.showinfo("完成", "源列表已刷新")
+
+    def _create_config_tab(self):
+        """创建配置管理选项卡内容（显示生效的 config.json 路径等）"""
+        tab = self.tabview.tab("配置管理")
+
+        info_label = ctk.CTkLabel(
+            tab,
+            text="配置管理：显示当前生效的配置文件路径，便于诊断与手动替换",
+            font=ctk.CTkFont(size=12),
+            text_color="#666666"
+        )
+        info_label.pack(pady=(10, 16))
+
+        try:
+            from .. import config_loader
+            cfg_path = getattr(config_loader, '_loader').config_path
+        except Exception:
+            cfg_path = "(未找到)"
+
+        cfg_frame = ctk.CTkFrame(tab, fg_color="#FFFFFF", corner_radius=6)
+        cfg_frame.pack(fill="x", padx=10, pady=(0, 12))
+
+        cfg_label = ctk.CTkLabel(
+            cfg_frame,
+            text="当前生效的 config.json:",
+            font=ctk.CTkFont(size=11),
+            text_color="#333333"
+        )
+        cfg_label.pack(side="left", padx=(8, 8), pady=8)
+
+        # 扩大输入框和按钮尺寸以避免文字被截断
+        self.config_path_entry = ctk.CTkEntry(
+            cfg_frame,
+            width=520,
+            height=32,
+            font=ctk.CTkFont(size=11),
+            state="normal"
+        )
+        try:
+            self.config_path_entry.insert(0, str(cfg_path))
+            self.config_path_entry.configure(state="readonly")
+        except Exception:
+            self.config_path_entry.insert(0, "(未找到)")
+            self.config_path_entry.configure(state="readonly")
+        self.config_path_entry.pack(side="left", padx=(0, 8), pady=8)
+
+        copy_btn = ctk.CTkButton(
+            cfg_frame,
+            text="复制",
+            width=90,
+            height=32,
+            font=ctk.CTkFont(size=11),
+            command=self._copy_config_path
+        )
+        copy_btn.pack(side="left", padx=(0, 8), pady=8)
+
+        open_btn = ctk.CTkButton(
+            cfg_frame,
+            text="打开目录",
+            width=110,
+            height=32,
+            font=ctk.CTkFont(size=11),
+            command=self._open_config_in_explorer
+        )
+        open_btn.pack(side="left", padx=(0, 8), pady=8)
