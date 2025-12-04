@@ -126,17 +126,32 @@ class DLCDownloader:
         cutoff_time = current_time - 60
         state['speed_samples'] = [(t, b) for t, b in state['speed_samples'] if t >= cutoff_time]
         
-        # 需要至少10秒的数据才能判断
+        # 需要至少2个采样点才能计算速度
         if len(state['speed_samples']) < 2:
             return False, None, None
         
+        # 计算实际采样时间跨度
         time_span = current_time - state['speed_samples'][0][0]
-        if time_span < 10:
+        
+        # 【修复1】最少需要5秒数据,但对于小文件要宽松处理
+        # 如果文件很小(已下载量<100MB),只需要5秒;否则需要10秒
+        min_time_required = 5 if state['total_downloaded'] < 100 * 1024 * 1024 else 10
+        
+        if time_span < min_time_required:
             return False, None, None
         
         # 计算平均速度（MB/s）
         bytes_delta = state['total_downloaded'] - state['speed_samples'][0][1]
+        
+        # 【修复2】防止除零,确保time_span至少为0.001
+        if time_span < 0.001:
+            time_span = 0.001
+        
         avg_speed_mb = (bytes_delta / 1024 / 1024) / time_span
+        
+        # 【修复3】如果下载量太小(少于5MB),速度计算不可靠,跳过检查
+        if bytes_delta < 5 * 1024 * 1024:
+            return False, None, None
         
         # 检查速度阈值（考虑Gitee稳定2-3 MB/s）
         # 如果速度持续低于1.0 MB/s（低于Gitee下限），持续20秒以上
@@ -172,8 +187,9 @@ class DLCDownloader:
                         available_sources.sort(key=lambda x: x[0], reverse=True)
                         best_speed, best_url, best_source = available_sources[0]
                         
-                        # 只有当备选源速度明显更快时才切换（至少快50%）
-                        if best_speed > avg_speed_mb * 1.5:
+                        # 【修复4】只有当备选源速度明显更快时才切换（至少快100%）
+                        # 提高切换阈值,避免频繁切换
+                        if best_speed > avg_speed_mb * 2.0:
                             self._log_message(f"⚠️ 检测到速度过慢 ({avg_speed_mb:.2f} MB/s)，切换到更快的源: {best_source} (缓存速度: {best_speed:.2f} MB/s)")
                             self._reset_dlc_download_state()  # 重置DLC级别状态
                             return True, best_url, best_source
@@ -199,7 +215,6 @@ class DLCDownloader:
                         self._log_message(f"❌ 重新测速失败: {e}")
         else:
             # 速度正常，重置慢速计时器
-            state['slow_speed_duration'] = 0
             state['slow_speed_duration'] = 0
         
         state['last_speed_check_time'] = current_time
