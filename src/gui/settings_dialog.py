@@ -121,6 +121,57 @@ class SettingsDialog(ctk.CTkToplevel):
         )
         info_label.pack(pady=(10, 20))
 
+        # 显示当前生效的 config.json 路径（只读，方便用户复制或打开）
+        try:
+            from .. import config_loader
+            cfg_path = getattr(config_loader, '_loader').config_path
+        except Exception:
+            cfg_path = "(未找到)"
+
+        cfg_frame = ctk.CTkFrame(tab, fg_color="#FFFFFF", corner_radius=6)
+        cfg_frame.pack(fill="x", padx=10, pady=(0, 12))
+
+        cfg_label = ctk.CTkLabel(
+            cfg_frame,
+            text="当前生效的 config.json:",
+            font=ctk.CTkFont(size=11),
+            text_color="#333333"
+        )
+        cfg_label.pack(side="left", padx=(8, 8), pady=8)
+
+        self.config_path_entry = ctk.CTkEntry(
+            cfg_frame,
+            width=380,
+            height=28,
+            font=ctk.CTkFont(size=11),
+            state="normal"
+        )
+        try:
+            self.config_path_entry.insert(0, str(cfg_path))
+            self.config_path_entry.configure(state="readonly")
+        except Exception:
+            self.config_path_entry.insert(0, "(未找到)")
+            self.config_path_entry.configure(state="readonly")
+        self.config_path_entry.pack(side="left", padx=(0, 8), pady=8)
+
+        copy_btn = ctk.CTkButton(
+            cfg_frame,
+            text="复制",
+            width=60,
+            height=28,
+            command=self._copy_config_path
+        )
+        copy_btn.pack(side="left", padx=(0, 6), pady=8)
+
+        open_btn = ctk.CTkButton(
+            cfg_frame,
+            text="打开目录",
+            width=90,
+            height=28,
+            command=self._open_config_in_explorer
+        )
+        open_btn.pack(side="left", padx=(0, 8), pady=8)
+
         # 源列表框架
         sources_frame = ctk.CTkScrollableFrame(
             tab,
@@ -311,6 +362,33 @@ class SettingsDialog(ctk.CTkToplevel):
                 self.after(0, lambda: self.test_all_btn.configure(state="normal", text="🚀 测速所有源"))
 
         threading.Thread(target=test_thread, daemon=True).start()
+
+    def _copy_config_path(self):
+        """复制 config.json 路径到剪贴板"""
+        try:
+            path = self.config_path_entry.get()
+            self.clipboard_clear()
+            self.clipboard_append(path)
+            self.update()
+            messagebox.showinfo("已复制", "配置路径已复制到剪贴板")
+        except Exception as e:
+            messagebox.showwarning("复制失败", f"无法复制配置路径: {e}")
+
+    def _open_config_in_explorer(self):
+        """在资源管理器中打开 config.json 所在目录"""
+        try:
+            from pathlib import Path
+            path_str = self.config_path_entry.get()
+            p = Path(path_str)
+            target = p if p.exists() and p.is_file() else p.parent
+            import subprocess
+            if os.name == 'nt':
+                subprocess.Popen(['explorer', str(target)])
+            else:
+                # cross-platform fallback
+                subprocess.Popen(['xdg-open', str(target)])
+        except Exception as e:
+            messagebox.showwarning("打开失败", f"无法打开路径: {e}")
 
     def _refresh_sources(self):
         """刷新源列表"""
