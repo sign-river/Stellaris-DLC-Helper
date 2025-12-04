@@ -1430,25 +1430,40 @@ class MainWindowCTk:
         self.is_downloading = True
         self.execute_btn.configure(text="⏸️ 暂停下载", state="normal")
         
-        # 在后台线程中进行测速选择最佳源
-        def speed_test_thread():
-            try:
-                best_source, test_url = self.dlc_manager.source_manager.get_best_download_source(
-                    silent=False,  # 允许显示详细信息到控制台，但GUI会通过log_callback显示
-                    log_callback=self.logger.info
-                )
-                self.best_download_source = best_source
-                # 选择结果已在get_best_download_source中通过log_callback输出，这里不再重复
-            except Exception as e:
-                self.logger.warning(f"测速失败，使用默认源: {e}")
-                self.best_download_source = "domestic_cloud"
-            
-            # 测速完成后，在主线程中继续下载流程
-            self.root.after(0, lambda: self._continue_download_after_speed_test(selected))
+        # 检查是否跳过测速
+        try:
+            from .. import config_loader
+            skip_speed_test = config_loader.get_config("settings", "skip_speed_test", default=False)
+            default_source = config_loader.get_config("settings", "default_source", default="github")
+        except Exception:
+            skip_speed_test = False
+            default_source = "github"
         
-        # 启动测速线程
-        import threading
-        threading.Thread(target=speed_test_thread, daemon=True).start()
+        if skip_speed_test:
+            # 跳过测速，直接使用默认源
+            self.best_download_source = default_source
+            self.logger.info(f"已跳过测速，使用默认源: {default_source}")
+            self.root.after(0, lambda: self._continue_download_after_speed_test(selected))
+        else:
+            # 在后台线程中进行测速选择最佳源
+            def speed_test_thread():
+                try:
+                    best_source, test_url = self.dlc_manager.source_manager.get_best_download_source(
+                        silent=False,  # 允许显示详细信息到控制台，但GUI会通过log_callback显示
+                        log_callback=self.logger.info
+                    )
+                    self.best_download_source = best_source
+                    # 选择结果已在get_best_download_source中通过log_callback输出，这里不再重复
+                except Exception as e:
+                    self.logger.warning(f"测速失败，使用默认源: {e}")
+                    self.best_download_source = "domestic_cloud"
+                
+                # 测速完成后，在主线程中继续下载流程
+                self.root.after(0, lambda: self._continue_download_after_speed_test(selected))
+            
+            # 启动测速线程
+            import threading
+            threading.Thread(target=speed_test_thread, daemon=True).start()
     
     def _continue_download_after_speed_test(self, selected):
         """测速完成后继续下载流程"""

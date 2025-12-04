@@ -81,14 +81,15 @@ class SettingsDialog(ctk.CTkToplevel):
         self.tabview = ctk.CTkTabview(main_frame, height=350)
         self.tabview.pack(fill="both", expand=True)
 
-        # 添加选项卡
+        # 添加选项卡（常规设置排在最前面）
+        self.tabview.add("常规设置")
         self.tabview.add("源管理")
         self.tabview.add("配置管理")
         # 可以添加更多选项卡
-        # self.tabview.add("常规设置")
         # self.tabview.add("高级选项")
 
         # 创建选项卡内容
+        self._create_general_settings_tab()
         self._create_source_management_tab()
         self._create_config_tab()
 
@@ -374,6 +375,210 @@ class SettingsDialog(ctk.CTkToplevel):
         # 重新创建源管理选项卡
         self._create_source_management_tab()
         messagebox.showinfo("完成", "源列表已刷新")
+
+    def _create_general_settings_tab(self):
+        """创建常规设置选项卡"""
+        tab = self.tabview.tab("常规设置")
+
+        info_label = ctk.CTkLabel(
+            tab,
+            text="常规设置：配置应用程序的基本行为",
+            font=ctk.CTkFont(size=12),
+            text_color="#666666"
+        )
+        info_label.pack(pady=(10, 20))
+
+        # 获取当前配置
+        try:
+            from .. import config_loader
+            skip_test = config_loader.get_config("settings", "skip_speed_test", default=False)
+            default_source = config_loader.get_config("settings", "default_source", default="github")
+        except Exception:
+            skip_test = False
+            default_source = "github"
+
+        # 跳过启动测速设置框架
+        speed_test_frame = ctk.CTkFrame(tab, fg_color="#FFFFFF", corner_radius=8)
+        speed_test_frame.pack(fill="x", padx=20, pady=(0, 15))
+
+        # 标题行
+        title_frame = ctk.CTkFrame(speed_test_frame, fg_color="transparent")
+        title_frame.pack(fill="x", padx=15, pady=(15, 10))
+
+        speed_title = ctk.CTkLabel(
+            title_frame,
+            text="⚡ 启动测速设置",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#1976D2"
+        )
+        speed_title.pack(side="left")
+
+        # 跳过测速开关
+        switch_frame = ctk.CTkFrame(speed_test_frame, fg_color="transparent")
+        switch_frame.pack(fill="x", padx=15, pady=(0, 10))
+
+        self.skip_test_var = ctk.BooleanVar(value=skip_test)
+        skip_test_switch = ctk.CTkSwitch(
+            switch_frame,
+            text="跳过启动时的源测速",
+            variable=self.skip_test_var,
+            command=self._on_skip_test_changed,
+            font=ctk.CTkFont(size=13),
+            switch_width=50,
+            switch_height=24
+        )
+        skip_test_switch.pack(side="left")
+
+        # 说明文本
+        desc_label = ctk.CTkLabel(
+            speed_test_frame,
+            text="启用后，程序启动时将不进行源测速，直接使用下方选择的默认源",
+            font=ctk.CTkFont(size=11),
+            text_color="#999999"
+        )
+        desc_label.pack(padx=15, pady=(0, 10), anchor="w")
+
+        # 分隔线
+        separator = ctk.CTkFrame(speed_test_frame, height=1, fg_color="#E0E0E0")
+        separator.pack(fill="x", padx=15, pady=10)
+
+        # 默认源选择
+        source_frame = ctk.CTkFrame(speed_test_frame, fg_color="transparent")
+        source_frame.pack(fill="x", padx=15, pady=(0, 15))
+
+        source_label = ctk.CTkLabel(
+            source_frame,
+            text="默认下载源:",
+            font=ctk.CTkFont(size=13),
+            text_color="#333333"
+        )
+        source_label.pack(side="left", padx=(0, 15))
+
+        # 获取所有可用源
+        try:
+            from ..config import DLC_SOURCES
+            sources = DLC_SOURCES if DLC_SOURCES else []
+            source_names = [s.get("name", "") for s in sources if s.get("enabled", True)]
+            # 源的中文显示名称映射
+            source_display_names = {
+                "r2": "R2 (推荐)",
+                "github": "GitHub",
+                "domestic_cloud": "国内云",
+                "gitee": "Gitee"
+            }
+        except Exception:
+            source_names = ["r2", "github", "domestic_cloud", "gitee"]
+            source_display_names = {
+                "r2": "R2 (推荐)",
+                "github": "GitHub",
+                "domestic_cloud": "国内云",
+                "gitee": "Gitee"
+            }
+
+        # 确保默认源在列表中
+        if default_source not in source_names:
+            default_source = source_names[0] if source_names else "github"
+
+        self.default_source_var = ctk.StringVar(value=default_source)
+
+        # 创建单选按钮
+        radio_container = ctk.CTkFrame(source_frame, fg_color="transparent")
+        radio_container.pack(side="left", fill="x", expand=True)
+
+        for idx, source_name in enumerate(source_names):
+            display_name = source_display_names.get(source_name, source_name)
+            radio = ctk.CTkRadioButton(
+                radio_container,
+                text=display_name,
+                variable=self.default_source_var,
+                value=source_name,
+                font=ctk.CTkFont(size=12),
+                radiobutton_width=18,
+                radiobutton_height=18
+            )
+            radio.pack(side="left", padx=(0, 20))
+
+        # 根据初始状态设置单选按钮启用/禁用
+        self._update_source_radios_state()
+
+        # 保存按钮
+        save_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        save_frame.pack(fill="x", padx=20, pady=(10, 0))
+
+        save_btn = ctk.CTkButton(
+            save_frame,
+            text="💾 保存设置",
+            command=self._save_general_settings,
+            width=140,
+            height=36,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            corner_radius=8,
+            fg_color="#4CAF50",
+            hover_color="#45a049"
+        )
+        save_btn.pack(side="left")
+
+        hint_label = ctk.CTkLabel(
+            save_frame,
+            text="提示: 修改设置后需要重启程序才能生效",
+            font=ctk.CTkFont(size=11),
+            text_color="#FF9800"
+        )
+        hint_label.pack(side="left", padx=15)
+
+    def _on_skip_test_changed(self):
+        """跳过测速选项改变时的回调"""
+        self._update_source_radios_state()
+
+    def _update_source_radios_state(self):
+        """根据跳过测速开关状态更新源选择单选按钮的启用状态"""
+        skip = self.skip_test_var.get()
+        # 查找所有单选按钮并设置状态
+        try:
+            tab = self.tabview.tab("常规设置")
+            for widget in tab.winfo_children():
+                self._update_radios_recursive(widget, "normal" if skip else "disabled")
+        except Exception:
+            pass
+
+    def _update_radios_recursive(self, widget, state):
+        """递归更新单选按钮状态"""
+        if isinstance(widget, ctk.CTkRadioButton):
+            widget.configure(state=state)
+        for child in widget.winfo_children():
+            self._update_radios_recursive(child, state)
+
+    def _save_general_settings(self):
+        """保存常规设置到config.json"""
+        try:
+            from .. import config_loader
+            import json
+
+            # 读取当前配置
+            config_path = config_loader._loader.config_path
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+
+            # 确保settings节点存在
+            if "settings" not in config:
+                config["settings"] = {}
+
+            # 更新设置
+            config["settings"]["skip_speed_test"] = self.skip_test_var.get()
+            config["settings"]["default_source"] = self.default_source_var.get()
+
+            # 写回配置文件
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+
+            messagebox.showinfo("保存成功", "设置已保存！\n\n请重启程序使设置生效。")
+            self.logger.info(f"常规设置已保存: skip_speed_test={self.skip_test_var.get()}, default_source={self.default_source_var.get()}")
+
+        except Exception as e:
+            error_msg = str(e)
+            messagebox.showerror("保存失败", f"无法保存设置:\n{error_msg}")
+            import logging
+            logging.error(f"保存常规设置失败: {error_msg}", exc_info=True)
 
     def _create_config_tab(self):
         """创建配置管理选项卡内容（显示生效的 config.json 路径等）"""

@@ -1,6 +1,10 @@
 {
   "version": "1.0.0",
   "stellaris_app_id": "281990",
+  "settings": {
+    "skip_speed_test": false,
+    "default_source": "github"
+  },
   "server": {
     "url": "https://dlc.dlchelper.top/dlc/",
     "timeout": 30
