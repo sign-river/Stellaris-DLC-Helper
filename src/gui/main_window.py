@@ -1783,7 +1783,10 @@ class MainWindowCTk:
             self.root.after(0, lambda: self.speed_label.configure(text="0.00 MB/s"))
             self.root.after(0, lambda: self.source_label.configure(text="下载源: 连接中..."))
             
-            # 初始化下载器将在每次尝试中创建，确保 stop/close 不会影响后续尝试
+            # 创建一个downloader实例用于整个批量下载过程，复用TCP连接
+            # 这样可以避免每个DLC都重新握手，减少慢启动影响
+            downloader = DLCDownloader(progress_callback)
+            self.current_downloader = downloader
             
             # pending switch info used to perform controlled switch after re-test
             self._pending_switch_url = None
@@ -1798,7 +1801,7 @@ class MainWindowCTk:
                 last_exception = None
                 while attempt < max_attempts:
                     attempt += 1
-                    # 每次尝试都创建新的 downloader，以避免 stop() 的副作用
+                    # 在每次尝试前重置downloader状态（但复用session连接）
                     try:
                         # 如果之前因为重测而暂停了下载，则在开始新尝试前恢复UI和状态
                         if getattr(self, 'download_paused', False):
@@ -1808,16 +1811,11 @@ class MainWindowCTk:
                                 self.logger.info('重新开始下载')
                             except Exception:
                                 pass
-                        # 关闭并清理旧的 downloader（如存在）
-                        if hasattr(self, 'current_downloader') and self.current_downloader:
-                            try:
-                                self.current_downloader.close()
-                            except Exception:
-                                pass
+                        # 重置downloader状态以准备新的DLC下载（保留session连接）
+                        if attempt == 1:  # 只在开始新DLC时重置，重试时不重置
+                            downloader.reset_for_new_dlc()
                     except Exception:
                         pass
-                    downloader = DLCDownloader(progress_callback)
-                    self.current_downloader = downloader  # 保存当前尝试的下载器
                     self.logger.info(f"\n{'='*50}")
                     # 在 DLC 名称后显示预估/已知文件大小（如有）
                     display_size = dlc.get('size') or '未知'
@@ -2106,6 +2104,13 @@ class MainWindowCTk:
                         gitee_retest_thread.join(timeout=1)
                     except Exception:
                         pass
+            except Exception:
+                pass
+            
+            # 批量下载完成后关闭downloader释放连接
+            try:
+                if downloader:
+                    downloader.close()
             except Exception:
                 pass
 

@@ -49,10 +49,10 @@ class DLCDownloader:
         
         # 创建会话以复用连接
         self.session = requests.Session()
-        # 设置合理的超时和重试
+        # 设置合理的超时和重试，增加连接池以支持更好的复用
         adapter = requests.adapters.HTTPAdapter(
-            pool_connections=10,
-            pool_maxsize=10,
+            pool_connections=20,  # 增加连接池大小以更好地复用TCP连接
+            pool_maxsize=20,      # 增加最大连接数
             max_retries=0,  # 我们自己处理重试
             pool_block=False
         )
@@ -81,6 +81,18 @@ class DLCDownloader:
                 self.session.close()
             except Exception:
                 pass
+    
+    def reset_for_new_dlc(self):
+        """在开始下载新DLC前调用，重置DLC级别状态但保留session连接
+        
+        这个方法用于在批量下载多个DLC时，在开始新DLC前重置状态，
+        但保持session连接以复用TCP连接，避免重复握手。
+        """
+        # 重置DLC级别的下载状态
+        self._init_dlc_download_state()
+        # 重置控制标志
+        self.paused = False
+        self.stopped = False
     
     def _init_dlc_download_state(self):
         """初始化单个DLC的下载状态（每次下载DLC前调用）"""
