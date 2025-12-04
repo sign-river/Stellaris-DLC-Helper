@@ -326,6 +326,17 @@ class SettingsDialog(ctk.CTkToplevel):
         except Exception as e:
             messagebox.showwarning("复制失败", f"无法复制配置路径: {e}")
 
+    def _copy_log_path(self):
+        """复制日志目录路径到剪贴板"""
+        try:
+            path = self.log_path_entry.get()
+            self.clipboard_clear()
+            self.clipboard_append(path)
+            self.update()
+            messagebox.showinfo("已复制", "日志路径已复制到剪贴板")
+        except Exception as e:
+            messagebox.showwarning("复制失败", f"无法复制日志路径: {e}")
+
     def _open_config_in_explorer(self):
         """在资源管理器中打开 config.json 所在目录"""
         try:
@@ -333,6 +344,22 @@ class SettingsDialog(ctk.CTkToplevel):
             path_str = self.config_path_entry.get()
             p = Path(path_str)
             target = p if p.exists() and p.is_file() else p.parent
+            import subprocess
+            if os.name == 'nt':
+                subprocess.Popen(['explorer', str(target)])
+            else:
+                # cross-platform fallback
+                subprocess.Popen(['xdg-open', str(target)])
+        except Exception as e:
+            messagebox.showwarning("打开失败", f"无法打开路径: {e}")
+
+    def _open_log_in_explorer(self):
+        """在资源管理器中打开日志目录"""
+        try:
+            from pathlib import Path
+            path_str = self.log_path_entry.get()
+            p = Path(path_str)
+            target = p if p.exists() and p.is_dir() else p.parent if p.exists() else p
             import subprocess
             if os.name == 'nt':
                 subprocess.Popen(['explorer', str(target)])
@@ -354,7 +381,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
         info_label = ctk.CTkLabel(
             tab,
-            text="配置管理：显示当前生效的配置文件路径，便于诊断与手动替换",
+            text="配置管理：显示当前生效的配置文件路径和日志目录，便于诊断与手动替换",
             font=ctk.CTkFont(size=12),
             text_color="#666666"
         )
@@ -366,7 +393,7 @@ class SettingsDialog(ctk.CTkToplevel):
         except Exception:
             cfg_path = "(未找到)"
 
-        # 使用 grid 布局，确保路径框可扩展，按钮始终可见
+        # 配置文件路径框架
         cfg_frame = ctk.CTkFrame(tab, fg_color="#FFFFFF", corner_radius=6)
         cfg_frame.pack(fill="x", padx=10, pady=(0, 12))
         cfg_frame.grid_columnconfigure(0, weight=0, minsize=180)
@@ -375,7 +402,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
         cfg_label = ctk.CTkLabel(
             cfg_frame,
-            text="当前生效的 config.json:",
+            text="配置文件路径:",
             font=ctk.CTkFont(size=11),
             text_color="#333333"
         )
@@ -420,3 +447,64 @@ class SettingsDialog(ctk.CTkToplevel):
             command=self._open_config_in_explorer
         )
         open_btn.pack(side="left")
+
+        # 日志目录路径框架
+        try:
+            from ..utils.path_utils import PathUtils
+            log_path = PathUtils.get_log_dir()
+        except Exception:
+            log_path = "(未找到)"
+
+        log_frame = ctk.CTkFrame(tab, fg_color="#FFFFFF", corner_radius=6)
+        log_frame.pack(fill="x", padx=10, pady=(0, 12))
+        log_frame.grid_columnconfigure(0, weight=0, minsize=180)
+        log_frame.grid_columnconfigure(1, weight=1)
+        log_frame.grid_columnconfigure(2, weight=0)
+
+        log_label = ctk.CTkLabel(
+            log_frame,
+            text="日志目录路径:",
+            font=ctk.CTkFont(size=11),
+            text_color="#333333"
+        )
+        log_label.grid(row=0, column=0, sticky="w", padx=(12, 8), pady=8)
+
+        # 日志路径输入框
+        self.log_path_entry = ctk.CTkEntry(
+            log_frame,
+            width=20,
+            height=32,
+            font=ctk.CTkFont(size=11),
+            state="normal"
+        )
+        try:
+            self.log_path_entry.insert(0, str(log_path))
+            self.log_path_entry.configure(state="readonly")
+        except Exception:
+            self.log_path_entry.insert(0, "(未找到)")
+            self.log_path_entry.configure(state="readonly")
+        self.log_path_entry.grid(row=0, column=1, sticky="ew", padx=(0, 8), pady=8)
+
+        # 日志路径按钮容器
+        log_btn_container = ctk.CTkFrame(log_frame, fg_color="transparent")
+        log_btn_container.grid(row=0, column=2, sticky="e", padx=(0, 12), pady=8)
+
+        log_copy_btn = ctk.CTkButton(
+            log_btn_container,
+            text="复制",
+            width=90,
+            height=32,
+            font=ctk.CTkFont(size=11),
+            command=self._copy_log_path
+        )
+        log_copy_btn.pack(side="left", padx=(0, 6))
+
+        log_open_btn = ctk.CTkButton(
+            log_btn_container,
+            text="打开目录",
+            width=110,
+            height=32,
+            font=ctk.CTkFont(size=11),
+            command=self._open_log_in_explorer
+        )
+        log_open_btn.pack(side="left")
