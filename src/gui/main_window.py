@@ -973,6 +973,12 @@ class MainWindowCTk:
 
     def _refresh_all_status(self):
         """刷新所有状态：重新检测 DLC 列表、补丁状态和下载状态等"""
+        # 检查是否正在下载，如果是则不允许刷新
+        if self.is_downloading:
+            self.logger.warning("下载进行中，无法刷新DLC列表。请等待下载完成后再刷新。")
+            messagebox.showwarning("提示", "下载进行中，请等待下载完成后再刷新！")
+            return
+        
         try:
             self.logger.info("手动刷新：开始重新检测DLC和补丁状态...")
             # 重新加载 DLC 列表（会在后台线程中完成并调用 display_dlc_list）
@@ -1069,6 +1075,12 @@ class MainWindowCTk:
     
     def _set_game_path(self, path: str):
         """设置游戏路径（内部方法）"""
+        # 检查是否正在下载
+        if self.is_downloading:
+            self.logger.warning("下载进行中，无法更改游戏路径")
+            messagebox.showwarning("提示", "下载进行中，请等待下载完成后再更改游戏路径！")
+            return
+        
         self.game_path = path
         self.path_entry.delete(0, "end")
         self.path_entry.insert(0, path)
@@ -1100,6 +1112,12 @@ class MainWindowCTk:
         
     def load_dlc_list(self):
         """加载DLC列表"""
+        # 检查是否正在下载
+        if self.is_downloading:
+            self.logger.warning("下载进行中，无法重新加载DLC列表")
+            messagebox.showwarning("提示", "下载进行中，请等待下载完成后再加载DLC列表！")
+            return
+        
         if not self.game_path:
             # 在DLC列表框中显示提示
             for widget in self.dlc_scrollable_frame.winfo_children():
@@ -1147,6 +1165,47 @@ class MainWindowCTk:
                 self.root.after(0, show_error)
                 # 在主线程中记录异常并写入错误日志
                 self.root.after(0, lambda e=e: self.logger.log_exception("无法加载DLC列表", e))
+        
+        threading.Thread(target=fetch_thread, daemon=True).start()
+    
+    def _reload_dlc_list_after_download(self):
+        """下载完成后重新加载DLC列表（内部方法，跳过下载状态检查）"""
+        if not self.game_path:
+            return
+        
+        self.logger.info("下载完成，正在刷新DLC列表...")
+        
+        # 在DLC列表框中显示加载状态
+        for widget in self.dlc_scrollable_frame.winfo_children():
+            widget.destroy()
+        loading_label = ctk.CTkLabel(
+            self.dlc_scrollable_frame,
+            text="正在刷新DLC列表...",
+            font=ctk.CTkFont(size=13),
+            text_color="#757575"
+        )
+        loading_label.pack(pady=20)
+        
+        def fetch_thread():
+            try:
+                # 获取DLC列表
+                self.dlc_list = self.dlc_manager.fetch_dlc_list()
+                self.root.after(0, self.display_dlc_list)
+                
+            except Exception as e:
+                def show_error():
+                    for widget in self.dlc_scrollable_frame.winfo_children():
+                        widget.destroy()
+                    error_label = ctk.CTkLabel(
+                        self.dlc_scrollable_frame,
+                        text=f"刷新失败: {str(e)}",
+                        font=ctk.CTkFont(size=13),
+                        text_color="#D32F2F"
+                    )
+                    error_label.pack(pady=20)
+                self.root.after(0, show_error)
+                # 在主线程中记录异常并写入错误日志
+                self.root.after(0, lambda e=e: self.logger.log_exception("刷新DLC列表失败", e))
         
         threading.Thread(target=fetch_thread, daemon=True).start()
         
@@ -2067,16 +2126,19 @@ class MainWindowCTk:
             #   已在 start_execute() 中触发过统一成功消息。
             if (self._one_click_flow) and success > 0:
                 self.root.after(0, lambda: messagebox.showinfo("成功", "解锁成功！"))
-            # 重置下载状态
+            
+            # 重置下载状态（在刷新列表之前重置，确保刷新不会被阻止）
             self.is_downloading = False
             self.download_paused = False
             self.current_downloader = None
+            
             # 在展示最终模态后清除一键流程标志
             if self._one_click_flow:
                 self._one_click_flow = False
             
-            # 重新加载DLC列表
-            self.root.after(100, self.load_dlc_list)
+            # 重新加载DLC列表（在主线程中执行，确保下载状态已重置）
+            # 使用 after(0) 确保在主线程的下一个事件循环中执行
+            self.root.after(0, self._reload_dlc_list_after_download)
             self.root.after(0, lambda: self.execute_btn.configure(
                 text="🔓 一键解锁", 
                 state="normal"
@@ -2254,6 +2316,12 @@ class MainWindowCTk:
     
     def _clear_cache(self):
         """清理DLC缓存"""
+        # 检查是否正在下载
+        if self.is_downloading:
+            self.logger.warning("下载进行中，无法清理缓存")
+            messagebox.showwarning("提示", "下载进行中，请等待下载完成后再清理缓存！")
+            return
+        
         try:
             from ..utils import PathUtils
             import shutil
@@ -2412,10 +2480,12 @@ class MainWindowCTk:
             from .settings_dialog import SettingsDialog
             
             # 创建设置对话框，传入logger以便错误能显示在主窗口
+            # 同时传入下载状态检查回调
             settings = SettingsDialog(
                 self.root, 
                 source_manager=self.dlc_manager.source_manager if self.dlc_manager else None,
-                main_logger=self.logger
+                main_logger=self.logger,
+                is_downloading_callback=lambda: self.is_downloading
             )
             
         except Exception as e:

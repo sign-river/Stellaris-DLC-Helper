@@ -17,11 +17,12 @@ import os
 class SettingsDialog(ctk.CTkToplevel):
     """设置对话框"""
 
-    def __init__(self, parent, source_manager=None, main_logger=None):
+    def __init__(self, parent, source_manager=None, main_logger=None, is_downloading_callback=None):
         super().__init__(parent)
 
         self.source_manager = source_manager
         self.main_logger = main_logger  # 主窗口的日志记录器
+        self.is_downloading_callback = is_downloading_callback  # 检查下载状态的回调函数
         self.logger = logging.getLogger(__name__)
 
         self.title("设置")
@@ -228,6 +229,11 @@ class SettingsDialog(ctk.CTkToplevel):
 
     def _test_all_sources(self):
         """测试所有源的速度"""
+        # 检查是否正在下载
+        if self.is_downloading_callback and self.is_downloading_callback():
+            messagebox.showwarning("提示", "下载进行中，无法进行测速操作！\n请等待下载完成后再测速。")
+            return
+        
         if not self.source_manager:
             messagebox.showwarning("警告", "源管理器未初始化")
             return
