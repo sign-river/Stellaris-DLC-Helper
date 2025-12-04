@@ -25,10 +25,6 @@ DLC_SOURCES = get_config("server", "sources", default=[
     }
 ])
 
-# 兼容性：保留原有配置作为默认源
-DLC_SERVER_URL = _get_best_source_url()
-DLC_INDEX_URL = f"{DLC_SERVER_URL.rstrip('/')}/index.json"
-
 def _get_best_source_url():
     """获取最佳的源URL（优先选择国内云服务器）"""
     # 优先选择国内云服务器
@@ -41,6 +37,10 @@ def _get_best_source_url():
             return source["url"].rstrip("/")
     # 默认值
     return "https://dlc.dlchelper.top"
+
+# 兼容性：保留原有配置作为默认源
+DLC_SERVER_URL = _get_best_source_url()
+DLC_INDEX_URL = f"{DLC_SERVER_URL.rstrip('/')}/index.json"
 
 # 更新服务器配置 - 使用专用配置
 UPDATE_URL_BASE = get_config("server", "update_url_base", default="http://47.100.2.190/update/")
