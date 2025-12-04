@@ -143,7 +143,7 @@ class Packager:
         if not self._should_rebuild_exe():
             print("exe文件已存在且是最新的，跳过构建")
             # 如果 updater_helper 脚本存在但 helper exe 不存在，则尝试仅构建 helper
-            helper_script = self.project_root / 'tools' / 'updater_helper.py'
+            helper_script = self.project_root / 'src' / 'utils' / 'updater_helper.py'
             helper_exe = self.dist_path / 'updater_helper.exe'
             if helper_script.exists() and not helper_exe.exists():
                 print('补充构建 updater_helper.exe...')
@@ -243,7 +243,7 @@ class Packager:
         # 在项目根目录运行 PyInstaller，确保 os.getcwd() 返回正确路径
         subprocess.run(pyinstaller_cmd, check=True, cwd=str(self.project_root))
         # 额外构建：updater_helper 可执行程序（更稳定的替换器）
-        helper_script = self.project_root / 'tools' / 'updater_helper.py'
+        helper_script = self.project_root / 'src' / 'utils' / 'updater_helper.py'
         if helper_script.exists():
             print('正在构建 updater_helper.exe...')
             helper_cmd = [
