@@ -154,17 +154,17 @@ class DLCInstaller:
         
         for op in reversed(operations):
             if op["type"] == "install_dlc":
-                total += 1
                 try:
                     dlc_path = op["details"]["install_path"]
                     if os.path.exists(dlc_path):
+                        total += 1  # 只计算实际存在的 DLC
                         shutil.rmtree(dlc_path)
                         success += 1
                 except Exception:
                     pass
         
         # 清空操作日志
-        if total > 0:
+        if success > 0 or len(operations) > 0:
             self.operation_log.clear()
         
         return success, total
