@@ -83,3 +83,7 @@ test_*.py
 Stellaris_DLC_Cache/**/*.tmp
 Stellaris_DLC_Cache/*.tmp
 Stellaris_DLC_Cache/dlc_urls.json
+
+# 运行时诊断文件
+runtime_info.txt
+Stellaris_DLC_Cache/runtime_info.txt

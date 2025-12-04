@@ -99,6 +99,13 @@ def main():
         import time
         exe_dir = Path(sys.executable).parent
         cwd = Path.cwd()
+        # 缓存目录，优先写入到 Stellaris_DLC_Cache（或 config 指定的缓存名）
+        try:
+            cache_dir_name = getattr(app_config, 'CACHE_DIR_NAME', 'Stellaris_DLC_Cache')
+        except Exception:
+            cache_dir_name = 'Stellaris_DLC_Cache'
+        cache_dir = cwd / cache_dir_name
+        cache_dir.mkdir(parents=True, exist_ok=True)
         try:
             cfg_path = getattr(config_loader, '_loader').config_path
         except Exception:
@@ -121,15 +128,14 @@ def main():
             f"DLC_SERVER_URL: {DLC_SERVER_URL}",
             f"DLC_INDEX_URL: {DLC_INDEX_URL}",
         ]
-
-        for target_dir in (exe_dir, cwd):
-            try:
-                out_path = target_dir / "runtime_info.txt"
-                with open(out_path, 'w', encoding='utf-8') as f:
-                    f.write('\n'.join(content_lines))
-                logger.info(f"已写入运行时诊断文件: {out_path}")
-            except Exception as e:
-                logger.warning(f"写 runtime_info 到 {target_dir} 失败: {e}")
+        # 写入到缓存目录的 runtime_info.txt
+        try:
+            out_path = cache_dir / "runtime_info.txt"
+            with open(out_path, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(content_lines))
+            logger.info(f"已写入运行时诊断文件: {out_path}")
+        except Exception as e:
+            logger.warning(f"写 runtime_info 到 {cache_dir} 失败: {e}")
     except Exception as e:
         logger.warning(f"生成 runtime_info.txt 失败: {e}")
 
