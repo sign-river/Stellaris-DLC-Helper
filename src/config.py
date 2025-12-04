@@ -53,6 +53,11 @@ REQUEST_TIMEOUT = get_config("server", "timeout", default=30)
 CHUNK_SIZE = get_config("network", "chunk_size", default=8192)
 RETRY_TIMES = get_config("network", "retry_times", default=3)
 
+# 下载源选择配置
+PREFERRED_SOURCE = get_config("download", "preferred_source", default=None)  # 用户手动指定的源，None表示自动选择
+SKIP_SPEED_TEST_ON_STARTUP = get_config("download", "skip_speed_test_on_startup", default=False)  # 是否跳过启动时测速
+SPEED_MONITOR_ENABLED = get_config("download", "speed_monitor_enabled", default=True)  # 是否启用下载速度监控
+
 # 缓存配置
 CACHE_DIR_NAME = get_config("cache", "dir_name", default="Stellaris_DLC_Cache")
 DLC_CACHE_SUBDIR = get_config("cache", "dlc_subdir", default="dlc")

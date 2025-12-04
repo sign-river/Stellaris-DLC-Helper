@@ -85,14 +85,18 @@ class AutoUpdater:
     def fetch_announcement(self, timeout: int = 10) -> str:
         """获取公告内容"""
         try:
-            self.logger.info(f"获取公告: {ANNOUNCEMENT_URL}")
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"获取公告: {ANNOUNCEMENT_URL}")
             response = requests.get(ANNOUNCEMENT_URL, timeout=timeout)
             response.raise_for_status()
             announcement = response.text.strip()
-            self.logger.debug(f"公告内容长度: {len(announcement)}")
+            logger.debug(f"公告内容长度: {len(announcement)}")
             return announcement
         except Exception as e:
-            self.logger.warning(f"获取公告失败: {e}")
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"获取公告失败: {e}")
             return ""
 
     def check_for_updates(self, callback: Callable[[Optional[UpdateInfo], str], None]) -> None:
@@ -104,7 +108,11 @@ class AutoUpdater:
         """
         def _check():
             try:
-                self.logger.info("开始检查更新...")
+                # 直接输出到标准logging，会被GUIHandler转发到GUI并写入文件
+                # 但不会经Logger.log()重复添加时间戳
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info("开始检查更新...")
                 
                 # 并行获取更新信息和公告
                 update_info = None
@@ -116,7 +124,7 @@ class AutoUpdater:
                     response.raise_for_status()
                     data = response.json()
                 except Exception as e:
-                    self.logger.warning(f"获取更新信息失败: {e}")
+                    logger.warning(f"获取更新信息失败: {e}")
                     data = {}
                 
                 # 获取公告
@@ -126,15 +134,17 @@ class AutoUpdater:
                 update_info = UpdateInfo(data, announcement)
 
                 if update_info.has_update(self.current_version):
-                    self.logger.info(f"发现新版本: {update_info.latest_version}")
+                    logger.info(f"发现新版本: {update_info.latest_version}")
                     callback(update_info, announcement)
                 else:
-                    self.logger.info("当前已是最新版本")
+                    logger.info("当前已是最新版本")
                     # 即使没有更新，如果有公告也要传递
                     callback(None, announcement)
 
             except Exception as e:
-                self.logger.error(f"检查更新失败: {e}")
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"检查更新失败: {e}")
                 # 失败时也尝试获取公告
                 announcement = self.fetch_announcement()
                 callback(None, announcement)

@@ -9,6 +9,11 @@
     "chunk_size": 8192,
     "retry_times": 3
   },
+  "download": {
+    "preferred_source": null,
+    "skip_speed_test_on_startup": false,
+    "speed_monitor_enabled": true
+  },
   "cache": {
     "dir_name": "Stellaris_DLC_Cache",
     "dlc_subdir": "dlc",

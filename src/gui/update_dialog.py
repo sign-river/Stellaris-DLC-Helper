@@ -31,51 +31,65 @@ class UpdateDialog(ctk.CTkToplevel):
         self.announcement = announcement
         self.updater = AutoUpdater()
         self.logger = logging.getLogger(__name__)
-
-        # 根据是否有更新设置标题
-        if update_info and update_info.has_update(self.updater.current_version):
-            self.title(f"发现新版本 {update_info.latest_version}")
-        else:
-            self.title("系统公告")
         
-        # 先隐藏窗口，避免闪烁
-        self.withdraw()
-        
-        # 根据内容调整窗口高度
-        if update_info and update_info.has_update(self.updater.current_version):
-            # 有更新时的高度
-            self.geometry("520x460")
-        elif announcement:
-            # 只有公告：中等高度
-            self.geometry("520x420")
-        else:
-            # 默认高度
-            self.geometry("520x400")
-        
-        self.resizable(False, False)
-
-        # 设置窗口图标
         try:
-            from ..utils.path_utils import PathUtils
-            icon_path = PathUtils.get_resource_path("assets/images/tea_Gray.ico")
-            if os.path.exists(icon_path):
-                self.iconbitmap(icon_path)
+            # 根据是否有更新设置标题
+            if update_info and update_info.has_update(self.updater.current_version):
+                self.title(f"发现新版本 {update_info.latest_version}")
+            else:
+                self.title("系统公告")
+            
+            # 先隐藏窗口，避免闪烁
+            self.withdraw()
+            
+            # 根据内容调整窗口高度
+            if update_info and update_info.has_update(self.updater.current_version):
+                # 有更新时的高度
+                self.geometry("520x460")
+            elif announcement:
+                # 只有公告：中等高度
+                self.geometry("520x420")
+            else:
+                # 默认高度
+                self.geometry("520x400")
+            
+            self.resizable(False, False)
+
+            # 设置窗口图标
+            try:
+                from ..utils.path_utils import PathUtils
+                icon_path = PathUtils.get_resource_path("assets/images/tea_Gray.ico")
+                if os.path.exists(icon_path):
+                    self.iconbitmap(icon_path)
+            except Exception as e:
+                self.logger.warning(f"设置窗口图标失败: {e}")
+
+            # 设置模态
+            self.grab_set()
+            self.focus_set()
+
+            # 禁用主窗口的下载功能
+            if update_info and update_info.has_update(self.updater.current_version):
+                self._disable_main_window_download()
+
+            self._create_widgets()
+            self._center_window(parent)
+            
+            # 居中完成后再显示窗口
+            self.deiconify()
+            
         except Exception as e:
-            self.logger.warning(f"设置窗口图标失败: {e}")
-
-        # 设置模态
-        self.grab_set()
-        self.focus_set()
-
-        # 禁用主窗口的下载功能
-        if update_info and update_info.has_update(self.updater.current_version):
-            self._disable_main_window_download()
-
-        self._create_widgets()
-        self._center_window(parent)
-        
-        # 居中完成后再显示窗口
-        self.deiconify()
+            # 如果初始化失败，确保释放grab并销毁窗口
+            self.logger.error(f"UpdateDialog初始化失败: {e}")
+            try:
+                self.grab_release()
+            except:
+                pass
+            try:
+                self.destroy()
+            except:
+                pass
+            raise  # 重新抛出异常让调用者知道失败了
 
     def _disable_main_window_download(self):
         """禁用主窗口的下载功能"""

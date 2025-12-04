@@ -80,10 +80,6 @@ class MainWindowCTk:
         self.patch_manager = None
         self.logger = Logger(root=self.root)
         
-        # 初始化统一错误处理器
-        from ..utils import set_gui_logger
-        set_gui_logger(self.logger)
-        
         # 初始化UI
         self.init_ui()
         
@@ -107,14 +103,6 @@ class MainWindowCTk:
 
         # 延迟检查更新（避免启动时卡顿）
         self.root.after(2000, self._auto_check_update)
-        
-        # 将 GUI 日志处理器附加到根日志记录器，以便标准日志转发到 GUI
-        try:
-            import logging
-            handler = self.logger.get_logging_handler()
-            logging.getLogger().addHandler(handler)
-        except Exception:
-            pass
 
     def _open_error_docs(self, event=None):
         """在用户默认浏览器中打开在线错误/调试文档。
@@ -1513,7 +1501,7 @@ class MainWindowCTk:
             import requests
             current_time = time.time()
             
-                # 进度条实时更新（不限制频率）
+            # 进度条实时更新（不限制频率）
             # 仅当 percent 有效时更新进度条（total 未知时 percent=None）
             try:
                 if percent is not None:
@@ -1928,11 +1916,9 @@ class MainWindowCTk:
                         self.dlc_installer.install(cache_path, dlc['key'], dlc['name'])
                         self.logger.success("安装成功")
                         success += 1
-                        # 每个 DLC 安装成功后，立即刷新 DLC 列表以更新已安装状态（在主线程中执行）
-                        try:
-                            self.root.after(0, self.load_dlc_list)
-                        except Exception:
-                            pass
+                        # 每个 DLC 安装成功后，标记需要刷新，但不立即刷新避免阻塞下载线程
+                        # 将在所有下载完成后统一刷新
+                        self._dlc_list_needs_refresh = True
                         # 成功则停止 gitee 线程（如有）并跳出重试循环
                         try:
                             if gitee_fast_switch_event:
@@ -1989,8 +1975,11 @@ class MainWindowCTk:
                         # 小延时后重试
                         import time
                         time.sleep(0.8)
-                    # 记录完整异常堆栈到错误日志，并在 GUI 日志中显示
-                    error_str = str(e) if e else "未知错误"
+                
+                # 如果所有重试都失败了，记录完整异常堆栈到错误日志，并在 GUI 日志中显示
+                if last_exception:
+                    e = last_exception
+                    error_str = str(e)
 
                     # 提供更友好的错误信息
                     if "校验失败" in error_str or "哈希" in error_str:
@@ -2018,11 +2007,6 @@ class MainWindowCTk:
                         self.logger.error(friendly_msg)
                         self.root.after(0, lambda e=e, msg=friendly_msg: self.logger.log_exception(msg, e))
                         failed += 1
-                        # 每个 DLC 最终失败后，也刷新列表以便界面及时反映状态变化
-                        try:
-                            self.root.after(0, self.load_dlc_list)
-                        except Exception:
-                            pass
             
             # 停止任何仍在运行的 gitee 快速重测线程（如果存在）
             try:
@@ -2451,14 +2435,23 @@ class MainWindowCTk:
     def _auto_check_update(self):
         """自动检查更新（启动时调用）"""
         def on_update_check_complete(update_info, announcement):
-            # 如果有强制更新或有公告，显示对话框
-            if update_info and update_info.is_force_update(VERSION):
-                # 强制更新，显示对话框（无论是否有公告）
-                UpdateDialog(self.root, update_info, announcement)
-            elif announcement:
-                # 没有强制更新但有公告，显示公告对话框
-                UpdateDialog(self.root, None, announcement)
-            # 非强制更新且无公告时不显示弹窗，避免打扰用户
+            # 使用 after 确保在主线程中创建对话框，避免线程安全问题
+            def show_dialog():
+                try:
+                    # 如果有强制更新或有公告，显示对话框
+                    if update_info and update_info.is_force_update(VERSION):
+                        # 强制更新，显示对话框（无论是否有公告）
+                        UpdateDialog(self.root, update_info, announcement)
+                    elif announcement:
+                        # 没有强制更新但有公告，显示公告对话框
+                        UpdateDialog(self.root, None, announcement)
+                    # 非强制更新且无公告时不显示弹窗，避免打扰用户
+                except Exception as e:
+                    # 如果对话框创建失败，记录错误但不影响主程序
+                    self.logger.log_exception("显示更新/公告对话框失败", e)
+            
+            # 在主线程中执行
+            self.root.after(0, show_dialog)
 
         updater = AutoUpdater()
         updater.check_for_updates(on_update_check_complete)
@@ -2470,14 +2463,23 @@ class MainWindowCTk:
         self.root.update()
 
         def on_update_check_complete(update_info, announcement):
-            self.update_btn.configure(state="normal", text="🔄 检查更新")
+            # 使用 after 确保在主线程中更新UI
+            def update_ui():
+                self.update_btn.configure(state="normal", text="🔄 检查更新")
 
-            if update_info or announcement:
-                # 有更新或有公告，显示对话框
-                UpdateDialog(self.root, update_info, announcement)
-            else:
-                # 没有更新且没有公告
-                messagebox.showinfo("检查更新", "当前已是最新版本，也没有新的系统公告")
+                try:
+                    if update_info or announcement:
+                        # 有更新或有公告，显示对话框
+                        UpdateDialog(self.root, update_info, announcement)
+                    else:
+                        # 没有更新且没有公告
+                        messagebox.showinfo("检查更新", "当前已是最新版本，也没有新的系统公告")
+                except Exception as e:
+                    # 如果对话框创建失败，记录错误并提示用户
+                    self.logger.log_exception("显示更新/公告对话框失败", e)
+                    messagebox.showerror("错误", f"无法显示更新对话框\n{str(e)}")
+            
+            self.root.after(0, update_ui)
 
         # 创建更新器并检查更新
         updater = AutoUpdater()
