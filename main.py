@@ -59,6 +59,9 @@ if platform.system() != "Windows":
 
 import customtkinter as ctk
 from src.gui.main_window import MainWindowCTk
+import os
+from src import config as app_config
+from src import config_loader
 
 
 def main():
@@ -68,6 +71,27 @@ def main():
         logger.info(f"日志文件路径: {get_default_log_file_path()}")
     except:
         pass
+
+    # 记录运行时环境信息，帮助诊断打包后用户运行旧配置的问题
+    try:
+        logger.info(f"sys.executable: {sys.executable}")
+        logger.info(f"当前工作目录: {os.getcwd()}")
+        # config_loader 内部维护了用于加载的路径信息，尝试读取并记录
+        try:
+            cfg_path = getattr(config_loader, '_loader').config_path
+            logger.info(f"使用的 config.json 路径: {cfg_path}")
+            # 尝试记录关键配置字段以判断来源
+            try:
+                from src.config import DLC_SERVER_URL, DLC_INDEX_URL, VERSION
+                logger.info(f"应用版本 (config.VERSION): {VERSION}")
+                logger.info(f"DLC_SERVER_URL: {DLC_SERVER_URL}")
+                logger.info(f"DLC_INDEX_URL: {DLC_INDEX_URL}")
+            except Exception as e:
+                logger.warning(f"读取配置关键字段失败: {e}")
+        except Exception as e:
+            logger.warning(f"无法获取 config loader 路径信息: {e}")
+    except Exception as e:
+        logger.warning(f"记录运行时环境信息失败: {e}")
 
     root = ctk.CTk()
     app = MainWindowCTk(root)
