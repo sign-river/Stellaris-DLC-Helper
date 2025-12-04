@@ -1348,6 +1348,21 @@ class MainWindowCTk:
 
         # 如果未打补丁则决定自动应用补丁（不弹确认对话）
         should_patch = not patched_status.get('patched', False)
+        
+        # 在应用补丁前，检查补丁文件是否存在
+        if should_patch:
+            patch_dir = PathUtils.get_base_dir()
+            patch_file = os.path.join(patch_dir, "patches", "steam_api64.dll")
+            if not os.path.exists(patch_file):
+                messagebox.showerror(
+                    "错误", 
+                    "检测到补丁文件 steam_api64.dll 缺失！\n\n"
+                    "这很可能是杀毒软件误删了该文件。\n"
+                    "请将本程序目录添加到杀毒软件白名单后，\n"
+                    "重新下载完整的程序压缩包并解压使用。"
+                )
+                self.logger.error("补丁文件缺失: steam_api64.dll 不存在于 patches 目录")
+                return
 
         # 确定被选中且实际需要下载的 DLC（即尚未安装）
         # 过滤掉已安装的 DLC，只尝试下载缺失项
