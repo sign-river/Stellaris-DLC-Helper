@@ -1915,6 +1915,11 @@ class MainWindowCTk:
                         self.dlc_installer.install(cache_path, dlc['key'], dlc['name'])
                         self.logger.success("安装成功")
                         success += 1
+                        # 每个 DLC 安装成功后，立即刷新 DLC 列表以更新已安装状态（在主线程中执行）
+                        try:
+                            self.root.after(0, self.load_dlc_list)
+                        except Exception:
+                            pass
                         # 成功则停止 gitee 线程（如有）并跳出重试循环
                         try:
                             if gitee_fast_switch_event:
@@ -1988,8 +1993,8 @@ class MainWindowCTk:
                     self.root.after(0, lambda e=e, msg=friendly_msg: self.logger.log_exception(msg, e))
                     # 如果循环结束但仍有异常，计入失败
                     if attempt >= max_attempts and last_exception:
-                        e = last_exception
                         # 记录完整异常堆栈到错误日志，并在 GUI 日志中显示
+                        e = last_exception
                         error_str = str(e) if e else "未知错误"
                         if "400 Bad Request" in error_str or "URL可能已过期" in error_str:
                             friendly_msg = f"下载失败: {dlc['name']} - 服务器URL配置问题，请稍后重试或联系开发者"
@@ -2000,6 +2005,11 @@ class MainWindowCTk:
                         self.logger.error(friendly_msg)
                         self.root.after(0, lambda e=e, msg=friendly_msg: self.logger.log_exception(msg, e))
                         failed += 1
+                        # 每个 DLC 最终失败后，也刷新列表以便界面及时反映状态变化
+                        try:
+                            self.root.after(0, self.load_dlc_list)
+                        except Exception:
+                            pass
             
             # 停止任何仍在运行的 gitee 快速重测线程（如果存在）
             try:
