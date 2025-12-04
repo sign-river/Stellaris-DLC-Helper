@@ -93,6 +93,46 @@ def main():
     except Exception as e:
         logger.warning(f"记录运行时环境信息失败: {e}")
 
+    # 将运行时诊断信息写入 runtime_info.txt，分别写到 exe 目录和当前工作目录，便于用户上报
+    try:
+        from pathlib import Path
+        import time
+        exe_dir = Path(sys.executable).parent
+        cwd = Path.cwd()
+        try:
+            cfg_path = getattr(config_loader, '_loader').config_path
+        except Exception:
+            cfg_path = "(unknown)"
+
+        try:
+            from src.config import DLC_SERVER_URL, DLC_INDEX_URL, VERSION
+        except Exception:
+            DLC_SERVER_URL = "(unknown)"
+            DLC_INDEX_URL = "(unknown)"
+            VERSION = "(unknown)"
+
+        content_lines = [
+            f"timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"sys.executable: {sys.executable}",
+            f"exe_dir: {exe_dir}",
+            f"cwd: {cwd}",
+            f"config_path: {cfg_path}",
+            f"VERSION: {VERSION}",
+            f"DLC_SERVER_URL: {DLC_SERVER_URL}",
+            f"DLC_INDEX_URL: {DLC_INDEX_URL}",
+        ]
+
+        for target_dir in (exe_dir, cwd):
+            try:
+                out_path = target_dir / "runtime_info.txt"
+                with open(out_path, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(content_lines))
+                logger.info(f"已写入运行时诊断文件: {out_path}")
+            except Exception as e:
+                logger.warning(f"写 runtime_info 到 {target_dir} 失败: {e}")
+    except Exception as e:
+        logger.warning(f"生成 runtime_info.txt 失败: {e}")
+
     root = ctk.CTk()
     app = MainWindowCTk(root)
     root.mainloop()

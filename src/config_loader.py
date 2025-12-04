@@ -55,37 +55,47 @@ class ConfigLoader:
 
         优先级：当前工作目录、可执行文件目录、模块文件目录、PyInstaller 的 _MEIPASS。
         """
+        # 优化查找顺序：优先使用可执行文件所在目录与 PyInstaller 的 _MEIPASS，
+        # 然后是模块目录，最后退回到当前工作目录。这样可以避免用户直接从
+        # ZIP 内临时运行 exe 导致的 cwd 是临时目录而找不到随包提供的 config.json。
         candidates = []
-        # 1. 当前工作目录
-        candidates.append(Path.cwd() / "config.json")
-
-        # 2. 可执行文件所在目录（对于打包 exe 很重要）
+        exe_dir = None
         try:
             exe_dir = Path(sys.executable).parent
-            candidates.append(exe_dir / "config.json")
         except Exception:
-            pass
+            exe_dir = None
 
-        # 3. 当前模块的上级目录（原来的实现）
+        meipass = getattr(sys, "_MEIPASS", None)
+
+        # 1. 可执行文件所在目录（优先）
+        if exe_dir:
+            candidates.append(exe_dir / "config.json")
+
+        # 2. PyInstaller 临时目录（如果存在）
+        if meipass:
+            candidates.append(Path(meipass) / "config.json")
+
+        # 3. 当前模块的上级目录（源码目录）
         try:
             module_dir = Path(__file__).parent.parent
             candidates.append(module_dir / "config.json")
         except Exception:
             pass
 
-        # 4. PyInstaller 临时目录（如果存在）
-        meipass = getattr(sys, "_MEIPASS", None)
-        if meipass:
-            candidates.append(Path(meipass) / "config.json")
+        # 4. 当前工作目录（最后）
+        candidates.append(Path.cwd() / "config.json")
 
-        # 记录候选路径并返回第一个存在的，如果都不存在则返回第一个候选（cwd）作为默认写入位置
+        # 记录候选路径并返回第一个存在的
         for p in candidates:
-            logging.debug(f"候选配置路径: {p} (exists={p.exists()})")
+            try:
+                logging.debug(f"候选配置路径: {p} (exists={p.exists()})")
+            except Exception:
+                logging.debug(f"候选配置路径: {p}")
             if p.exists():
                 logging.info(f"使用配置文件: {p}")
                 return p
 
-        # 如果都不存在，返回第一个候选（cwd）用于创建
+        # 如果都不存在，默认使用第一个候选（优先为 exe_dir），否则回退到模块目录
         default = candidates[0] if candidates else Path(__file__).parent.parent / "config.json"
         logging.info(f"未找到配置文件，默认使用路径: {default}")
         return default
