@@ -19,6 +19,11 @@ class SourceManager:
     def __init__(self):
         self.sources = self._load_sources()
         self.mappings = self._load_mappings()
+        # 测速结果缓存：{source_name: (speed_mb, timestamp)}
+        self._speed_cache = {}
+        self._cache_validity = 300  # 缓存有效期5分钟
+        self._last_best_source = None  # 上次选择的最佳源
+        self._last_best_timestamp = 0  # 上次选择的时间
     
     def _load_sources(self) -> List[Dict[str, Any]]:
         """加载并验证源配置"""
@@ -30,6 +35,43 @@ class SourceManager:
         # 按优先级排序（数字越小优先级越高）
         sources.sort(key=lambda x: x.get("priority", 999))
         return sources
+    
+    def _get_test_url_for_source(self, source_name: str, sources_by_name: Dict[str, Any]) -> Tuple[str, str]:
+        """
+        获取指定源的测试URL
+        
+        参数:
+            source_name: 源名称
+            sources_by_name: 源配置字典
+            
+        返回:
+            tuple: (源名称, 测试URL)
+        """
+        source = sources_by_name.get(source_name)
+        if not source:
+            return source_name, ""
+        
+        # 使用与 get_best_download_source 相同的逻辑获取测试URL
+        if source.get('test_url'):
+            return source_name, source.get('test_url')
+        
+        base = source.get("url", "").rstrip('/')
+        fmt = source.get('format', 'standard')
+        
+        # 默认固定测试路径
+        if source_name == 'r2':
+            return source_name, f"{base}/test/test2.bin"
+        elif source_name == 'domestic_cloud':
+            return source_name, f"{base}/test/test.bin"
+        elif fmt in ['github_release', 'gitee_release']:
+            if '/releases/download/' in base:
+                parts = base.split('/releases/download/')
+                prefix = parts[0] + '/releases/download/'
+                return source_name, f"{prefix}test/test.bin"
+            else:
+                return source_name, f"{base}/test/test.bin"
+        else:
+            return source_name, f"{base}/test/test.bin"
     
     def _load_mappings(self) -> Dict[str, Dict[str, str]]:
         """加载文件名映射配置"""
@@ -383,15 +425,17 @@ class SourceManager:
 
         return urls
 
-    def measure_speed(self, url, description, threshold_mb, log_callback=None, max_seconds: float = 5.0, max_bytes: int = 70 * 1024 * 1024):
+    def measure_speed(self, url, description, threshold_mb, log_callback=None, max_seconds: float = 10.0, max_bytes: int = 100 * 1024 * 1024):
         """
-        测速单个URL
+        测速单个URL - 通过实际下载测试真实速度
         
         参数:
             url: 测试URL
             description: 描述信息
             threshold_mb: 速度阈值(MB/s)
             log_callback: 日志回调函数，用于输出到GUI
+            max_seconds: 最大测试时间（秒），默认10秒以获取准确速度
+            max_bytes: 最大下载字节数，默认100MB
             
         返回:
             tuple: (是否达标, 速度MB/s)
@@ -400,7 +444,7 @@ class SourceManager:
         
         # 总是显示测试开始信息（如果有log_callback）
         if log_callback:
-            log_callback(f"正在测试 [{description}] ...")
+            log_callback(f"━━━━ 开始测试 [{description}] ━━━━")
         elif not silent:
             print(f"正在测试 [{description}] ...")
         
@@ -411,8 +455,8 @@ class SourceManager:
         }
 
         try:
-            # 连接 3s 超时，读取 8s 超时
-            with requests.get(url, headers=headers, stream=True, timeout=(3.0, 8.0)) as response:
+            # 连接 5s 超时，读取 15s 超时（给足时间进行准确测速）
+            with requests.get(url, headers=headers, stream=True, timeout=(5.0, 15.0)) as response:
                 # 1. 检查状态码
                 if not response.ok:
                     message = f"测试 [{description}] 失败: 服务器返回状态码 {response.status_code}"
@@ -441,6 +485,8 @@ class SourceManager:
                 total_downloaded = 0
                 start_time = time.time()
                 first_chunk = True
+                last_report_time = time.time()
+                report_interval = 2.0  # 每2秒报告一次当前速度
                 
                 # 3. 开始下载循环
                 total_read = 0
@@ -450,6 +496,7 @@ class SourceManager:
                     if first_chunk:
                         first_chunk = False
                         start_time = time.time() # 真正的计时开始
+                        last_report_time = start_time
                         continue
 
                     total_downloaded += len(chunk)
@@ -457,30 +504,40 @@ class SourceManager:
                     current_time = time.time()
                     duration = current_time - start_time
                     
-                    # --- 停止条件诊断 ---
+                    # 每2秒输出一次实时速度
+                    if current_time - last_report_time >= report_interval:
+                        current_speed = (total_downloaded / 1024 / 1024) / duration
+                        progress_msg = f"[{description}] 测速中... {duration:.1f}秒 | 已下载: {total_downloaded/1024/1024:.2f} MB | 当前速度: {current_speed:.2f} MB/s"
+                        if log_callback:
+                            log_callback(progress_msg)
+                        elif not silent:
+                            print(f"   {progress_msg}")
+                        last_report_time = current_time
+                    
+                    # --- 停止条件 ---
                     if duration >= max_seconds:
-                        message = f"[{description}] 测速完成: 满 5 秒时间到"
+                        message = f"[{description}] 测速完成 (达到 {max_seconds:.0f} 秒时间限制)"
                         if log_callback:
                             log_callback(message)
                         elif not silent:
-                            print("   [√] 停止原因: 满 5 秒时间到")
+                            print(f"   [√] 停止原因: 满 {max_seconds:.0f} 秒时间到")
                         break
                     
                     total_read += len(chunk)
                     if total_downloaded >= max_bytes or total_read >= max_bytes:
-                        message = f"[{description}] 测速完成: 速度太快 (超过70MB)"
+                        message = f"[{description}] 测速完成 (达到 {max_bytes/1024/1024:.0f}MB 数据限制)"
                         if log_callback:
                             log_callback(message)
                         elif not silent:
-                            print("   [√] 停止原因: 速度太快 (超过70MB)")
+                            print(f"   [√] 停止原因: 速度太快 (超过{max_bytes/1024/1024:.0f}MB)")
                         break
                 else:
                     # 如果循环自然结束（即文件读完了，也没触发 break）
-                    message = f"[{description}] 测速完成: 文件被下载完了 (文件太小?)"
+                    message = f"[{description}] 测速完成 (文件已下载完)"
                     if log_callback:
                         log_callback(message)
                     elif not silent:
-                        print("   [!] 停止原因: 文件被下载完了 (文件太小?)")
+                        print("   [!] 停止原因: 文件被下载完了")
 
                 # 4. 计算结果
                 final_duration = time.time() - start_time
@@ -489,56 +546,90 @@ class SourceManager:
                 speed_mb = (total_downloaded / 1024 / 1024) / final_duration
                 
                 # 总是显示测速结果（如果有log_callback）
-                message1 = f"[{description}] 耗时: {final_duration:.2f}秒 | 下载量: {total_downloaded/1024/1024:.2f} MB"
-                message2 = f"[{description}] 最终速度: {speed_mb:.2f} MB/s"
+                result_line = "━" * 50
+                message1 = f"[{description}] 测试完成"
+                message2 = f"  ⏱ 测试时长: {final_duration:.2f}秒"
+                message3 = f"  📦 下载数据: {total_downloaded/1024/1024:.2f} MB"
+                message4 = f"  🚀 平均速度: {speed_mb:.2f} MB/s"
+                
+                # 阈值为-1时（Gitee保底源），只记录速度不做判断
+                if threshold_mb < 0:
+                    status_msg = f"  ℹ️ 保底源: 已记录速度"
+                    result = True
+                elif speed_mb > threshold_mb:
+                    status_msg = f"  ✅ 结果: 速度达标 (阈值: {threshold_mb:.1f} MB/s)"
+                    result = True
+                else:
+                    status_msg = f"  ❌ 结果: 速度未达标 (阈值: {threshold_mb:.1f} MB/s)"
+                    result = False
+                
                 if log_callback:
+                    log_callback(result_line)
                     log_callback(message1)
                     log_callback(message2)
+                    log_callback(message3)
+                    log_callback(message4)
+                    log_callback(status_msg)
+                    log_callback(result_line)
                 elif not silent:
-                    print(f"   [i] 耗时: {final_duration:.2f}秒 | 下载量: {total_downloaded/1024/1024:.2f} MB")
-                    print(f"   >>> 最终速度: {speed_mb:.2f} MB/s", end="")
+                    print(f"\n   {message1}")
+                    print(f"   {message2}")
+                    print(f"   {message3}")
+                    print(f"   {message4}")
+                    print(f"   {status_msg}\n")
                 
-                if speed_mb > threshold_mb:
-                    message = f"[{description}] 达标 (>{threshold_mb} MB/s)"
-                    if log_callback:
-                        log_callback(message)
-                    elif not silent:
-                        print(f" -> 达标 (>{threshold_mb} MB/s)\n")
-                    return True, speed_mb
-                else:
-                    message = f"[{description}] 未达标 (<={threshold_mb} MB/s)"
-                    if log_callback:
-                        log_callback(message)
-                    elif not silent:
-                        print(" -> 未达标\n")
-                    return False, speed_mb
+                return result, speed_mb
 
         except requests.exceptions.ConnectTimeout:
-            message = f"[{description}] 连接超时 (3秒内未连上)"
+            message = f"❌ [{description}] 连接超时 (5秒内未连上)"
             if log_callback:
                 log_callback(message)
             elif not silent:
-                print("   [X] 连接超时 (3秒内未连上)\n")
+                print("   [X] 连接超时 (5秒内未连上)\n")
+            return False, 0.0
+        except requests.exceptions.ReadTimeout:
+            message = f"❌ [{description}] 读取超时 (网络传输中断)"
+            if log_callback:
+                log_callback(message)
+            elif not silent:
+                print("   [X] 读取超时\n")
             return False, 0.0
         except Exception as e:
-            message = f"[{description}] 发生错误: {e}"
+            message = f"❌ [{description}] 测试失败: {str(e)[:100]}"
             if log_callback:
                 log_callback(message)
             elif not silent:
                 print(f"   [X] 发生错误: {e}\n")
             return False, 0.0
 
-    def get_best_download_source(self, silent=False, log_callback=None):
+    def get_best_download_source(self, silent=False, log_callback=None, force_retest=False):
         """
-        测速选择最佳下载源
+        测速选择最佳下载源（带智能缓存）
         
         参数:
             silent: 是否静默模式（不输出到控制台）
             log_callback: 日志回调函数，用于输出到GUI
+            force_retest: 是否强制重新测速（忽略缓存）
             
         返回:
             tuple: (最佳源名称, 测试URL) 或 (None, None) 如果全部失败
         """
+        current_time = time.time()
+        
+        # 检查缓存：如果上次测速在5分钟内且不强制重测，直接使用缓存结果
+        if not force_retest and self._last_best_source:
+            cache_age = current_time - self._last_best_timestamp
+            if cache_age < self._cache_validity:
+                remaining_time = int(self._cache_validity - cache_age)
+                if log_callback:
+                    log_callback(f"⚡ 使用缓存的测速结果: {self._last_best_source} (缓存剩余 {remaining_time}秒)")
+                elif not silent:
+                    print(f"使用缓存的测速结果: {self._last_best_source}")
+                
+                # 返回缓存的最佳源和对应的测试URL
+                sources_by_name = {source.get("name"): source for source in DLC_SOURCES}
+                return self._get_test_url_for_source(self._last_best_source, sources_by_name)
+        
         # 设置静默模式
         self._silent_mode = silent
         
@@ -599,42 +690,115 @@ class SourceManager:
         # 按优先级顺序测试（与get_download_urls_for_dlc保持一致）
         priority_order = ["r2", "github", "domestic_cloud", "gitee"]
         
+        # 存储所有测速结果，用于找到最优源和保底源
+        test_results = {}  # {source_name: (speed_mb, candidate_url)}
+        domestic_cloud_data = None  # 国内云数据用于默认源
+        gitee_data = None  # Gitee数据用于保底源
+        
         for source_name in priority_order:
             if source_name in test_candidates:
                 candidates = test_candidates[source_name]
-                threshold = 3.0 if source_name in ["r2", "domestic_cloud"] else 2.0
+                
+                # 阈值设计理念：
+                # - R2/GitHub：高阈值(2.5 MB/s) → 筛选有梯子的用户
+                # - 国内云：高阈值(3.0 MB/s) → 避免拥挤时段的慢速
+                # - Gitee：保留测速显示，但不参与正常选择（作为保底源）
+                if source_name in ["r2", "github"]:
+                    threshold = 2.5  # 筛选：有梯子的用户才用
+                elif source_name == "domestic_cloud":
+                    threshold = 3.0  # 高要求：避开拥挤
+                else:  # gitee - 测速但不参与选择
+                    threshold = -1  # 不进行阈值判断，只记录速度
+                
                 # 允许从源配置中覆盖阈值
                 cfg = sources_by_name.get(source_name) if 'sources_by_name' in locals() else None
-                if cfg and cfg.get('threshold_mb'):
+                if cfg and cfg.get('threshold_mb') and threshold >= 0:
                     threshold = cfg.get('threshold_mb')
+                
                 # 逐个 candidate 测试
                 for candidate in candidates:
-                    ok, speed = self.measure_speed(candidate, f"{source_name}", threshold, log_callback)
-                    if ok:
-                        if not silent:
-                            message = f"选择下载源: {source_name} (速度: {speed:.2f} MB/s) -> {candidate}"
-                            print(message)
-                            if log_callback:
-                                log_callback(message)
-                        elif log_callback:
-                            log_callback(f"选择下载源: {source_name} (速度: {speed:.2f} MB/s) -> {candidate}")
-                        return source_name, candidate
-                    # 如果不达标则继续测试下一个 candidate
-                    continue
-
+                    # Gitee不需要阈值判断，直接测速
+                    if source_name == "gitee":
+                        ok, speed = self.measure_speed(candidate, source_name, -1, log_callback)
+                        self._speed_cache[source_name] = (speed, time.time())
+                        gitee_data = (speed, candidate)
+                    else:
+                        ok, speed = self.measure_speed(candidate, source_name, threshold, log_callback)
+                        self._speed_cache[source_name] = (speed, time.time())
+                        
+                        # 记录国内云数据用于默认源
+                        if source_name == "domestic_cloud":
+                            domestic_cloud_data = (speed, candidate)
+                        
+                        # 记录达标的源
+                        if ok:
+                            test_results[source_name] = (speed, candidate)
+        
+        # 选源逻辑：三层选择
+        # 第一层：选择达标的源中速度最快的
+        if test_results:
+            best_source = max(test_results.items(), key=lambda x: x[1][0])
+            source_name = best_source[0]
+            speed, candidate = best_source[1]
+            
+            # 更新最佳源缓存
+            self._last_best_source = source_name
+            self._last_best_timestamp = time.time()
+            
+            if not silent:
+                message = f"✅ 选择下载源: {source_name} (平均速度: {speed:.2f} MB/s)"
+                print(message)
+                if log_callback:
+                    log_callback(message)
+            elif log_callback:
+                log_callback(f"✅ 选择下载源: {source_name} (平均速度: {speed:.2f} MB/s)")
+            return source_name, candidate
+        
+        # 第二层：都不达标，使用默认源（国内云）
+        if domestic_cloud_data:
+            speed, candidate = domestic_cloud_data
+            self._last_best_source = "domestic_cloud"
+            self._last_best_timestamp = time.time()
+            
+            if not silent:
+                message = f"⚠️ 所有源未达标，使用默认源: domestic_cloud (测速: {speed:.2f} MB/s)"
+                print("-" * 40)
+                print(message)
+                if log_callback:
+                    log_callback(message)
+            elif log_callback:
+                log_callback(f"⚠️ 使用默认源: domestic_cloud (测速: {speed:.2f} MB/s)")
+            return "domestic_cloud", candidate
+        
+        # 第三层：连默认源都没测到（极少见），使用保底源（Gitee）
+        if gitee_data:
+            speed, candidate = gitee_data
+            self._last_best_source = "gitee"
+            self._last_best_timestamp = time.time()
+            
+            if not silent:
+                message = f"⚠️ 默认源测速失败，使用保底源: gitee (测速: {speed:.2f} MB/s)"
+                print("-" * 40)
+                print(message)
+                if log_callback:
+                    log_callback(message)
+            elif log_callback:
+                log_callback(f"⚠️ 使用保底源: gitee (测速: {speed:.2f} MB/s)")
+            return "gitee", candidate
+        
+        # 极端情况：所有源都无法测速，使用硬编码的保底URL
         if not silent:
-            message = "所有源测速均未达标，使用默认源"
+            message = "❌ 所有源测速失败，使用硬编码保底URL"
             print("-" * 40)
             print(message)
             if log_callback:
                 log_callback(message)
         elif log_callback:
-            # 即使silent，也要在GUI中显示默认源信息
-            log_callback("所有源测速均未达标，使用默认源")
-        # 所有候选都未达标，返回默认的 test url（优先取配置中定义的候选）
-        default_candidates = test_candidates.get("domestic_cloud", [])
-        default_url = default_candidates[0] if default_candidates else "http://47.100.2.190/dlc/test/test.bin"
-        return "domestic_cloud", default_url
+            log_callback("❌ 所有源测速失败，使用硬编码保底URL")
+        
+        default_candidates = test_candidates.get("gitee", [])
+        default_url = default_candidates[0] if default_candidates else "https://gitee.com/sign-river/Stellaris-DLC-Helper/releases/download/v1.0.0/test.bin"
+        return "gitee", default_url
 
     def find_first_source_above(self, required_speed_mb: float, exclude: Optional[List[str]] = None, silent=False, log_callback=None, max_seconds: float = 2.0, max_bytes: int = 2 * 1024 * 1024) -> Optional[Tuple[str, str, float]]:
         """

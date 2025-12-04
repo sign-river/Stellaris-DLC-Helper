@@ -1568,17 +1568,24 @@ class MainWindowCTk:
                             display_speed = 99.99
                         
                         # 服务器质量检测逻辑
-                        # 只有在下载时间超过5秒后才开始检测服务器问题，避免小文件误判
+                        # 只有在下载时间超过10秒后才开始检测服务器问题，避免小文件误判和频繁测速
                         # 使用 download_start_time 计算实际下载时长
                         download_duration = current_time - (progress_callback.download_start_time or progress_callback.last_time)
-                        # 如果速度低于 1.0 MB/s（变更要求），视为慢速
-                        if not self.download_paused and download_duration > 5.0 and display_speed < 1.0:
+                        
+                        # 优化检测条件：
+                        # 1. 下载时间 > 10秒（从5秒改为10秒，避免过早触发）
+                        # 2. 速度 < 0.3 MB/s（从1.0降低到0.3，只有极慢的情况才触发）
+                        # 3. 已下载数据 > 5MB（避免刚开始下载时网络不稳定导致误判）
+                        if (not self.download_paused and 
+                            download_duration > 10.0 and 
+                            display_speed < 0.3 and 
+                            downloaded > 5 * 1024 * 1024):
                             progress_callback.slow_speed_count += 1
                             
-                            # 如果连续3次慢速，检测服务器连接
-                            if progress_callback.slow_speed_count >= 3 and not progress_callback.server_issue_detected:
-                                # 每10秒最多检查一次服务器
-                                if current_time - progress_callback.last_server_check >= 10:
+                            # 如果连续5次慢速（从3次改为5次），才检测服务器连接
+                            if progress_callback.slow_speed_count >= 5 and not progress_callback.server_issue_detected:
+                                # 每30秒最多检查一次服务器（从10秒改为30秒，大幅降低频率）
+                                if current_time - progress_callback.last_server_check >= 30:
                                     progress_callback.last_server_check = current_time
                                     
                                     # 检测服务器连接质量
@@ -1651,11 +1658,16 @@ class MainWindowCTk:
                                                     progress_callback.server_issue_detected = False
                                                     progress_callback.slow_speed_count = 0
                                                 else:
-                                                    # 测速结果相同，显示服务器错误
-                                                    self.root.after(0, self._show_server_error)
+                                                    # 测速结果相同，说明这是最优源了，不再重新测速
+                                                    # 记录一个标志，避免再次触发测速
+                                                    progress_callback.server_issue_detected = True  # 保持True避免重复测速
+                                                    progress_callback.slow_speed_count = 0  # 重置计数
+                                                    # 给用户一个提示：当前已是最佳源
+                                                    self.logger.warning(f"当前源({self.best_download_source})已是测速最优选择，将继续使用")
                                             except Exception as e:
                                                 self.logger.error(f"重新测速失败: {e}")
-                                                self.root.after(0, self._show_server_error)
+                                                # 发生错误时也要避免重复触发
+                                                progress_callback.server_issue_detected = True
                                         
                                         import threading
                                         threading.Thread(target=retest_thread, daemon=True).start()
@@ -1664,10 +1676,11 @@ class MainWindowCTk:
                             if progress_callback.slow_speed_count > 0:
                                 progress_callback.slow_speed_count -= 1
                             
-                            # 如果之前检测到服务器问题，现在检查是否恢复
-                            if progress_callback.server_issue_detected and display_speed >= 0.5:
-                                # 速度恢复到0.5 MB/s以上，认为服务器恢复正常
+                            # 如果之前检测到服务器问题，现在检查是否恢复（阈值调整为0.3 MB/s）
+                            if progress_callback.server_issue_detected and display_speed >= 0.3:
+                                # 速度恢复到0.3 MB/s以上，认为服务器恢复正常
                                 progress_callback.server_issue_detected = False
+                                self.logger.info("下载速度已恢复正常")
                                 self.root.after(0, self._hide_server_error)
                         
                         # 更新速度显示
