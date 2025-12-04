@@ -8,8 +8,8 @@
 
 from .config_loader import get_config
 
-# 版本号
-VERSION = get_config("version", default="1.0.0")
+# 版本号（从 config.json 读取）
+VERSION = get_config("version", default="1.0.2")
 
 # Stellaris 游戏 AppID
 STELLARIS_APP_ID = get_config("stellaris_app_id", default="281990")
@@ -42,8 +42,8 @@ def _get_best_source_url():
 DLC_SERVER_URL = _get_best_source_url()
 DLC_INDEX_URL = f"{DLC_SERVER_URL.rstrip('/')}/index.json"
 
-# 更新服务器配置 - 使用专用配置
-UPDATE_URL_BASE = get_config("server", "update_url_base", default="http://47.100.2.190/update/")
+# 更新服务器配置 - 使用专用配置（已升级到 HTTPS）
+UPDATE_URL_BASE = get_config("server", "update_url_base", default="https://update.dlchelper.top/update/")
 UPDATE_CHECK_URL = f"{UPDATE_URL_BASE}version.json"
 ANNOUNCEMENT_URL = f"{UPDATE_URL_BASE}announcement.txt"
 APPINFO_URL = "http://47.100.2.190/appinfo/stellaris_appinfo.json"

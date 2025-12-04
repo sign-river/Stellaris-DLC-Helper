@@ -386,8 +386,15 @@ class SettingsDialog(ctk.CTkToplevel):
         """创建常规设置选项卡"""
         tab = self.tabview.tab("常规设置")
 
-        info_label = ctk.CTkLabel(
+        # 创建可滚动框架
+        scrollable_frame = ctk.CTkScrollableFrame(
             tab,
+            fg_color="transparent"
+        )
+        scrollable_frame.pack(fill="both", expand=True, padx=0, pady=0)
+
+        info_label = ctk.CTkLabel(
+            scrollable_frame,
             text="常规设置：配置应用程序的基本行为",
             font=ctk.CTkFont(size=12),
             text_color="#666666"
@@ -404,7 +411,7 @@ class SettingsDialog(ctk.CTkToplevel):
             default_source = "github"
 
         # 跳过启动测速设置框架
-        speed_test_frame = ctk.CTkFrame(tab, fg_color="#FFFFFF", corner_radius=8)
+        speed_test_frame = ctk.CTkFrame(scrollable_frame, fg_color="#FFFFFF", corner_radius=8)
         speed_test_frame.pack(fill="x", padx=20, pady=(0, 15))
 
         # 标题行
@@ -507,8 +514,94 @@ class SettingsDialog(ctk.CTkToplevel):
         # 根据初始状态设置单选按钮启用/禁用
         self._update_source_radios_state()
 
+        # 更新文件管理框架
+        update_files_frame = ctk.CTkFrame(scrollable_frame, fg_color="#FFFFFF", corner_radius=8)
+        update_files_frame.pack(fill="x", padx=20, pady=(15, 15))
+
+        # 标题行
+        update_title_frame = ctk.CTkFrame(update_files_frame, fg_color="transparent")
+        update_title_frame.pack(fill="x", padx=15, pady=(15, 10))
+
+        update_title = ctk.CTkLabel(
+            update_title_frame,
+            text="🗂️ 更新文件管理",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#1976D2"
+        )
+        update_title.pack(side="left")
+
+        # 说明文本
+        update_desc_label = ctk.CTkLabel(
+            update_files_frame,
+            text="清理更新过程中产生的临时文件和残留文件",
+            font=ctk.CTkFont(size=11),
+            text_color="#999999"
+        )
+        update_desc_label.pack(padx=15, pady=(0, 10), anchor="w")
+
+        # 按钮容器
+        update_btn_frame = ctk.CTkFrame(update_files_frame, fg_color="transparent")
+        update_btn_frame.pack(fill="x", padx=15, pady=(0, 15))
+
+        # 清理临时文件按钮
+        clean_temp_btn = ctk.CTkButton(
+            update_btn_frame,
+            text="🗑️ 清理临时文件",
+            command=self._clean_temp_files,
+            width=150,
+            height=36,
+            font=ctk.CTkFont(size=13),
+            corner_radius=8,
+            fg_color="#1976D2",
+            hover_color="#1565C0",
+            text_color="#FFFFFF"
+        )
+        clean_temp_btn.pack(side="left", padx=(0, 10))
+
+        # 清理备份文件按钮
+        clean_backup_btn = ctk.CTkButton(
+            update_btn_frame,
+            text="🗑️ 清理备份文件",
+            command=self._clean_backup_files,
+            width=150,
+            height=36,
+            font=ctk.CTkFont(size=13),
+            corner_radius=8,
+            fg_color="#1976D2",
+            hover_color="#1565C0",
+            text_color="#FFFFFF"
+        )
+        clean_backup_btn.pack(side="left", padx=(0, 10))
+
+        # 清理更新下载包按钮
+        clean_update_pkg_btn = ctk.CTkButton(
+            update_btn_frame,
+            text="🗑️ 清理更新下载包",
+            command=self._clean_update_packages,
+            width=150,
+            height=36,
+            font=ctk.CTkFont(size=13),
+            corner_radius=8,
+            fg_color="#1976D2",
+            hover_color="#1565C0",
+            text_color="#FFFFFF"
+        )
+        clean_update_pkg_btn.pack(side="left")
+
+        # 文件统计信息
+        self.update_files_info_label = ctk.CTkLabel(
+            update_files_frame,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color="#666666"
+        )
+        self.update_files_info_label.pack(padx=15, pady=(0, 10), anchor="w")
+
+        # 更新文件统计信息
+        self._update_files_info()
+
         # 保存按钮
-        save_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        save_frame = ctk.CTkFrame(scrollable_frame, fg_color="transparent")
         save_frame.pack(fill="x", padx=20, pady=(10, 0))
 
         save_btn = ctk.CTkButton(
@@ -719,3 +812,218 @@ class SettingsDialog(ctk.CTkToplevel):
             command=self._open_log_in_explorer
         )
         log_open_btn.pack(side="left")
+
+    def _update_files_info(self):
+        """更新文件统计信息"""
+        try:
+            from ..utils.path_utils import PathUtils
+            from pathlib import Path
+            cache_dir = Path(PathUtils.get_cache_dir())
+            
+            # 统计 .new 文件（临时文件）
+            temp_files = list(cache_dir.parent.glob("*.new"))
+            temp_size = sum(f.stat().st_size for f in temp_files if f.is_file())
+            
+            # 统计备份文件
+            backup_files = []
+            backup_size = 0
+            backup_dir = cache_dir / "backup"
+            if backup_dir.exists():
+                for file in backup_dir.glob("**/*"):
+                    if file.is_file():
+                        backup_files.append(file)
+                        backup_size += file.stat().st_size
+            
+            # 统计更新下载包（系统临时文件夹中的更新包）
+            import tempfile
+            system_temp_dir = Path(tempfile.gettempdir()) / "StellarisUpdate"
+            update_pkg_files = []
+            update_pkg_size = 0
+            if system_temp_dir.exists():
+                for file in system_temp_dir.glob("*.zip"):
+                    if file.is_file() and "Stellaris-DLC-Helper" in file.name:
+                        update_pkg_files.append(file)
+                        update_pkg_size += file.stat().st_size
+            
+            # 格式化文件大小
+            def format_size(size_bytes):
+                if size_bytes < 1024:
+                    return f"{size_bytes} B"
+                elif size_bytes < 1024 * 1024:
+                    return f"{size_bytes / 1024:.2f} KB"
+                else:
+                    return f"{size_bytes / (1024 * 1024):.2f} MB"
+            
+            info_text = f"临时文件: {len(temp_files)} 个 ({format_size(temp_size)})  |  备份文件: {len(backup_files)} 个 ({format_size(backup_size)})  |  更新下载包: {len(update_pkg_files)} 个 ({format_size(update_pkg_size)})"
+            self.update_files_info_label.configure(text=info_text)
+            
+        except Exception as e:
+            self.logger.warning(f"更新文件统计失败: {e}")
+            self.update_files_info_label.configure(text="无法获取文件统计信息")
+
+    def _clean_temp_files(self):
+        """清理临时文件（.new 文件）"""
+        try:
+            # 确认对话框
+            result = messagebox.askyesno(
+                "确认清理",
+                "确定要清理临时文件吗？\n\n此操作将删除程序目录中的 *.new 文件。\n\n此操作不可恢复！",
+                icon="warning"
+            )
+            
+            if not result:
+                return
+            
+            from ..utils.path_utils import PathUtils
+            from pathlib import Path
+            cache_dir = Path(PathUtils.get_cache_dir())
+            deleted_count = 0
+            deleted_size = 0
+            
+            # 清理 .new 文件
+            for new_file in cache_dir.parent.glob("*.new"):
+                if new_file.is_file():
+                    try:
+                        size = new_file.stat().st_size
+                        new_file.unlink()
+                        deleted_count += 1
+                        deleted_size += size
+                        self.logger.info(f"已删除: {new_file.name}")
+                    except Exception as e:
+                        self.logger.warning(f"删除文件失败 {new_file}: {e}")
+            
+            # 格式化大小
+            def format_size(size_bytes):
+                if size_bytes < 1024:
+                    return f"{size_bytes} B"
+                elif size_bytes < 1024 * 1024:
+                    return f"{size_bytes / 1024:.2f} KB"
+                else:
+                    return f"{size_bytes / (1024 * 1024):.2f} MB"
+            
+            # 更新统计信息
+            self._update_files_info()
+            
+            messagebox.showinfo(
+                "清理完成",
+                f"已成功清理 {deleted_count} 个临时文件\n释放空间: {format_size(deleted_size)}"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"清理临时文件失败: {e}", exc_info=True)
+            messagebox.showerror("清理失败", f"清理临时文件时出错:\n{str(e)}")
+
+    def _clean_backup_files(self):
+        """清理备份文件"""
+        try:
+            # 确认对话框
+            result = messagebox.askyesno(
+                "确认清理",
+                "确定要清理备份文件吗？\n\n此操作将删除 backup 目录下的所有备份文件。\n\n⚠️ 警告: 此操作不可恢复！清理后将无法回滚更新！",
+                icon="warning"
+            )
+            
+            if not result:
+                return
+            
+            from ..utils.path_utils import PathUtils
+            from pathlib import Path
+            cache_dir = Path(PathUtils.get_cache_dir())
+            backup_dir = cache_dir / "backup"
+            deleted_count = 0
+            deleted_size = 0
+            
+            if backup_dir.exists():
+                for file in backup_dir.glob("**/*"):
+                    if file.is_file():
+                        try:
+                            size = file.stat().st_size
+                            file.unlink()
+                            deleted_count += 1
+                            deleted_size += size
+                        except Exception as e:
+                            self.logger.warning(f"删除备份文件失败 {file}: {e}")
+                
+                # 清理空目录
+                try:
+                    import shutil
+                    for subdir in backup_dir.glob("*"):
+                        if subdir.is_dir() and not any(subdir.iterdir()):
+                            subdir.rmdir()
+                except Exception as e:
+                    self.logger.warning(f"清理空目录失败: {e}")
+            
+            # 格式化大小
+            def format_size(size_bytes):
+                if size_bytes < 1024:
+                    return f"{size_bytes} B"
+                elif size_bytes < 1024 * 1024:
+                    return f"{size_bytes / 1024:.2f} KB"
+                else:
+                    return f"{size_bytes / (1024 * 1024):.2f} MB"
+            
+            # 更新统计信息
+            self._update_files_info()
+            
+            messagebox.showinfo(
+                "清理完成",
+                f"已成功清理 {deleted_count} 个备份文件\n释放空间: {format_size(deleted_size)}"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"清理备份文件失败: {e}", exc_info=True)
+            messagebox.showerror("清理失败", f"清理备份文件时出错:\n{str(e)}")
+
+    def _clean_update_packages(self):
+        """清理更新下载包（系统临时文件夹中的zip文件）"""
+        try:
+            # 确认对话框
+            result = messagebox.askyesno(
+                "确认清理",
+                "确定要清理更新下载包吗？\n\n此操作将删除系统临时文件夹中的所有更新程序压缩包。\n\n此操作不可恢复！",
+                icon="warning"
+            )
+            
+            if not result:
+                return
+            
+            from pathlib import Path
+            import tempfile
+            # 使用系统临时文件夹（与 updater.py 中一致）
+            system_temp_dir = Path(tempfile.gettempdir()) / "StellarisUpdate"
+            deleted_count = 0
+            deleted_size = 0
+            
+            if system_temp_dir.exists():
+                # 只清理系统临时文件夹中的更新包 zip 文件
+                for file in system_temp_dir.glob("*.zip"):
+                    if file.is_file() and "Stellaris-DLC-Helper" in file.name:
+                        try:
+                            size = file.stat().st_size
+                            file.unlink()
+                            deleted_count += 1
+                            deleted_size += size
+                            self.logger.info(f"已删除更新包: {file.name}")
+                        except Exception as e:
+                            self.logger.warning(f"删除更新包失败 {file}: {e}")
+            
+            # 格式化大小
+            def format_size(size_bytes):
+                if size_bytes < 1024:
+                    return f"{size_bytes} B"
+                elif size_bytes < 1024 * 1024:
+                    return f"{size_bytes / 1024:.2f} KB"
+                else:
+                    return f"{size_bytes / (1024 * 1024):.2f} MB"
+            
+            # 更新统计信息
+            self._update_files_info()
+            
+            messagebox.showinfo(
+                "清理完成",
+                f"已成功清理 {deleted_count} 个更新下载包\n释放空间: {format_size(deleted_size)}"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"清理更新下载包失败: {e}", exc_info=True)
+            messagebox.showerror("清理失败", f"清理更新下载包时出错:\n{str(e)}")

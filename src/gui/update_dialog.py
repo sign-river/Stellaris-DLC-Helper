@@ -407,18 +407,21 @@ class UpdateDialog(ctk.CTkToplevel):
         # 开始安装
         def install_thread():
             try:
+                self.logger.info(f"开始安装更新包: {zip_path}")
                 success = self.updater.apply_update(zip_path)
 
                 if success:
                     # 创建更新成功标记文件
                     self._create_update_marker()
+                    self.logger.info("更新安装成功")
                     self.after(0, self._show_success)
                 else:
-                    self.after(0, lambda: self._show_error("安装失败"))
+                    self.logger.error("更新安装失败")
+                    self.after(0, lambda: self._show_error("安装失败，请查看日志了解详情"))
 
             except Exception as e:
-                self.logger.error(f"安装更新失败: {e}")
-                self.after(0, lambda: self._show_error(f"安装失败: {e}"))
+                self.logger.error(f"安装更新失败: {e}", exc_info=True)
+                self.after(0, lambda: self._show_error(f"安装失败: {str(e)[:100]}"))
 
         thread = threading.Thread(target=install_thread, daemon=True)
         thread.start()
@@ -454,16 +457,11 @@ class UpdateDialog(ctk.CTkToplevel):
         restart_button = ctk.CTkButton(
             self,
             text="立即重启",
-            command=self._restart_app
+            command=self._restart_app,
+            height=40,
+            font=("Microsoft YaHei UI", 13)
         )
-        restart_button.pack(pady=(0, 10))
-
-        later_button = ctk.CTkButton(
-            self,
-            text="稍后重启",
-            command=self.destroy
-        )
-        later_button.pack()
+        restart_button.pack(pady=10)
 
     def _show_error(self, message: str):
         """显示错误界面"""
@@ -512,9 +510,26 @@ class UpdateDialog(ctk.CTkToplevel):
             import sys
             import os
             import subprocess
+            from pathlib import Path
             
             # 判断是否为打包后的 exe 模式
             is_frozen = getattr(sys, 'frozen', False)
+            
+            # 检查是否有 .new 文件待替换（updater_helper.exe 已启动）
+            app_root = Path(sys.executable).parent if is_frozen else Path(__file__).parent.parent.parent
+            new_files = list(app_root.glob("*.new"))
+            has_new_files = len(new_files) > 0
+            
+            # 如果有 .new 文件，说明 updater_helper.exe 已启动并等待主程序退出
+            # 直接退出，让 updater_helper.exe 完成替换并启动新进程
+            if is_frozen and has_new_files:
+                self.logger.info(f"检测到 {len(new_files)} 个 .new 文件待替换: {[f.name for f in new_files]}")
+                self.logger.info(f"updater_helper.exe 正在等待，准备退出主程序...")
+                # 短暂延迟确保日志写入和窗口关闭
+                import time
+                time.sleep(0.3)
+                self.logger.info("主程序即将退出，updater_helper.exe 将接管文件替换和重启")
+                os._exit(0)
             
             # 如果 exe 替换已排程（在 apply_update 中写入 .new 并创建替换脚本），且是 exe 模式，直接退出主进程以便批处理替换
             if is_frozen and hasattr(self.updater, 'exe_replacement_pending') and self.updater.exe_replacement_pending:

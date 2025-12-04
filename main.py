@@ -71,6 +71,44 @@ def main():
         logger.info(f"日志文件路径: {get_default_log_file_path()}")
     except:
         pass
+    
+    # 立即清理残留的 .new 文件（优先级最高，在任何其他操作之前）
+    try:
+        from pathlib import Path
+        if getattr(sys, 'frozen', False):
+            app_root = Path(sys.executable).parent
+            new_files = list(app_root.glob('*.new'))
+            
+            if new_files:
+                logger.info(f"发现 {len(new_files)} 个残留的 .new 文件")
+                for new_file in new_files:
+                    try:
+                        target_name = new_file.name[:-4]  # 移除 .new
+                        target_file = app_root / target_name
+                        
+                        # 不替换正在运行的主程序
+                        if target_file.resolve() == Path(sys.executable).resolve():
+                            logger.warning(f"跳过主程序: {target_file.name}")
+                            continue
+                        
+                        # 执行替换
+                        if target_file.exists():
+                            backup = target_file.with_suffix(target_file.suffix + '.old')
+                            target_file.rename(backup)
+                            new_file.rename(target_file)
+                            try:
+                                backup.unlink()
+                            except Exception:
+                                pass
+                            logger.info(f"✅ 已完成替换: {target_file.name}")
+                        else:
+                            new_file.rename(target_file)
+                            logger.info(f"✅ 已恢复文件: {target_file.name}")
+                            
+                    except Exception as e:
+                        logger.warning(f"处理 {new_file.name} 失败: {e}")
+    except Exception as e:
+        logger.warning(f"清理残留文件失败: {e}")
 
     # 记录运行时环境信息，帮助诊断打包后用户运行旧配置的问题
     try:

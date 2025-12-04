@@ -2543,14 +2543,10 @@ class MainWindowCTk:
             # 使用 after 确保在主线程中创建对话框，避免线程安全问题
             def show_dialog():
                 try:
-                    # 如果有强制更新或有公告，显示对话框
-                    if update_info and update_info.is_force_update(VERSION):
-                        # 强制更新，显示对话框（无论是否有公告）
+                    # 如果有更新（任何类型）或有公告，都显示对话框
+                    if update_info or announcement:
                         UpdateDialog(self.root, update_info, announcement)
-                    elif announcement:
-                        # 没有强制更新但有公告，显示公告对话框
-                        UpdateDialog(self.root, None, announcement)
-                    # 非强制更新且无公告时不显示弹窗，避免打扰用户
+                    # 没有更新且没有公告时静默（不打扰用户）
                 except Exception as e:
                     # 如果对话框创建失败，记录错误但不影响主程序
                     self.logger.log_exception("显示更新/公告对话框失败", e)
