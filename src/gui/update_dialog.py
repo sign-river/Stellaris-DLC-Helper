@@ -168,9 +168,20 @@ class UpdateDialog(ctk.CTkToplevel):
 
             # 更新信息文本框（使用公告内容填充）
             if self.announcement:
-                self.info_textbox = ctk.CTkTextbox(info_frame, width=440, height=120, wrap="word")
+                self.info_textbox = ctk.CTkTextbox(
+                    info_frame, 
+                    width=440, 
+                    height=120, 
+                    wrap="char",
+                    font=ctk.CTkFont(size=13),
+                    fg_color="#F8F9FA"
+                )
                 self.info_textbox.pack(fill='both', expand=True, pady=(0, 10))
+                # 增加行间距，让文本更透气
                 self.info_textbox.insert("0.0", self.announcement)
+                # 设置文本间距
+                self.info_textbox.tag_config("spacing", spacing1=3, spacing3=3)
+                self.info_textbox.tag_add("spacing", "1.0", "end")
                 self.info_textbox.configure(state="disabled")  # 只读
 
             # 强制更新提示
@@ -202,10 +213,16 @@ class UpdateDialog(ctk.CTkToplevel):
                 announcement_frame, 
                 width=440, 
                 height=240,
-                wrap="word"
+                wrap="char",
+                font=ctk.CTkFont(size=13),
+                fg_color="#F8F9FA"
             )
             announcement_textbox.pack(fill='both', expand=True, padx=10, pady=10)
+            # 增加行间距，让文本更透气
             announcement_textbox.insert("0.0", self.announcement)
+            # 设置文本间距
+            announcement_textbox.tag_config("spacing", spacing1=3, spacing3=3)
+            announcement_textbox.tag_add("spacing", "1.0", "end")
             announcement_textbox.configure(state="disabled")  # 只读
 
         # 按钮区域
