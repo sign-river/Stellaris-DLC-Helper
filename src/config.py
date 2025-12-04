@@ -26,8 +26,8 @@ DLC_SOURCES = get_config("server", "sources", default=[
 ])
 
 # 兼容性：保留原有配置作为默认源
-DLC_SERVER_URL = DLC_SOURCES[0]["url"] if DLC_SOURCES else "http://47.100.2.190/dlc/"
-DLC_INDEX_URL = f"{DLC_SERVER_URL}index.json"
+DLC_SERVER_URL = _get_best_source_url()
+DLC_INDEX_URL = f"{DLC_SERVER_URL.rstrip('/')}/index.json"
 
 def _get_best_source_url():
     """获取最佳的源URL（优先选择国内云服务器）"""
