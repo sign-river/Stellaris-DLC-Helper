@@ -366,8 +366,12 @@ class SettingsDialog(ctk.CTkToplevel):
         except Exception:
             cfg_path = "(未找到)"
 
+        # 使用 grid 布局，确保路径框可扩展，按钮始终可见
         cfg_frame = ctk.CTkFrame(tab, fg_color="#FFFFFF", corner_radius=6)
         cfg_frame.pack(fill="x", padx=10, pady=(0, 12))
+        cfg_frame.grid_columnconfigure(0, weight=0, minsize=180)
+        cfg_frame.grid_columnconfigure(1, weight=1)
+        cfg_frame.grid_columnconfigure(2, weight=0)
 
         cfg_label = ctk.CTkLabel(
             cfg_frame,
@@ -375,12 +379,12 @@ class SettingsDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(size=11),
             text_color="#333333"
         )
-        cfg_label.pack(side="left", padx=(8, 8), pady=8)
+        cfg_label.grid(row=0, column=0, sticky="w", padx=(12, 8), pady=8)
 
-        # 扩大输入框和按钮尺寸以避免文字被截断
+        # 路径输入框，占据中间可扩展列
         self.config_path_entry = ctk.CTkEntry(
             cfg_frame,
-            width=520,
+            width=20,
             height=32,
             font=ctk.CTkFont(size=11),
             state="normal"
@@ -391,24 +395,28 @@ class SettingsDialog(ctk.CTkToplevel):
         except Exception:
             self.config_path_entry.insert(0, "(未找到)")
             self.config_path_entry.configure(state="readonly")
-        self.config_path_entry.pack(side="left", padx=(0, 8), pady=8)
+        self.config_path_entry.grid(row=0, column=1, sticky="ew", padx=(0, 8), pady=8)
+
+        # 右侧按钮容器，固定大小，内含复制与打开按钮垂直/水平排列
+        btn_container = ctk.CTkFrame(cfg_frame, fg_color="transparent")
+        btn_container.grid(row=0, column=2, sticky="e", padx=(0, 12), pady=8)
 
         copy_btn = ctk.CTkButton(
-            cfg_frame,
+            btn_container,
             text="复制",
             width=90,
             height=32,
             font=ctk.CTkFont(size=11),
             command=self._copy_config_path
         )
-        copy_btn.pack(side="left", padx=(0, 8), pady=8)
+        copy_btn.pack(side="left", padx=(0, 6))
 
         open_btn = ctk.CTkButton(
-            cfg_frame,
+            btn_container,
             text="打开目录",
             width=110,
             height=32,
             font=ctk.CTkFont(size=11),
             command=self._open_config_in_explorer
         )
-        open_btn.pack(side="left", padx=(0, 8), pady=8)
+        open_btn.pack(side="left")
