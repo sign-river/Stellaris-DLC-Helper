@@ -28,10 +28,10 @@ class ConfigLoader:
             "version": "1.0.0",
             "stellaris_app_id": "281990",
             "server": {
-                "url": "https://dlc.dlchelper.top/dlc/",
+                "url": "http://47.100.2.190/dlc/",
                 "timeout": 30,
-                "update_url_base": "https://dlc.dlchelper.top/update/",
-                "appinfo_url": "https://dlc.dlchelper.top/appinfo/stellaris_appinfo.json"
+                "update_url_base": "http://47.100.2.190/update/",
+                "appinfo_url": "http://47.100.2.190/appinfo/stellaris_appinfo.json"
             },
             "network": {
                 "chunk_size": 8192,

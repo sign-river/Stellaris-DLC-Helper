@@ -17,8 +17,8 @@ STELLARIS_APP_ID = get_config("stellaris_app_id", default="281990")
 # DLC 服务器配置 - 多源支持
 DLC_SOURCES = get_config("server", "sources", default=[
     {
-        "name": "r2",
-        "url": "https://dlc.dlchelper.top/dlc/",
+        "name": "domestic_cloud",
+        "url": "http://47.100.2.190/dlc/",
         "priority": 1,
         "enabled": True,
         "format": "standard"
@@ -26,7 +26,7 @@ DLC_SOURCES = get_config("server", "sources", default=[
 ])
 
 # 兼容性：保留原有配置作为默认源
-DLC_SERVER_URL = DLC_SOURCES[0]["url"] if DLC_SOURCES else "https://dlc.dlchelper.top/dlc/"
+DLC_SERVER_URL = DLC_SOURCES[0]["url"] if DLC_SOURCES else "http://47.100.2.190/dlc/"
 DLC_INDEX_URL = f"{DLC_SERVER_URL}index.json"
 
 def _get_best_source_url():
@@ -43,7 +43,7 @@ def _get_best_source_url():
     return "https://dlc.dlchelper.top"
 
 # 更新服务器配置 - 使用专用配置
-UPDATE_URL_BASE = get_config("server", "update_url_base", default="https://dlc.dlchelper.top/update/")
+UPDATE_URL_BASE = get_config("server", "update_url_base", default="http://47.100.2.190/update/")
 UPDATE_CHECK_URL = f"{UPDATE_URL_BASE}version.json"
 ANNOUNCEMENT_URL = f"{UPDATE_URL_BASE}announcement.txt"
 APPINFO_URL = "http://47.100.2.190/appinfo/stellaris_appinfo.json"
