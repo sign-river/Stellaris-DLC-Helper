@@ -95,14 +95,14 @@ class MainWindowCTk:
         # 创建主内容区域
         self._create_content_area()
         
-        # 自动检测游戏路径并加载DLC列表
-        self.root.after(100, self.auto_detect_and_load)
+        # 优先检查更新和公告（让用户第一时间看到重要通知）
+        self.root.after(100, self._auto_check_update)
 
         # 检查是否刚刚完成更新
-        self.root.after(500, self._check_recent_update)
+        self.root.after(300, self._check_recent_update)
 
-        # 延迟检查更新（避免启动时卡顿）
-        self.root.after(2000, self._auto_check_update)
+        # 延迟检测游戏路径并加载DLC列表（避免阻塞公告显示）
+        self.root.after(800, self.auto_detect_and_load)
 
     def _open_error_docs(self, event=None):
         """在用户默认浏览器中打开在线错误/调试文档。
