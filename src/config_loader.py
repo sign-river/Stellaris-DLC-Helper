@@ -6,7 +6,6 @@
 """
 
 import json
-import shutil
 from pathlib import Path
 import logging
 import sys
@@ -19,7 +18,6 @@ class ConfigLoader:
         """初始化配置加载器"""
         # 以多个候选路径查找 config.json，兼容开发模式、打包后的 EXE、以及从当前工作目录启动的情况
         self.config_path = self._find_config_path()
-        self.example_path = Path(__file__).parent.parent / "config.json.example"
         self._config = self._load_config()
     
     def _get_default_config(self):
@@ -53,11 +51,10 @@ class ConfigLoader:
     def _find_config_path(self):
         """按优先级查找配置文件的路径，返回 Path（可能不存在）。
 
-        优先级：当前工作目录、可执行文件目录、模块文件目录、PyInstaller 的 _MEIPASS。
+        优先级：
+        - 开发模式：模块目录 > 当前工作目录 > 可执行文件目录
+        - 打包模式：可执行文件目录 > PyInstaller _MEIPASS
         """
-        # 优化查找顺序：优先使用可执行文件所在目录与 PyInstaller 的 _MEIPASS，
-        # 然后是模块目录，最后退回到当前工作目录。这样可以避免用户直接从
-        # ZIP 内临时运行 exe 导致的 cwd 是临时目录而找不到随包提供的 config.json。
         candidates = []
         exe_dir = None
         try:
@@ -66,24 +63,30 @@ class ConfigLoader:
             exe_dir = None
 
         meipass = getattr(sys, "_MEIPASS", None)
+        
+        # 判断是否为打包模式
+        is_frozen = getattr(sys, 'frozen', False) or meipass is not None
 
-        # 1. 可执行文件所在目录（优先）
-        if exe_dir:
-            candidates.append(exe_dir / "config.json")
-
-        # 2. PyInstaller 临时目录（如果存在）
-        if meipass:
-            candidates.append(Path(meipass) / "config.json")
-
-        # 3. 当前模块的上级目录（源码目录）
-        try:
-            module_dir = Path(__file__).parent.parent
-            candidates.append(module_dir / "config.json")
-        except Exception:
-            pass
-
-        # 4. 当前工作目录（最后）
-        candidates.append(Path.cwd() / "config.json")
+        if is_frozen:
+            # 打包模式：优先使用可执行文件所在目录
+            # 1. 可执行文件所在目录
+            if exe_dir:
+                candidates.append(exe_dir / "config.json")
+            
+            # 2. PyInstaller 临时目录（如果存在）
+            if meipass:
+                candidates.append(Path(meipass) / "config.json")
+        else:
+            # 开发模式：优先使用模块目录和当前工作目录，避免使用 Python 解释器所在目录
+            # 1. 当前模块的上级目录（源码目录）
+            try:
+                module_dir = Path(__file__).parent.parent
+                candidates.append(module_dir / "config.json")
+            except Exception:
+                pass
+            
+            # 2. 当前工作目录
+            candidates.append(Path.cwd() / "config.json")
 
         # 记录候选路径并返回第一个存在的
         for p in candidates:
@@ -113,23 +116,9 @@ class ConfigLoader:
                 logging.warning(f"⚠ 警告: 加载配置文件失败，使用默认配置: {e}")
                 return self._get_default_config()
         else:
-            # 如果不存在，从 config.json.example 复制（先尝试在 self.config_path 的目录内）
-            possible_example = self.example_path
-            if not possible_example.exists():
-                # 尝试在 _MEIPASS 中查找示例文件
-                meipass = getattr(sys, "_MEIPASS", None)
-                if meipass:
-                    possible_example = Path(meipass) / "config.json.example"
-            if possible_example.exists():
-                try:
-                    shutil.copy(possible_example, self.config_path)
-                    logging.info(f"✓ 已从示例配置创建 config.json")
-                    logging.info(f"  请根据需要修改: {self.config_path}")
-                    with open(self.config_path, 'r', encoding='utf-8') as f:
-                        return json.load(f)
-                except Exception as e:
-                    logging.warning(f"⚠ 警告: 无法创建配置文件: {e}")
-            
+            # 配置文件不存在，使用默认配置
+            logging.warning(f"⚠ 配置文件不存在: {self.config_path}")
+            logging.info("使用默认配置运行，建议从 GitHub 仓库下载 config.json")
             return self._get_default_config()
     
     def get(self, *keys, default=None):

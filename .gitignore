@@ -66,8 +66,7 @@ Stellaris-DLC-Helper/
 *.deb
 *.rpm
 
-# 配置文件（包含敏感信息）
-config.json
+# 备份文件
 *.bak
 *.backup
 
