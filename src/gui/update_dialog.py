@@ -440,20 +440,49 @@ class UpdateDialog(ctk.CTkToplevel):
         )
         title_label.pack(pady=(30, 20))
 
-        self.progress_bar = ctk.CTkProgressBar(self, width=300)
+        self.progress_bar = ctk.CTkProgressBar(self, width=300, mode="determinate")
         self.progress_bar.pack(pady=(0, 10))
         self.progress_bar.set(0)
 
-        self.progress_label = ctk.CTkLabel(self, text="0%")
+        self.progress_label = ctk.CTkLabel(self, text="准备下载...")
         self.progress_label.pack()
+        
+        # 用于不确定进度的动画
+        self._indeterminate_value = 0
+        self._indeterminate_animation = None
 
     def _update_progress(self, current: int, total: int):
         """更新下载进度"""
         if total > 0:
+            # 有总大小：显示百分比进度
+            if self._indeterminate_animation:
+                self.after_cancel(self._indeterminate_animation)
+                self._indeterminate_animation = None
+            
             progress = current / total
             self.progress_bar.set(progress)
             percentage = int(progress * 100)
-            self.progress_label.configure(text=f"{percentage}% ({current}/{total} bytes)")
+            
+            # 转换为可读的大小格式
+            current_mb = current / (1024 * 1024)
+            total_mb = total / (1024 * 1024)
+            self.progress_label.configure(text=f"{percentage}% ({current_mb:.1f}/{total_mb:.1f} MB)")
+        else:
+            # 无总大小：显示已下载量 + 不确定进度条动画
+            current_mb = current / (1024 * 1024)
+            self.progress_label.configure(text=f"正在下载... ({current_mb:.1f} MB)")
+            
+            # 启动不确定进度条动画（如果还没启动）
+            if not self._indeterminate_animation:
+                self._start_indeterminate_animation()
+    
+    def _start_indeterminate_animation(self):
+        """启动不确定进度条的动画效果"""
+        self._indeterminate_value += 0.02
+        if self._indeterminate_value > 1.0:
+            self._indeterminate_value = 0
+        self.progress_bar.set(self._indeterminate_value)
+        self._indeterminate_animation = self.after(50, self._start_indeterminate_animation)
 
     def _show_install_ui(self, zip_path: Path):
         """显示安装界面"""
