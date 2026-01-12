@@ -658,7 +658,7 @@ class UpdateManager:
             try:
                 self.logger.info(f"检查更新: {self.update_url}")
                 
-                response = requests.get(self.update_url, timeout=15)
+                response = requests.get(self.update_url, timeout=5)
                 response.raise_for_status()
                 data = response.json()
                 
@@ -700,7 +700,7 @@ class UpdateManager:
             announcement_url = f"{base_url}/announcement.txt"
             
             self.logger.info(f"获取公告: {announcement_url}")
-            response = requests.get(announcement_url, timeout=10)
+            response = requests.get(announcement_url, timeout=3)
             response.raise_for_status()
             
             # 使用 UTF-8 解码

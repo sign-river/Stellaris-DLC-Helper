@@ -26,7 +26,7 @@ ANNOUNCEMENT_URL = f"{UPDATE_URL_BASE}announcement.txt"
 APPINFO_URL = get_config("server", "appinfo_url", default="https://gitlink.org.cn/signriver/file-warehouse/releases/download/ste/stellaris_appinfo.json")
 
 # 网络配置
-REQUEST_TIMEOUT = get_config("server", "timeout", default=30)
+REQUEST_TIMEOUT = get_config("server", "timeout", default=10)  # 减少超时时间，避免启动卡顿
 CHUNK_SIZE = get_config("network", "chunk_size", default=8192)
 RETRY_TIMES = get_config("network", "retry_times", default=3)
 

@@ -95,14 +95,14 @@ class MainWindowCTk:
         # 创建主内容区域
         self._create_content_area()
         
-        # 优先检查更新和公告（让用户第一时间看到重要通知）
-        self.root.after(100, self._auto_check_update)
-
+        # 延迟检测游戏路径并加载DLC列表（优先显示界面）
+        self.root.after(500, self.auto_detect_and_load)
+        
         # 检查是否刚刚完成更新
-        self.root.after(300, self._check_recent_update)
+        self.root.after(800, self._check_recent_update)
 
-        # 延迟检测游戏路径并加载DLC列表（避免阻塞公告显示）
-        self.root.after(800, self.auto_detect_and_load)
+        # 最后检查更新和公告（避免阻塞界面启动）
+        self.root.after(1500, self._auto_check_update)
 
     def _open_error_docs(self, event=None):
         """在用户默认浏览器中打开在线错误/调试文档。
@@ -1956,7 +1956,7 @@ class MainWindowCTk:
                         if os.path.exists(cache_path):
                             self.logger.info("从本地缓存加载...")
                         else:
-                            self.logger.info("\n下载完成")
+                            self.logger.info("\n✓ 下载完成")
                         
                         # 验证下载文件完整性
                         if os.path.exists(cache_path):
@@ -1972,10 +1972,10 @@ class MainWindowCTk:
                             if expected_hash:
                                 self.logger.info(f"✓ 文件完整性校验通过 (SHA256)")
                         
-                        # 安装
-                        self.logger.info(f"正在安装: {dlc['name']}...")
+                        # 安装（解压ZIP文件，可能需要几秒钟）
+                        self.logger.info(f"正在解压安装: {dlc['name']}（请稍候...）")
                         self.dlc_installer.install(cache_path, dlc['key'], dlc['name'])
-                        self.logger.success("安装成功")
+                        self.logger.success("✓ 安装成功")
                         success += 1
                         # 每个 DLC 安装成功后，标记需要刷新，但不立即刷新避免阻塞下载线程
                         # 将在所有下载完成后统一刷新
