@@ -23,6 +23,28 @@ from ..core.updater import AutoUpdater, UpdateInfo
 
 class UpdateDialog(ctk.CTkToplevel):
     """更新/公告对话框"""
+    
+    @staticmethod
+    def should_show_announcement():
+        """
+        检查是否应该显示公告
+        如果当前版本的公告已被用户标记为"不再显示"，则返回False
+        """
+        try:
+            from ..config import VERSION
+            from .. import config_loader
+            
+            # 读取配置
+            dismissed_version = config_loader.get_config("settings", "dismissed_announcement_version", default="")
+            
+            # 如果记录的版本与当前版本相同，说明用户已选择不再显示
+            if dismissed_version == VERSION:
+                return False
+            
+            return True
+        except Exception:
+            # 出错时默认显示公告
+            return True
 
     def __init__(self, parent, update_info: Optional[UpdateInfo] = None, announcement: str = ""):
         super().__init__(parent)
@@ -31,6 +53,7 @@ class UpdateDialog(ctk.CTkToplevel):
         self.announcement = announcement
         self.updater = AutoUpdater()
         self.logger = logging.getLogger(__name__)
+        self.dont_show_again_var = ctk.BooleanVar(value=False)
         
         try:
             # 根据是否有更新设置标题
@@ -225,6 +248,19 @@ class UpdateDialog(ctk.CTkToplevel):
             announcement_textbox.tag_add("spacing", "1.0", "end")
             announcement_textbox.configure(state="disabled")  # 只读
 
+            # 不再显示复选框
+            dont_show_frame = ctk.CTkFrame(self, fg_color="transparent")
+            dont_show_frame.pack(fill="x", padx=20, pady=(0, 5))
+            
+            dont_show_checkbox = ctk.CTkCheckBox(
+                dont_show_frame,
+                text="本版本不再显示此公告",
+                variable=self.dont_show_again_var,
+                font=ctk.CTkFont(size=12),
+                text_color="#666666"
+            )
+            dont_show_checkbox.pack(anchor="w")
+
         # 按钮区域
         button_frame = ctk.CTkFrame(self, fg_color="transparent")
         button_frame.pack(side="bottom", fill="x", padx=20, pady=(0, 20))
@@ -267,12 +303,43 @@ class UpdateDialog(ctk.CTkToplevel):
 
     def _close_announcement(self):
         """关闭公告"""
+        # 如果用户勾选了不再显示，保存版本号
+        if self.dont_show_again_var.get():
+            self._save_announcement_dismissed()
+        
         try:
             self.grab_release()  # 释放模态锁
         except Exception:
             pass
         self._enable_main_window_download()
         self.destroy()
+    
+    def _save_announcement_dismissed(self):
+        """保存用户已查看公告的版本号"""
+        try:
+            from ..config import VERSION
+            from .. import config_loader
+            import json
+            
+            # 读取当前配置
+            config_path = config_loader._loader.config_path
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            # 确保settings节点存在
+            if "settings" not in config:
+                config["settings"] = {}
+            
+            # 保存已查看的公告版本号
+            config["settings"]["dismissed_announcement_version"] = VERSION
+            
+            # 写回配置文件
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            
+            self.logger.info(f"已保存公告查看记录: v{VERSION}")
+        except Exception as e:
+            self.logger.error(f"保存公告查看记录失败: {e}", exc_info=True)
 
     def _center_window(self, parent):
         """居中窗口"""

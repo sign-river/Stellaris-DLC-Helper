@@ -3,7 +3,8 @@
   "stellaris_app_id": "281990",
   "settings": {
     "skip_speed_test": false,
-    "default_source": "gitlink"
+    "default_source": "gitlink",
+    "dismissed_announcement_version": "1.0.4"
   },
   "server": {
     "update_url_base": "https://gitlink.org.cn/signriver/file-warehouse/releases/download/v/",
