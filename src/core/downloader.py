@@ -114,16 +114,36 @@ class DLCDownloader:
         # 确保目标目录存在
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
         
-        # 检查已下载的文件大小
-        resume_position = 0
+        # 检查已下载的文件
         if os.path.exists(dest_path):
             existing_size = os.path.getsize(dest_path)
-            # GitLink不支持断点续传，删除部分文件重新下载
-            print(f"检测到部分下载的文件 ({existing_size / 1024 / 1024:.2f} MB)，GitLink不支持断点续传，将重新下载")
-            try:
-                os.remove(dest_path)
-            except Exception as e:
-                print(f"⚠ 删除部分文件失败: {e}")
+            if existing_size > 0:
+                # 验证ZIP文件完整性
+                try:
+                    import zipfile
+                    with zipfile.ZipFile(dest_path, 'r') as zip_ref:
+                        # testzip()返回第一个损坏文件的名称，如果都正常则返回None
+                        bad_file = zip_ref.testzip()
+                        if bad_file is None:
+                            print(f"✓ 文件已存在且完整 ({existing_size / 1024 / 1024:.2f} MB)，使用缓存")
+                            return True
+                        else:
+                            print(f"⚠ ZIP文件损坏 (文件 {bad_file} 校验失败)，重新下载")
+                except (zipfile.BadZipFile, Exception) as e:
+                    print(f"⚠ ZIP文件无效或损坏 ({e})，重新下载")
+                
+                # 文件损坏，删除重新下载
+                try:
+                    os.remove(dest_path)
+                except Exception as e:
+                    print(f"⚠ 删除损坏文件失败: {e}")
+            else:
+                # 文件为空，删除重新下载
+                print(f"⚠ 检测到空文件，将重新下载")
+                try:
+                    os.remove(dest_path)
+                except Exception as e:
+                    print(f"⚠ 删除空文件失败: {e}")
         
         # 配置请求头
         headers = {
