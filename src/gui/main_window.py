@@ -437,13 +437,13 @@ class MainWindowCTk:
             border_color="#E0E0E0"
         )
         dlc_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
-        dlc_frame.grid_rowconfigure(1, weight=1)
+        dlc_frame.grid_rowconfigure(2, weight=1)  # 第2行是滚动框架，需要自动扩展
         dlc_frame.grid_columnconfigure(0, weight=1)
 
         
         # 标题行（9列布局：DLC标题 | 下载信息 | 进度条 | 速度 | 下载源 | 全选按钮）
         header_frame = ctk.CTkFrame(dlc_frame, fg_color="transparent")
-        header_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 10))
+        header_frame.grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 5))
         
         # 配置列权重：第0列固定，第1-2列下载信息，第3-6列进度条，第7列固定
         header_frame.grid_columnconfigure(0, weight=0, minsize=100)  # DLC列表标题
@@ -603,8 +603,7 @@ class MainWindowCTk:
         self.dlc_scrollable_frame = ctk.CTkScrollableFrame(
             dlc_frame,
             corner_radius=8,
-            fg_color="#FAFAFA",
-            height=220  # 设置固定高度，降低DLC区域高度
+            fg_color="#FAFAFA"
         )
         self.dlc_scrollable_frame.grid(row=2, column=0, sticky="nsew", padx=15, pady=(0, 15))
         self.dlc_scrollable_frame.grid_columnconfigure(0, weight=1)
