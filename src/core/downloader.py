@@ -142,13 +142,21 @@ class DLCDownloader:
         if response.status_code == 206:
             # 断点续传：总大小 = 已下载 + 剩余内容
             if 'Content-Length' in response.headers:
-                total_size = resume_position + int(response.headers['Content-Length'])
+                remaining_size = int(response.headers['Content-Length'])
+                total_size = resume_position + remaining_size
+                print(f"✓ 断点续传 - 已下载: {resume_position} bytes, 剩余: {remaining_size} bytes, 总大小: {total_size} bytes")
             else:
-                total_size = resume_position
+                # 如果没有Content-Length，使用expected_size（如果提供）
+                if expected_size:
+                    total_size = expected_size
+                    print(f"✓ 使用预期文件大小: {total_size} bytes ({total_size/1024/1024:.1f} MB)")
+                else:
+                    total_size = resume_position
         else:
             # 全新下载（200）：总大小 = Content-Length
             if 'Content-Length' in response.headers:
                 total_size = int(response.headers['Content-Length'])
+                print(f"✓ 从服务器获取文件大小: {total_size} bytes ({total_size/1024/1024:.1f} MB)")
             else:
                 # 如果没有 Content-Length，尝试从 Content-Range 获取（某些服务器可能返回这个）
                 content_range = response.headers.get('Content-Range')
@@ -174,7 +182,7 @@ class DLCDownloader:
             total_size = expected_size
             print(f"✓ 使用预期文件大小: {total_size} bytes ({total_size/1024/1024:.1f} MB)")
         elif total_size > 0:
-            print(f"✓ 从服务器获取文件大小: {total_size} bytes ({total_size/1024/1024:.1f} MB)")
+            pass  # 已经打印过了
         else:
             print(f"⚠ 警告: 无法获取文件大小，进度条将不可用")
         
