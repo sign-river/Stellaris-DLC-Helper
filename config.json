@@ -3,7 +3,7 @@
   "stellaris_app_id": "281990",
   "settings": {
     "skip_speed_test": false,
-    "default_source": "github"
+    "default_source": "gitlink"
   },
   "server": {
     "update_url_base": "https://gitlink.org.cn/signriver/file-warehouse/releases/download/v/",
@@ -17,37 +17,6 @@
         "format": "github_release",
         "mapping_file": "pairings.json",
         "test_url": "https://gitlink.org.cn/signriver/file-warehouse/releases/download/test/test.bin"
-      },
-      {
-        "name": "github",
-        "url": "https://github.com/sign-river/File_warehouse/releases/download/ste4.2/",
-        "priority": 2,
-        "enabled": true,
-        "format": "github_release",
-        "repo": "sign-river/File_warehouse",
-        "tag": "ste4.2",
-        "mapping_file": "pairings.json",
-        "test_url": "https://github.com/sign-river/File_warehouse/releases/download/test/test.bin"
-      },
-      {
-        "name": "gitee",
-        "url": "https://gitee.com/signriver/file_warehouse",
-        "priority": 3,
-        "enabled": true,
-        "format": "gitee_release",
-        "repo": "signriver/file_warehouse",
-        "mapping_file": "pairings.json",
-        "releases": {
-          "ste1-26": {
-            "min": 1,
-            "max": 26
-          },
-          "ste27-39": {
-            "min": 27,
-            "max": 39
-          }
-        },
-        "test_url": "https://gitee.com/signriver/file_warehouse/releases/download/test/test.bin"
       }
     ],
     "timeout": 30
