@@ -206,7 +206,7 @@ class PatchManager:
             for filename in local_appinfo_files:
                 local_path = PathUtils.get_appinfo_path(filename)
                 # 如果旧版文件位于项目根目录，则迁移到缓存目录
-                legacy_path = Path(__file__).parent.parent.parent / filename
+                legacy_path = Path(PathUtils.get_base_dir()) / filename
                 try:
                     if legacy_path.exists() and not os.path.exists(local_path):
                         # 进行一次迁移复制，保留旧文件

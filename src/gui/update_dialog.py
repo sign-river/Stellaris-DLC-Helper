@@ -516,7 +516,8 @@ class UpdateDialog(ctk.CTkToplevel):
             is_frozen = getattr(sys, 'frozen', False)
             
             # 检查是否有 .new 文件待替换（updater_helper.exe 已启动）
-            app_root = Path(sys.executable).parent if is_frozen else Path(__file__).parent.parent.parent
+            from ..utils.path_utils import PathUtils
+            app_root = Path(PathUtils.get_base_dir())
             new_files = list(app_root.glob("*.new"))
             has_new_files = len(new_files) > 0
             

@@ -80,7 +80,8 @@ class ConfigLoader:
             # 开发模式：优先使用模块目录和当前工作目录，避免使用 Python 解释器所在目录
             # 1. 当前模块的上级目录（源码目录）
             try:
-                module_dir = Path(__file__).parent.parent
+                from .utils.path_utils import PathUtils
+                module_dir = Path(PathUtils.get_base_dir())
                 candidates.append(module_dir / "config.json")
             except Exception:
                 pass
@@ -99,7 +100,8 @@ class ConfigLoader:
                 return p
 
         # 如果都不存在，默认使用第一个候选（优先为 exe_dir），否则回退到模块目录
-        default = candidates[0] if candidates else Path(__file__).parent.parent / "config.json"
+        from .utils.path_utils import PathUtils
+        default = candidates[0] if candidates else Path(PathUtils.get_base_dir()) / "config.json"
         logging.info(f"未找到配置文件，默认使用路径: {default}")
         return default
     

@@ -311,10 +311,8 @@ class UpdateInstaller:
         
     def get_app_root(self) -> Path:
         """获取应用根目录"""
-        if self.is_frozen:
-            return Path(sys.executable).parent
-        else:
-            return Path(__file__).parent.parent.parent
+        from ..utils.path_utils import PathUtils
+        return Path(PathUtils.get_base_dir())
     
     def install_update(self, zip_path: Path) -> bool:
         """

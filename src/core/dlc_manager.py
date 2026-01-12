@@ -32,10 +32,9 @@ class DLCManager:
         """从pairings.json加载DLC名称映射"""
         try:
             # 尝试从多个位置加载pairings.json
-            base_dir = Path(__file__).parent.parent.parent
+            base_dir = Path(PathUtils.get_base_dir())
             pairings_paths = [
-                base_dir / "pairings.json",
-                Path(PathUtils.get_base_dir()) / "pairings.json"
+                base_dir / "pairings.json"
             ]
             
             for path in pairings_paths:
