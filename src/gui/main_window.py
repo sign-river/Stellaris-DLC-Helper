@@ -1439,7 +1439,7 @@ class MainWindowCTk:
                     "错误", 
                     "检测到补丁文件 steam_api64.dll 缺失！\n\n"
                     "这很可能是杀毒软件误删了该文件。\n"
-                    "请将本程序目录或者补丁文件所在目录添加到杀毒软件白名单\n\n"
+                    "请将本程序目录或者补丁文件所在目录patches添加到杀毒软件白名单\n\n"
                     "处理完成后，可以在「设置 → 高级功能」中恢复补丁。"
                 )
                 self.logger.error("补丁文件缺失: steam_api64.dll 不存在于 patches 目录")
