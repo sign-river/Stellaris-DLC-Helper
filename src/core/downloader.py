@@ -59,7 +59,7 @@ class DLCDownloader:
             except Exception:
                 pass
     
-    def download(self, url, dest_path, expected_hash: str = None):
+    def download(self, url, dest_path, expected_hash: str = None, expected_size: int = None):
         """
         下载文件（支持断点续传）
         
@@ -67,6 +67,7 @@ class DLCDownloader:
             url: 下载URL
             dest_path: 目标文件路径
             expected_hash: 预期的文件SHA256哈希（可选）
+            expected_size: 预期的文件大小（字节，可选）
             
         返回:
             bool: 是否成功
@@ -76,7 +77,7 @@ class DLCDownloader:
         """
         try:
             print(f"开始下载: {url}")
-            result = self._download_single_attempt(url, dest_path)
+            result = self._download_single_attempt(url, dest_path, expected_size)
             
             # 验证哈希（如果提供）
             if result and expected_hash:
@@ -95,13 +96,14 @@ class DLCDownloader:
                 pass
             raise Exception(f"下载失败: {str(e)}")
     
-    def _download_single_attempt(self, url, dest_path):
+    def _download_single_attempt(self, url, dest_path, expected_size=None):
         """
         单次下载尝试（内部方法）
         
         参数:
             url: 下载URL
             dest_path: 目标文件路径
+            expected_size: 预期的文件大小（字节，可选）
             
         返回:
             bool: 是否成功
@@ -137,11 +139,39 @@ class DLCDownloader:
             raise Exception(f"HTTP错误: {response.status_code}")
         
         # 获取文件总大小
-        total_size = resume_position
-        if 'Content-Length' in response.headers:
-            total_size += int(response.headers['Content-Length'])
-        elif response.status_code == 200:
-            total_size = int(response.headers.get('Content-Length', 0))
+        if response.status_code == 206:
+            # 断点续传：总大小 = 已下载 + 剩余内容
+            if 'Content-Length' in response.headers:
+                total_size = resume_position + int(response.headers['Content-Length'])
+            else:
+                total_size = resume_position
+        else:
+            # 全新下载（200）：总大小 = Content-Length
+            if 'Content-Length' in response.headers:
+                total_size = int(response.headers['Content-Length'])
+            else:
+                # 如果没有 Content-Length，尝试从 Content-Range 获取（某些服务器可能返回这个）
+                content_range = response.headers.get('Content-Range')
+                if content_range:
+                    # 格式: bytes 0-1234/5678
+                    try:
+                        total_size = int(content_range.split('/')[-1])
+                    except Exception:
+                        total_size = 0
+                else:
+                    # 最后尝试：发送 HEAD 请求获取文件大小
+                    try:
+                        head_response = self.session.head(url, timeout=5)
+                        if 'Content-Length' in head_response.headers:
+                            total_size = int(head_response.headers['Content-Length'])
+                        else:
+                            total_size = 0
+                    except Exception:
+                        total_size = 0
+        
+        # 如果还是没有获取到大小，使用预期大小（如果提供）
+        if total_size == 0 and expected_size:
+            total_size = expected_size
         
         # 下载文件
         mode = 'ab' if resume_position > 0 else 'wb'
@@ -169,7 +199,8 @@ class DLCDownloader:
                         if self.progress_callback:
                             try:
                                 percent = int(downloaded / total_size * 100) if total_size > 0 else 0
-                                self.progress_callback(downloaded, total_size, percent)
+                                # 注意：progress_callback的参数顺序是(percent, downloaded, total)
+                                self.progress_callback(percent, downloaded, total_size)
                             except Exception:
                                 pass
                         last_update_time = current_time
@@ -177,7 +208,8 @@ class DLCDownloader:
         # 最终进度更新
         if self.progress_callback:
             try:
-                self.progress_callback(downloaded, total_size, 100)
+                # 注意：progress_callback的参数顺序是(percent, downloaded, total)
+                self.progress_callback(100, downloaded, total_size)
             except Exception:
                 pass
         
@@ -211,7 +243,7 @@ class DLCDownloader:
             print(f"哈希校验失败: {str(e)}")
             return False
     
-    def download_dlc(self, dlc_name, url, dest_folder, expected_hash=None):
+    def download_dlc(self, dlc_name, url, dest_folder, expected_hash=None, expected_size=None):
         """
         下载单个DLC
         
@@ -220,6 +252,7 @@ class DLCDownloader:
             url: 下载URL
             dest_folder: 目标文件夹
             expected_hash: 预期的文件哈希（可选）
+            expected_size: 预期的文件大小（字节，可选）
             
         返回:
             str: 下载文件的路径
@@ -229,7 +262,7 @@ class DLCDownloader:
         dest_path = os.path.join(dest_folder, filename)
         
         try:
-            self.download(url, dest_path, expected_hash)
+            self.download(url, dest_path, expected_hash, expected_size)
             return dest_path  # 返回文件路径而不是布尔值
         except Exception as e:
             raise Exception(f"下载DLC {dlc_name} 失败: {str(e)}")

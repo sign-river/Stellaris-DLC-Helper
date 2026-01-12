@@ -121,12 +121,46 @@ class DLCManager:
                 base_url = "https://gitlink.org.cn"
                 file_url = base_url + attachment.get("url", "")
                 
+                # 获取文件大小并格式化显示
+                file_size_bytes = 0
+                size_display = "未知"
+                
+                try:
+                    size_str = attachment.get("filesize", "")
+                    if size_str:
+                        # GitLink API返回的是格式化字符串，如 "95.3 KB" 或 "28.5 MB"
+                        import re
+                        match = re.search(r'([\d.]+)\s*(B|KB|MB|GB)', str(size_str), re.IGNORECASE)
+                        if match:
+                            size_value = float(match.group(1))
+                            unit = match.group(2).upper()
+                            
+                            # 转换为字节数
+                            if unit == 'B':
+                                file_size_bytes = int(size_value)
+                            elif unit == 'KB':
+                                file_size_bytes = int(size_value * 1024)
+                            elif unit == 'MB':
+                                file_size_bytes = int(size_value * 1024 * 1024)
+                            elif unit == 'GB':
+                                file_size_bytes = int(size_value * 1024 * 1024 * 1024)
+                            
+                            # 统一显示为MB（保留1位小数）
+                            if file_size_bytes > 0:
+                                size_mb = file_size_bytes / (1024 * 1024)
+                                size_display = f"{size_mb:.1f} MB"
+                except Exception as e:
+                    logger.warning(f"解析文件大小失败 '{size_str}': {e}")
+                    file_size_bytes = 0
+                    size_display = "未知"
+                
                 dlc_list.append({
                     "key": dlc_key,
                     "name": dlc_name,
                     "url": file_url,
                     "source": "gitlink",
-                    "size": attachment.get("filesize", "未知"),
+                    "size": size_display,  # 显示用的字符串
+                    "size_bytes": file_size_bytes,  # 原始字节数
                     "number": int(file_number)  # 添加数字用于排序
                 })
             

@@ -1564,7 +1564,8 @@ class MainWindowCTk:
             # 仅当 percent 有效时更新进度条（total 未知时 percent=None）
             try:
                 if percent is not None:
-                    self.root.after(0, lambda: self.progress_bar.set(percent / 100))
+                    # 使用参数默认值捕获当前值，避免闭包问题
+                    self.root.after(0, lambda p=percent: self.progress_bar.set(p / 100))
             except Exception:
                 pass
             
@@ -1949,10 +1950,15 @@ class MainWindowCTk:
                         self.logger.info(f"正在下载: {dlc['name']}... URL: {selected_url}")
                         expected_hash = dlc.get('checksum') or dlc.get('sha256') or dlc.get('hash')
                         
+                        # 获取文件大小（优先使用size_bytes）
+                        expected_size = dlc.get('size_bytes') or None
+                        
                         # 使用PathUtils获取DLC缓存目录
                         from ..utils import PathUtils
                         dlc_cache_dir = PathUtils.get_dlc_cache_dir()
-                        cache_path = downloader.download_dlc(dlc['key'], selected_url, dlc_cache_dir, expected_hash=expected_hash)
+                        cache_path = downloader.download_dlc(dlc['key'], selected_url, dlc_cache_dir, 
+                                                            expected_hash=expected_hash, 
+                                                            expected_size=expected_size)
                         if os.path.exists(cache_path):
                             self.logger.info("从本地缓存加载...")
                         else:
