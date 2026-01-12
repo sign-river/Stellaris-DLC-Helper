@@ -2488,7 +2488,6 @@ class MainWindowCTk:
             # 同时传入下载状态检查回调
             settings = SettingsDialog(
                 self.root, 
-                source_manager=self.dlc_manager.source_manager if self.dlc_manager else None,
                 main_logger=self.logger,
                 is_downloading_callback=lambda: self.is_downloading
             )

@@ -225,99 +225,8 @@ class SettingsDialog(ctk.CTkToplevel):
         self.test_all_btn = test_all_btn
 
     def _test_all_sources(self):
-        """测试所有源的速度"""
-        # 检查是否正在下载
-        if self.is_downloading_callback and self.is_downloading_callback():
-            messagebox.showwarning("提示", "下载进行中，无法进行测速操作！\n请等待下载完成后再测速。")
-            return
-        
-        if not self.source_manager:
-            messagebox.showwarning("警告", "源管理器未初始化")
-            return
-
-        # 禁用按钮
-        self.test_all_btn.configure(state="disabled", text="⏳ 测速中...")
-
-        def test_thread():
-            try:
-                # 获取所有源
-                from ..config import DLC_SOURCES
-                sources = DLC_SOURCES if DLC_SOURCES else []
-                
-                # 记录测速开始
-                if self.main_logger:
-                    self.main_logger.info(f"开始测速，共 {len(sources)} 个源")
-                
-                tested_count = 0
-                for widget in self.sources_frame.winfo_children():
-                    if hasattr(widget, 'source_data') and hasattr(widget, 'speed_label'):
-                        source = widget.source_data
-                        speed_label = widget.speed_label
-                        source_name = source.get('name', '未知源')
-                        
-                        tested_count += 1
-                        
-                        # 更新状态
-                        self.after(0, lambda l=speed_label: l.configure(text="测速中..."))
-                        
-                        # 记录测速进度
-                        if self.main_logger:
-                            self.main_logger.info(f"正在测速: {source_name}")
-                        
-                        # 测试速度
-                        try:
-                            from ..core.speed_test import test_speed
-                            test_url = source.get('test_url', '')
-                            
-                            if test_url:
-                                speed = test_speed(test_url, timeout=10)
-                                if speed > 0:
-                                    speed_mb = speed / (1024 * 1024)
-                                    speed_text = f"✓ {speed_mb:.2f} MB/s"
-                                    color = "#4CAF50"
-                                    if self.main_logger:
-                                        self.main_logger.info(f"{source_name}: {speed_mb:.2f} MB/s")
-                                else:
-                                    speed_text = "✗ 超时"
-                                    color = "#F44336"
-                                    if self.main_logger:
-                                        self.main_logger.warning(f"{source_name}: 超时")
-                            else:
-                                speed_text = "⚠ 无测试URL"
-                                color = "#FF9800"
-                                if self.main_logger:
-                                    self.main_logger.warning(f"{source_name}: 无测试URL")
-                            
-                            self.after(0, lambda l=speed_label, t=speed_text, c=color: (
-                                l.configure(text=t, text_color=c)
-                            ))
-                        except Exception as e:
-                            error_msg = str(e)
-                            if self.main_logger:
-                                self.main_logger.error(f"{source_name} 测速失败: {error_msg}")
-                            self.after(0, lambda l=speed_label: l.configure(
-                                text=f"✗ 错误",
-                                text_color="#F44336"
-                            ))
-                
-                if self.main_logger:
-                    self.main_logger.info(f"测速完成，共测试 {tested_count} 个源")
-                
-                self.after(0, lambda: messagebox.showinfo("完成", f"源测速已完成\n共测试 {tested_count} 个源"))
-                
-            except Exception as e:
-                error_msg = str(e)
-                # 记录错误到日志
-                import logging
-                logging.error(f"源测速失败: {error_msg}", exc_info=True)
-                # 如果有主窗口logger，也记录到那里
-                if self.main_logger:
-                    self.main_logger.error(f"源测速失败: {error_msg}")
-                self.after(0, lambda msg=error_msg: messagebox.showerror("错误", f"测速失败:\n{msg}"))
-            finally:
-                self.after(0, lambda: self.test_all_btn.configure(state="normal", text="🚀 测速所有源"))
-
-        threading.Thread(target=test_thread, daemon=True).start()
+        """已废弃 - 仅支持GitLink单一源"""
+        pass
 
     def _copy_config_path(self):
         """复制 config.json 路径到剪贴板"""
@@ -372,12 +281,6 @@ class SettingsDialog(ctk.CTkToplevel):
                 subprocess.Popen(['xdg-open', str(target)])
         except Exception as e:
             messagebox.showwarning("打开失败", f"无法打开路径: {e}")
-
-    def _refresh_sources(self):
-        """刷新源列表"""
-        # 重新创建源管理选项卡
-        self._create_source_management_tab()
-        messagebox.showinfo("完成", "源列表已刷新")
 
     def _create_general_settings_tab(self):
         """创建常规设置选项卡"""
@@ -464,52 +367,16 @@ class SettingsDialog(ctk.CTkToplevel):
         )
         source_label.pack(side="left", padx=(0, 15))
 
-        # 获取所有可用源
-        try:
-            from ..config import DLC_SOURCES
-            sources = DLC_SOURCES if DLC_SOURCES else []
-            source_names = [s.get("name", "") for s in sources if s.get("enabled", True)]
-            # 源的中文显示名称映射
-            source_display_names = {
-                "r2": "R2 (推荐)",
-                "github": "GitHub",
-                "domestic_cloud": "国内云",
-                "gitee": "Gitee"
-            }
-        except Exception:
-            source_names = ["r2", "github", "domestic_cloud", "gitee"]
-            source_display_names = {
-                "r2": "R2 (推荐)",
-                "github": "GitHub",
-                "domestic_cloud": "国内云",
-                "gitee": "Gitee"
-            }
-
-        # 确保默认源在列表中
-        if default_source not in source_names:
-            default_source = source_names[0] if source_names else "github"
-
-        self.default_source_var = ctk.StringVar(value=default_source)
-
-        # 创建单选按钮
-        radio_container = ctk.CTkFrame(source_frame, fg_color="transparent")
-        radio_container.pack(side="left", fill="x", expand=True)
-
-        for idx, source_name in enumerate(source_names):
-            display_name = source_display_names.get(source_name, source_name)
-            radio = ctk.CTkRadioButton(
-                radio_container,
-                text=display_name,
-                variable=self.default_source_var,
-                value=source_name,
-                font=ctk.CTkFont(size=12),
-                radiobutton_width=18,
-                radiobutton_height=18
-            )
-            radio.pack(side="left", padx=(0, 20))
-
-        # 根据初始状态设置单选按钮启用/禁用
-        self._update_source_radios_state()
+        # GitLink单一源配置（无需选择）
+        self.default_source_var = ctk.StringVar(value="gitlink")
+        
+        gitlink_label = ctk.CTkLabel(
+            source_frame,
+            text="GitLink（默认且唯一下载源）",
+            font=ctk.CTkFont(size=13),
+            text_color="#4CAF50"
+        )
+        gitlink_label.pack(side="left", padx=(0, 15))
 
         # 更新文件管理框架
         update_files_frame = ctk.CTkFrame(scrollable_frame, fg_color="#FFFFFF", corner_radius=8)
