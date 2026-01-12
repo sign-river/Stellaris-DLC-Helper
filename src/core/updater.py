@@ -5,7 +5,7 @@
 - 状态机管理
 - HTTPS + 签名验证
 - 原子性更新
-- 简化的断点续传
+- 可靠的文件下载
 """
 
 import json
@@ -166,7 +166,7 @@ class VersionComparator:
 # ==================== 下载器 ====================
 
 class ReliableDownloader:
-    """可靠的下载器（支持断点续传）"""
+    """简单可靠的下载器"""
     
     def __init__(self, logger: logging.Logger):
         self.logger = logger
@@ -183,69 +183,31 @@ class ReliableDownloader:
         chunk_size: int = 8192
     ) -> bool:
         """
-        下载文件，支持断点续传
+        下载文件，失败后重新开始
         
         返回:
             成功返回 True，失败返回 False
         """
         try:
-            # 检查已下载的部分
-            headers = {}
-            existing_size = 0
+            # 如果文件已存在，删除重新下载
             if dest.exists():
-                existing_size = dest.stat().st_size
-                self.logger.info(f"发现部分下载文件，已下载: {existing_size} bytes")
-                
-                # 验证服务器是否支持续传
-                try:
-                    head_resp = self.session.head(url, timeout=10, allow_redirects=True)
-                    accept_ranges = head_resp.headers.get('Accept-Ranges', '').lower()
-                    content_length = head_resp.headers.get('Content-Length')
-                    
-                    if accept_ranges == 'bytes' and content_length:
-                        remote_size = int(content_length)
-                        if 0 < existing_size < remote_size:
-                            headers['Range'] = f'bytes={existing_size}-'
-                            self.logger.info(f"使用断点续传，从 {existing_size} 继续")
-                        elif existing_size >= remote_size:
-                            self.logger.info("文件已完整下载")
-                            return True
-                        else:
-                            self.logger.info("服务器不支持续传，重新下载")
-                            dest.unlink()
-                            existing_size = 0
-                    else:
-                        self.logger.info("服务器不支持 Range，重新下载")
-                        dest.unlink()
-                        existing_size = 0
-                except Exception as e:
-                    self.logger.warning(f"HEAD 请求失败: {e}，尝试完整下载")
-                    try:
-                        dest.unlink()
-                    except Exception:
-                        pass
-                    existing_size = 0
+                self.logger.info(f"删除旧文件，重新下载")
+                dest.unlink()
             
             # 开始下载
-            mode = 'ab' if existing_size > 0 else 'wb'
-            response = self.session.get(url, stream=True, headers=headers, timeout=30)
+            response = self.session.get(url, stream=True, timeout=30)
             response.raise_for_status()
             
             # 获取总大小
-            if response.status_code == 206:  # Partial Content
-                content_range = response.headers.get('Content-Range', '')
-                # Content-Range: bytes 1234-5678/9999
-                total_size = int(content_range.split('/')[-1]) if '/' in content_range else 0
-            else:
-                total_size = int(response.headers.get('Content-Length', 0))
+            total_size = int(response.headers.get('Content-Length', 0))
             
-            downloaded = existing_size
+            downloaded = 0
             start_time = time.time()
             last_report_time = start_time
             
             dest.parent.mkdir(parents=True, exist_ok=True)
             
-            with open(dest, mode) as f:
+            with open(dest, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=chunk_size):
                     if chunk:
                         f.write(chunk)
@@ -269,6 +231,12 @@ class ReliableDownloader:
             
         except Exception as e:
             self.logger.error(f"下载失败: {e}", exc_info=True)
+            # 清理失败的下载文件
+            if dest.exists():
+                try:
+                    dest.unlink()
+                except Exception:
+                    pass
             return False
 
 
