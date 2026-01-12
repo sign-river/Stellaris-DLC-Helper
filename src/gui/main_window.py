@@ -1296,21 +1296,24 @@ class MainWindowCTk:
             # 添加查看 URL 映射的操作（不弹窗，只写入操作日志）
             def _show_urls(key=dlc['key'], d=dlc):
                 try:
-                    urls = d.get('url_map', {})
-                    if not urls:
-                        message = "未找到 URL 映射信息（可能是旧版索引或未启用其它源）"
+                    # 当前使用单一GitLink源，直接显示URL
+                    url = d.get('url', '')
+                    message_lines = []
+                    
+                    if url:
+                        message_lines.append(f"GitLink: {url}")
                     else:
-                        message_lines = []
-                        for src, u in urls.items():
-                            message_lines.append(f"{src}: {u if u else 'N/A'}")
-                        message = "\n".join(message_lines)
+                        message_lines.append("未找到下载链接")
+                    
                     checksum = d.get('checksum') or d.get('sha256') or d.get('hash')
                     if checksum:
-                        message = f"校验哈希: {checksum}\n\n" + message
+                        message_lines.insert(0, f"校验哈希: {checksum}\n")
+                    
+                    message = "\n".join(message_lines)
                     # 记录到操作日志（不弹窗）
-                    self.logger.info(f"DLC {d.get('name')} 的 URL 映射:\n{message}")
+                    self.logger.info(f"DLC {d.get('name')} 的下载信息:\n{message}")
                 except Exception as e:
-                    self.logger.log_exception("显示 URL 映射失败", e)
+                    self.logger.log_exception("显示下载信息失败", e)
 
             # 将 DLC 名称绑定点击事件，输出 URL 映射到操作日志
             try:
@@ -1436,8 +1439,7 @@ class MainWindowCTk:
                     "错误", 
                     "检测到补丁文件 steam_api64.dll 缺失！\n\n"
                     "这很可能是杀毒软件误删了该文件。\n"
-                    "请将本程序目录添加到杀毒软件白名单后，\n"
-                    "重新下载完整的程序压缩包并解压使用。\n\n"
+                    "请将本程序目录或者补丁文件所在目录添加到杀毒软件白名单\n\n"
                     "处理完成后，可以在「设置 → 高级功能」中恢复补丁。"
                 )
                 self.logger.error("补丁文件缺失: steam_api64.dll 不存在于 patches 目录")
