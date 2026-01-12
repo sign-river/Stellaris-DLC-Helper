@@ -117,78 +117,39 @@ class DLCDownloader:
         # 检查已下载的文件大小
         resume_position = 0
         if os.path.exists(dest_path):
-            resume_position = os.path.getsize(dest_path)
-            print(f"发现部分下载的文件，将从 {resume_position / 1024 / 1024:.2f} MB 处继续")
+            existing_size = os.path.getsize(dest_path)
+            # GitLink不支持断点续传，删除部分文件重新下载
+            print(f"检测到部分下载的文件 ({existing_size / 1024 / 1024:.2f} MB)，GitLink不支持断点续传，将重新下载")
+            try:
+                os.remove(dest_path)
+            except Exception as e:
+                print(f"⚠ 删除部分文件失败: {e}")
         
-        # 配置请求头（断点续传）
+        # 配置请求头
         headers = {
             'User-Agent': self.user_agent,
         }
-        if resume_position > 0:
-            headers['Range'] = f'bytes={resume_position}-'
         
-        # 发送请求
+        # 发送请求（不使用Range）
         response = self.session.get(url, headers=headers, stream=True, timeout=30)
         
         # 处理响应状态
-        if response.status_code == 416:  # Range Not Satisfiable
-            # 文件已经完整下载
-            return True
-        
-        if response.status_code not in (200, 206):
+        if response.status_code != 200:
             raise Exception(f"HTTP错误: {response.status_code}")
         
-        # 获取文件总大小
-        if response.status_code == 206:
-            # 断点续传：总大小 = 已下载 + 剩余内容
-            if 'Content-Length' in response.headers:
-                remaining_size = int(response.headers['Content-Length'])
-                total_size = resume_position + remaining_size
-                print(f"✓ 断点续传 - 已下载: {resume_position} bytes, 剩余: {remaining_size} bytes, 总大小: {total_size} bytes")
-            else:
-                # 如果没有Content-Length，使用expected_size（如果提供）
-                if expected_size:
-                    total_size = expected_size
-                    print(f"✓ 使用预期文件大小: {total_size} bytes ({total_size/1024/1024:.1f} MB)")
-                else:
-                    total_size = resume_position
-        else:
-            # 全新下载（200）：总大小 = Content-Length
-            if 'Content-Length' in response.headers:
-                total_size = int(response.headers['Content-Length'])
-                print(f"✓ 从服务器获取文件大小: {total_size} bytes ({total_size/1024/1024:.1f} MB)")
-            else:
-                # 如果没有 Content-Length，尝试从 Content-Range 获取（某些服务器可能返回这个）
-                content_range = response.headers.get('Content-Range')
-                if content_range:
-                    # 格式: bytes 0-1234/5678
-                    try:
-                        total_size = int(content_range.split('/')[-1])
-                    except Exception:
-                        total_size = 0
-                else:
-                    # 最后尝试：发送 HEAD 请求获取文件大小
-                    try:
-                        head_response = self.session.head(url, timeout=5)
-                        if 'Content-Length' in head_response.headers:
-                            total_size = int(head_response.headers['Content-Length'])
-                        else:
-                            total_size = 0
-                    except Exception:
-                        total_size = 0
-        
-        # 如果还是没有获取到大小，使用预期大小（如果提供）
-        if total_size == 0 and expected_size:
+        # 获取文件总大小（GitLink不返回Content-Length，使用expected_size）
+        if 'Content-Length' in response.headers:
+            total_size = int(response.headers['Content-Length'])
+            print(f"✓ 从服务器获取文件大小: {total_size} bytes ({total_size/1024/1024:.1f} MB)")
+        elif expected_size:
             total_size = expected_size
             print(f"✓ 使用预期文件大小: {total_size} bytes ({total_size/1024/1024:.1f} MB)")
-        elif total_size > 0:
-            pass  # 已经打印过了
         else:
+            total_size = 0
             print(f"⚠ 警告: 无法获取文件大小，进度条将不可用")
         
-        # 下载文件
-        mode = 'ab' if resume_position > 0 else 'wb'
-        downloaded = resume_position
+        # 下载文件（始终从头开始）
+        downloaded = 0
         start_time = time.time()
         last_update_time = start_time
         
@@ -233,7 +194,7 @@ class DLCDownloader:
                 pass
         
         elapsed_time = time.time() - start_time
-        speed_mb = (downloaded - resume_position) / 1024 / 1024 / max(elapsed_time, 0.001)
+        speed_mb = downloaded / 1024 / 1024 / max(elapsed_time, 0.001)
         print(f"✅ 下载完成: {dest_path} (平均速度: {speed_mb:.2f} MB/s)")
         return True
     
