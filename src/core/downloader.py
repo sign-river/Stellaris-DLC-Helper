@@ -153,7 +153,7 @@ class DLCDownloader:
         start_time = time.time()
         last_update_time = start_time
         
-        with open(dest_path, mode) as f:
+        with open(dest_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 # 检查停止标志
                 if self.stopped:
