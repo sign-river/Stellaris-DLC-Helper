@@ -989,23 +989,27 @@ class MainWindowCTk:
             messagebox.showwarning("提示", "下载进行中，请等待下载完成后再刷新！")
             return
         
-        try:
-            self.logger.info("手动刷新：开始重新检测DLC和补丁状态...")
-            # 重新加载 DLC 列表（会在后台线程中完成并调用 display_dlc_list）
-            self._auto_load_dlc_list()
-            # 重新检查补丁状态并更新 UI
+        # 在后台线程中执行刷新，避免阻塞UI
+        def refresh_thread():
             try:
-                self._check_patch_status()
-            except Exception:
-                pass
-            # 检查是否有待恢复的下载状态
-            try:
-                self._check_pending_download_state()
-            except Exception:
-                pass
-            self.logger.info("手动刷新：已触发所有检测任务")
-        except Exception as e:
-            self.logger.log_exception("刷新状态失败", e)
+                self.logger.info("手动刷新：开始重新检测DLC和补丁状态...")
+                # 重新加载 DLC 列表（会在后台线程中完成并调用 display_dlc_list）
+                self._auto_load_dlc_list()
+                # 重新检查补丁状态并更新 UI
+                try:
+                    self._check_patch_status()
+                except Exception:
+                    pass
+                # 检查是否有待恢复的下载状态
+                try:
+                    self._check_pending_download_state()
+                except Exception:
+                    pass
+                self.logger.info("手动刷新：已触发所有检测任务")
+            except Exception as e:
+                self.logger.log_exception("刷新状态失败", e)
+        
+        threading.Thread(target=refresh_thread, daemon=True).start()
     
     def _auto_load_dlc_list(self):
         """自动加载DLC列表（内部方法，不弹窗提示）"""
