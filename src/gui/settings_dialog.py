@@ -303,6 +303,71 @@ class SettingsDialog(ctk.CTkToplevel):
         )
         info_label.pack(pady=(10, 20))
 
+        # 公告显示设置框架
+        announcement_frame = ctk.CTkFrame(scrollable_frame, fg_color="#FFFFFF", corner_radius=8)
+        announcement_frame.pack(fill="x", padx=20, pady=(0, 15))
+
+        # 标题行
+        announcement_title_frame = ctk.CTkFrame(announcement_frame, fg_color="transparent")
+        announcement_title_frame.pack(fill="x", padx=15, pady=(15, 10))
+
+        announcement_title = ctk.CTkLabel(
+            announcement_title_frame,
+            text="📢 公告显示设置",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#1976D2"
+        )
+        announcement_title.pack(side="left")
+
+        # 内容区域
+        announcement_content_frame = ctk.CTkFrame(announcement_frame, fg_color="transparent")
+        announcement_content_frame.pack(fill="x", padx=20, pady=(5, 15))
+
+        # 左侧：描述信息
+        left_frame = ctk.CTkFrame(announcement_content_frame, fg_color="transparent")
+        left_frame.pack(side="left", fill="both", expand=True)
+
+        desc_label = ctk.CTkLabel(
+            left_frame,
+            text="启动时显示系统公告\n每个版本的公告独立控制",
+            font=ctk.CTkFont(size=12),
+            text_color="#666666",
+            anchor="w",
+            justify="left"
+        )
+        desc_label.pack(anchor="w")
+
+        # 右侧：开关按钮
+        right_frame = ctk.CTkFrame(announcement_content_frame, fg_color="transparent")
+        right_frame.pack(side="right", padx=(20, 0))
+
+        # 读取当前配置
+        from ..config import VERSION
+        from .. import config_loader
+        dismissed_version = config_loader.get_config("settings", "dismissed_announcement_version", default="")
+        # 如果记录的版本与当前版本相同，说明已禁用
+        is_enabled = (dismissed_version != VERSION)
+        
+        self.announcement_switch_var = ctk.BooleanVar(value=is_enabled)
+        announcement_switch = ctk.CTkSwitch(
+            right_frame,
+            text="",
+            variable=self.announcement_switch_var,
+            command=self._toggle_announcement,
+            width=50,
+            height=24
+        )
+        announcement_switch.pack()
+
+        # 状态标签
+        self.announcement_status_label = ctk.CTkLabel(
+            right_frame,
+            text="已启用" if is_enabled else "已禁用",
+            font=ctk.CTkFont(size=11),
+            text_color="#4CAF50" if is_enabled else "#999999"
+        )
+        self.announcement_status_label.pack(pady=(5, 0))
+
         # 更新文件管理框架
         update_files_frame = ctk.CTkFrame(scrollable_frame, fg_color="#FFFFFF", corner_radius=8)
         update_files_frame.pack(fill="x", padx=20, pady=(15, 15))
@@ -388,6 +453,58 @@ class SettingsDialog(ctk.CTkToplevel):
 
         # 更新文件统计信息
         self._update_files_info()
+
+    def _toggle_announcement(self):
+        """切换公告显示设置"""
+        try:
+            from ..config import VERSION
+            from .. import config_loader
+            import json
+            
+            is_enabled = self.announcement_switch_var.get()
+            
+            # 读取当前配置
+            config_path = config_loader._loader.config_path
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            # 确保settings节点存在
+            if "settings" not in config:
+                config["settings"] = {}
+            
+            # 更新配置
+            if is_enabled:
+                # 启用公告：清空记录的版本号
+                config["settings"]["dismissed_announcement_version"] = ""
+                self.announcement_status_label.configure(
+                    text="已启用",
+                    text_color="#4CAF50"
+                )
+                self.logger.info("已启用公告显示")
+            else:
+                # 禁用公告：保存当前版本号
+                config["settings"]["dismissed_announcement_version"] = VERSION
+                self.announcement_status_label.configure(
+                    text="已禁用",
+                    text_color="#999999"
+                )
+                self.logger.info(f"已禁用v{VERSION}的公告显示")
+            
+            # 写回配置文件
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            
+            # 提示用户
+            if is_enabled:
+                messagebox.showinfo("设置已保存", "公告显示已启用\n\n下次启动时将显示系统公告")
+            else:
+                messagebox.showinfo("设置已保存", "公告显示已禁用\n\n下次启动时将不再显示本版本公告")
+            
+        except Exception as e:
+            self.logger.error(f"切换公告显示设置失败: {e}", exc_info=True)
+            messagebox.showerror("保存失败", f"无法保存设置:\n{str(e)}")
+            # 恢复开关状态
+            self.announcement_switch_var.set(not self.announcement_switch_var.get())
 
     def _create_config_tab(self):
         """创建配置管理选项卡内容（显示生效的 config.json 路径等）"""
