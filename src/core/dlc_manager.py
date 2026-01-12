@@ -25,6 +25,7 @@ class DLCManager:
         """
         self.game_path = game_path
         self.dlc_names = {}  # DLC名称映射表，从pairings.json动态加载
+        self.game_version = None  # 游戏版本信息
         self._load_dlc_names()
     
     def _load_dlc_names(self):
@@ -99,6 +100,9 @@ class DLCManager:
             if not release:
                 logger.warning("未找到tag为'ste'的Release")
                 return None
+            
+            # 保存游戏版本信息（从release的name或body中获取）
+            self.game_version = release.get('name') or release.get('body', '').split('\n')[0] or '未知版本'
             
             # 构建DLC列表
             dlc_list = []

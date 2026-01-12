@@ -439,6 +439,7 @@ class MainWindowCTk:
         dlc_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
         dlc_frame.grid_rowconfigure(1, weight=1)
         dlc_frame.grid_columnconfigure(0, weight=1)
+
         
         # 标题行（9列布局：DLC标题 | 下载信息 | 进度条 | 速度 | 下载源 | 全选按钮）
         header_frame = ctk.CTkFrame(dlc_frame, fg_color="transparent")
@@ -446,7 +447,7 @@ class MainWindowCTk:
         
         # 配置列权重：第0列固定，第1-2列下载信息，第3-6列进度条，第7列固定
         header_frame.grid_columnconfigure(0, weight=0, minsize=100)  # DLC列表标题
-        header_frame.grid_columnconfigure(1, weight=0, minsize=10)   # 间隔
+        header_frame.grid_columnconfigure(1, weight=0, minsize=100)   # 版本信息
         header_frame.grid_columnconfigure(2, weight=0, minsize=150)  # 下载信息
         header_frame.grid_columnconfigure(3, weight=1)               # 进度条（弹性）
         header_frame.grid_columnconfigure(4, weight=0, minsize=100)  # 速度显示
@@ -464,6 +465,16 @@ class MainWindowCTk:
             text_color="#1976D2"
         )
         label.grid(row=0, column=0, sticky="w")
+        
+        # 第1列：游戏版本信息（显示在标题右边）
+        self.version_label = ctk.CTkLabel(
+            header_frame,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color="#757575",
+            anchor="w"
+        )
+        self.version_label.grid(row=0, column=1, sticky="w", padx=(10, 0))
         
         # 第2列：正在下载的DLC名称（默认隐藏）
         self.downloading_label = ctk.CTkLabel(
@@ -595,7 +606,7 @@ class MainWindowCTk:
             fg_color="#FAFAFA",
             height=220  # 设置固定高度，降低DLC区域高度
         )
-        self.dlc_scrollable_frame.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
+        self.dlc_scrollable_frame.grid(row=2, column=0, sticky="nsew", padx=15, pady=(0, 15))
         self.dlc_scrollable_frame.grid_columnconfigure(0, weight=1)
         
         # 显示初始提示
@@ -1313,6 +1324,10 @@ class MainWindowCTk:
         total = len(self.dlc_list)
         installed_count = len(installed_dlcs)
         available_count = total - installed_count
+        
+        # 更新游戏版本信息
+        if hasattr(self.dlc_manager, 'game_version') and self.dlc_manager.game_version:
+            self.version_label.configure(text=f"适配版本: {self.dlc_manager.game_version}")
         
         self.logger.info(f"DLC列表加载完成: 共{total}个，已安装{installed_count}个，可下载{available_count}个")
         
