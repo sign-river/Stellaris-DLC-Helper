@@ -85,13 +85,13 @@ class SettingsDialog(ctk.CTkToplevel):
         self.tabview.add("常规设置")
         self.tabview.add("测速")
         self.tabview.add("配置管理")
-        # 可以添加更多选项卡
-        # self.tabview.add("高级选项")
+        self.tabview.add("高级功能")
 
         # 创建选项卡内容
         self._create_general_settings_tab()
         self._create_speed_test_tab()
         self._create_config_tab()
+        self._create_advanced_tab()
 
         # 底部按钮
         button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
@@ -313,7 +313,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
         announcement_title = ctk.CTkLabel(
             announcement_title_frame,
-            text="📢 公告显示设置",
+            text="📢    公告显示设置",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color="#1976D2"
         )
@@ -321,21 +321,29 @@ class SettingsDialog(ctk.CTkToplevel):
 
         # 内容区域
         announcement_content_frame = ctk.CTkFrame(announcement_frame, fg_color="transparent")
-        announcement_content_frame.pack(fill="x", padx=20, pady=(5, 15))
+        announcement_content_frame.pack(fill="x", padx=15, pady=(0, 15))
 
         # 左侧：描述信息
         left_frame = ctk.CTkFrame(announcement_content_frame, fg_color="transparent")
         left_frame.pack(side="left", fill="both", expand=True)
 
-        desc_label = ctk.CTkLabel(
+        desc_line1 = ctk.CTkLabel(
             left_frame,
-            text="启动时显示系统公告\n每个版本的公告独立控制",
+            text="启动时显示系统公告",
+            font=ctk.CTkFont(size=13),
+            text_color="#333333",
+            anchor="w"
+        )
+        desc_line1.pack(anchor="w", pady=(0, 3))
+        
+        desc_line2 = ctk.CTkLabel(
+            left_frame,
+            text="每个版本的公告独立控制",
             font=ctk.CTkFont(size=12),
             text_color="#666666",
-            anchor="w",
-            justify="left"
+            anchor="w"
         )
-        desc_label.pack(anchor="w")
+        desc_line2.pack(anchor="w")
 
         # 右侧：开关按钮
         right_frame = ctk.CTkFrame(announcement_content_frame, fg_color="transparent")
@@ -363,7 +371,7 @@ class SettingsDialog(ctk.CTkToplevel):
         self.announcement_status_label = ctk.CTkLabel(
             right_frame,
             text="已启用" if is_enabled else "已禁用",
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(size=12),
             text_color="#4CAF50" if is_enabled else "#999999"
         )
         self.announcement_status_label.pack(pady=(5, 0))
@@ -378,7 +386,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
         update_title = ctk.CTkLabel(
             update_title_frame,
-            text="🗂️ 更新文件管理",
+            text="🗂️    更新文件管理",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color="#1976D2"
         )
@@ -1050,3 +1058,143 @@ class SettingsDialog(ctk.CTkToplevel):
         # 在后台线程执行测速
         threading.Thread(target=test_thread, daemon=True).start()
 
+    def _create_advanced_tab(self):
+        """创建高级功能选项卡"""
+        tab = self.tabview.tab("高级功能")
+        
+        # 创建可滚动容器
+        scrollable_frame = ctk.CTkScrollableFrame(
+            tab,
+            fg_color="transparent"
+        )
+        scrollable_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        # 补丁恢复模块
+        self._create_patch_recovery_section(scrollable_frame)
+    
+    def _create_patch_recovery_section(self, parent):
+        """创建补丁恢复模块"""
+        # 模块容器
+        section_frame = ctk.CTkFrame(parent, corner_radius=8, fg_color="#FFFFFF")
+        section_frame.pack(fill="x", padx=20, pady=(0, 15))
+        
+        # 内部容器（左右布局）
+        content_frame = ctk.CTkFrame(section_frame, fg_color="transparent")
+        content_frame.pack(fill="x", padx=15, pady=15)
+        
+        # 左侧：标题和说明
+        left_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        left_frame.pack(side="left", fill="both", expand=True)
+        
+        title_label = ctk.CTkLabel(
+            left_frame,
+            text="🔧 补丁恢复",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#1976D2",
+            anchor="w"
+        )
+        title_label.pack(anchor="w", pady=(0, 5))
+        
+        desc_label = ctk.CTkLabel(
+            left_frame,
+            text="如果补丁文件被杀毒软件误删，可以点击右侧按钮重新下载",
+            font=ctk.CTkFont(size=12),
+            text_color="#666666",
+            anchor="w"
+        )
+        desc_label.pack(anchor="w")
+        
+        # 右侧：恢复按钮
+        right_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        right_frame.pack(side="right", padx=(10, 0))
+        
+        self.patch_recovery_btn = ctk.CTkButton(
+            right_frame,
+            text="恢复补丁",
+            command=self._recover_patch,
+            width=120,
+            height=35,
+            font=ctk.CTkFont(size=14),
+            corner_radius=8,
+            fg_color="#4CAF50",
+            hover_color="#45A049"
+        )
+        self.patch_recovery_btn.pack()
+    
+    def _recover_patch(self):
+        """恢复补丁文件"""
+        import requests
+        import zipfile
+        import tempfile
+        from ..utils.path_utils import PathUtils
+        
+        # 禁用按钮
+        self.patch_recovery_btn.configure(state="disabled", text="下载中...")
+        
+        def download_thread():
+            try:
+                # 下载补丁压缩包
+                patch_url = "https://gitlink.org.cn/signriver/file-warehouse/releases/download/patchs/patches.zip"
+                
+                if self.main_logger:
+                    self.main_logger.info("正在下载补丁文件...")
+                
+                response = requests.get(patch_url, timeout=30)
+                response.raise_for_status()
+                
+                # 保存到临时文件
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
+                    tmp_file.write(response.content)
+                    tmp_path = tmp_file.name
+                
+                # 解压到 patches 目录
+                base_dir = PathUtils.get_base_dir()
+                patches_dir = Path(base_dir) / "patches"
+                patches_dir.mkdir(parents=True, exist_ok=True)
+                
+                if self.main_logger:
+                    self.main_logger.info("正在解压补丁文件...")
+                
+                with zipfile.ZipFile(tmp_path, 'r') as zip_ref:
+                    zip_ref.extractall(patches_dir)
+                
+                # 删除临时文件
+                Path(tmp_path).unlink()
+                
+                if self.main_logger:
+                    self.main_logger.success("补丁文件恢复成功！")
+                
+                # 在主线程显示成功消息
+                self.after(0, lambda: messagebox.showinfo(
+                    "成功",
+                    "补丁文件已成功恢复！\n\n"
+                    "现在可以正常使用一键解锁功能了。"
+                ))
+                
+            except requests.exceptions.RequestException as e:
+                error_msg = f"下载失败: {str(e)}"
+                if self.main_logger:
+                    self.main_logger.error(error_msg)
+                self.after(0, lambda: messagebox.showerror("错误", f"下载补丁文件失败\n\n{error_msg}"))
+                
+            except zipfile.BadZipFile:
+                error_msg = "压缩包损坏"
+                if self.main_logger:
+                    self.main_logger.error(error_msg)
+                self.after(0, lambda: messagebox.showerror("错误", f"解压失败\n\n{error_msg}"))
+                
+            except Exception as e:
+                error_msg = str(e)
+                if self.main_logger:
+                    self.main_logger.error(f"恢复补丁失败: {error_msg}")
+                self.after(0, lambda: messagebox.showerror("错误", f"恢复补丁失败\n\n{error_msg}"))
+                
+            finally:
+                # 恢复按钮
+                self.after(0, lambda: self.patch_recovery_btn.configure(
+                    state="normal",
+                    text="恢复补丁"
+                ))
+        
+        # 在后台线程执行下载
+        threading.Thread(target=download_thread, daemon=True).start()
