@@ -172,6 +172,11 @@ class DLCDownloader:
         # 如果还是没有获取到大小，使用预期大小（如果提供）
         if total_size == 0 and expected_size:
             total_size = expected_size
+            print(f"✓ 使用预期文件大小: {total_size} bytes ({total_size/1024/1024:.1f} MB)")
+        elif total_size > 0:
+            print(f"✓ 从服务器获取文件大小: {total_size} bytes ({total_size/1024/1024:.1f} MB)")
+        else:
+            print(f"⚠ 警告: 无法获取文件大小，进度条将不可用")
         
         # 下载文件
         mode = 'ab' if resume_position > 0 else 'wb'
@@ -199,6 +204,12 @@ class DLCDownloader:
                         if self.progress_callback:
                             try:
                                 percent = int(downloaded / total_size * 100) if total_size > 0 else 0
+                                # 每5秒输出一次进度信息
+                                if not hasattr(self, '_last_log_time'):
+                                    self._last_log_time = 0
+                                if current_time - self._last_log_time >= 5:
+                                    print(f"进度: {percent}% ({downloaded}/{total_size})")
+                                    self._last_log_time = current_time
                                 # 注意：progress_callback的参数顺序是(percent, downloaded, total)
                                 self.progress_callback(percent, downloaded, total_size)
                             except Exception:

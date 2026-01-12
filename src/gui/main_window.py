@@ -1236,6 +1236,7 @@ class MainWindowCTk:
                 "source": dlc.get("source", "unknown"),
                 "urls": dlc.get("urls", []),
                 "size": dlc["size"],
+                "size_bytes": dlc.get("size_bytes", 0),  # 添加这个字段！
                 "installed": is_installed
             }
             
@@ -1559,6 +1560,11 @@ class MainWindowCTk:
             import time
             import requests
             current_time = time.time()
+            
+            # 调试：首次回调时输出数据
+            if not hasattr(progress_callback, 'first_call_logged'):
+                progress_callback.first_call_logged = True
+                print(f"[UI回调] 首次调用 - percent={percent}, downloaded={downloaded}, total={total}")
             
             # 进度条实时更新（不限制频率）
             # 仅当 percent 有效时更新进度条（total 未知时 percent=None）
@@ -1952,6 +1958,11 @@ class MainWindowCTk:
                         
                         # 获取文件大小（优先使用size_bytes）
                         expected_size = dlc.get('size_bytes') or None
+                        print(f"[DEBUG] DLC信息:")
+                        print(f"  - name: {dlc.get('name')}")
+                        print(f"  - size: {dlc.get('size')}")
+                        print(f"  - size_bytes: {dlc.get('size_bytes')}")
+                        print(f"  - expected_size (传递给下载器): {expected_size}")
                         
                         # 使用PathUtils获取DLC缓存目录
                         from ..utils import PathUtils
