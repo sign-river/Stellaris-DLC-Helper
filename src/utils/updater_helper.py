@@ -263,10 +263,14 @@ def main():
                 # 批处理模式：已经在上面处理过了，batch文件已被清理
                 # 需要找到主程序exe
                 app_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-                main_exe = os.path.join(app_dir, 'Stellaris-DLC-Helper.exe')
-                if os.path.exists(main_exe):
-                    first_dest = main_exe
-                    logging.info(f"  找到主程序: {main_exe}")
+                # 尝试多个可能的主程序名称
+                possible_names = ['点击此处运行.exe', 'Stellaris-DLC-Helper.exe']
+                for name in possible_names:
+                    main_exe = os.path.join(app_dir, name)
+                    if os.path.exists(main_exe):
+                        first_dest = main_exe
+                        logging.info(f"  找到主程序: {main_exe}")
+                        break
             elif dst and dst.endswith('.exe'):
                 first_dest = dst
                 logging.info(f"  找到目标程序: {dst}")

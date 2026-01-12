@@ -372,6 +372,9 @@ class UpdateInstaller:
     
     def _find_source_dir(self, extract_dir: Path) -> Optional[Path]:
         """智能查找更新源目录"""
+        # 可能的主程序文件名
+        main_files = ["Stellaris-DLC-Helper.exe", "点击此处运行.exe", "main.py"]
+        
         # 检查是否有单个顶层目录
         items = list(extract_dir.iterdir())
         dirs = [d for d in items if d.is_dir()]
@@ -379,14 +382,14 @@ class UpdateInstaller:
         if len(dirs) == 1:
             potential = dirs[0]
             # 检查是否包含主程序
-            if (potential / "Stellaris-DLC-Helper.exe").exists() or \
-               (potential / "main.py").exists():
-                return potential
+            for main_file in main_files:
+                if (potential / main_file).exists():
+                    return potential
         
         # 否则使用解压根目录
-        if (extract_dir / "Stellaris-DLC-Helper.exe").exists() or \
-           (extract_dir / "main.py").exists():
-            return extract_dir
+        for main_file in main_files:
+            if (extract_dir / main_file).exists():
+                return extract_dir
         
         return None
     
@@ -405,6 +408,7 @@ class UpdateInstaller:
             # 备份关键文件
             critical_items = [
                 "Stellaris-DLC-Helper.exe",
+                "点击此处运行.exe",  # 新版本的主程序名
                 "updater_helper.exe",
                 "config.json",
                 "pairings.json",
