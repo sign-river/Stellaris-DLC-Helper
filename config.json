@@ -6,15 +6,17 @@
     "default_source": "github"
   },
   "server": {
-    "update_url_base": "http://47.100.2.190/update/",
+    "update_url_base": "https://gitlink.org.cn/signriver/file-warehouse/releases/download/v1.0.x/",
+    "appinfo_url": "https://gitlink.org.cn/signriver/file-warehouse/releases/download/ste/stellaris_appinfo.json",
     "sources": [
       {
-        "name": "r2",
-        "url": "https://dlc.dlchelper.top/dlc/",
+        "name": "gitlink",
+        "url": "https://gitlink.org.cn/signriver/file-warehouse/releases/download/ste/",
         "priority": 1,
         "enabled": true,
-        "format": "standard",
-        "test_url": "https://dlc.dlchelper.top/dlc/test/test2.bin"
+        "format": "github_release",
+        "mapping_file": "pairings.json",
+        "test_url": "https://gitlink.org.cn/signriver/file-warehouse/releases/download/test/test.bin"
       },
       {
         "name": "github",
@@ -28,17 +30,9 @@
         "test_url": "https://github.com/sign-river/File_warehouse/releases/download/test/test.bin"
       },
       {
-        "name": "domestic_cloud",
-        "url": "http://47.100.2.190/dlc/",
-        "priority": 3,
-        "enabled": true,
-        "format": "standard",
-        "test_url": "http://47.100.2.190/dlc/test/test.bin"
-      },
-      {
         "name": "gitee",
         "url": "https://gitee.com/signriver/file_warehouse",
-        "priority": 4,
+        "priority": 3,
         "enabled": true,
         "format": "gitee_release",
         "repo": "signriver/file_warehouse",
@@ -56,8 +50,7 @@
         "test_url": "https://gitee.com/signriver/file_warehouse/releases/download/test/test.bin"
       }
     ],
-    "timeout": 30,
-    "appinfo_url": "http://47.100.2.190/appinfo/stellaris_appinfo.json"
+    "timeout": 30
   },
   "network": {
     "chunk_size": 8192,
