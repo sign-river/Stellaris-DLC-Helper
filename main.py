@@ -120,10 +120,9 @@ def main():
             logger.info(f"使用的 config.json 路径: {cfg_path}")
             # 尝试记录关键配置字段以判断来源
             try:
-                from src.config import DLC_SERVER_URL, DLC_INDEX_URL, VERSION
+                from src.config import DLC_API_URL, VERSION
                 logger.info(f"应用版本 (config.VERSION): {VERSION}")
-                logger.info(f"DLC_SERVER_URL: {DLC_SERVER_URL}")
-                logger.info(f"DLC_INDEX_URL: {DLC_INDEX_URL}")
+                logger.info(f"DLC_API_URL: {DLC_API_URL}")
             except Exception as e:
                 logger.warning(f"读取配置关键字段失败: {e}")
         except Exception as e:
@@ -150,10 +149,9 @@ def main():
             cfg_path = "(unknown)"
 
         try:
-            from src.config import DLC_SERVER_URL, DLC_INDEX_URL, VERSION
+            from src.config import DLC_API_URL, VERSION
         except Exception:
-            DLC_SERVER_URL = "(unknown)"
-            DLC_INDEX_URL = "(unknown)"
+            DLC_API_URL = "(unknown)"
             VERSION = "(unknown)"
 
         content_lines = [
@@ -163,8 +161,7 @@ def main():
             f"cwd: {cwd}",
             f"config_path: {cfg_path}",
             f"VERSION: {VERSION}",
-            f"DLC_SERVER_URL: {DLC_SERVER_URL}",
-            f"DLC_INDEX_URL: {DLC_INDEX_URL}",
+            f"DLC_API_URL: {DLC_API_URL}",
         ]
         # 写入到缓存目录的 runtime_info.txt
         try:
