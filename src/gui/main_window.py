@@ -2188,7 +2188,7 @@ class MainWindowCTk:
             return
         
         result = messagebox.askyesno("确认", 
-            f"即将删除通过本工具安装的 {len(operations)} 个DLC\n是否继续？")
+            "即将删除通过本工具安装的 DLC\n是否继续？")
         
         if not result:
             return
