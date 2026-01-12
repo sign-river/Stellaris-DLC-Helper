@@ -357,8 +357,8 @@ class Packager:
             version_info = {
                 "latest_version": VERSION,
                 "force_update": False,
-                "update_url": f"{UPDATE_URL_BASE}v{VERSION}/Stellaris-DLC-Helper-v{VERSION}.zip",
-                "update_log": f"{UPDATE_URL_BASE}v{VERSION}/update.log",
+                "update_url": f"{UPDATE_URL_BASE}Stellaris-DLC-Helper-v{VERSION}.zip",
+                "update_log": f"{UPDATE_URL_BASE}update.log",
                 "min_version": VERSION,
                 "release_date": datetime.now().strftime("%Y-%m-%d"),
                 "file_size": f"{dir_size:.1f} MB",
