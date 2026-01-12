@@ -14,33 +14,8 @@ VERSION = get_config("version", default="1.0.2")
 # Stellaris 游戏 AppID
 STELLARIS_APP_ID = get_config("stellaris_app_id", default="281990")
 
-# DLC 服务器配置 - 多源支持
-DLC_SOURCES = get_config("server", "sources", default=[
-    {
-        "name": "domestic_cloud",
-        "url": "http://47.100.2.190/dlc/",
-        "priority": 1,
-        "enabled": True,
-        "format": "standard"
-    }
-])
-
-def _get_best_source_url():
-    """获取最佳的源URL（优先选择国内云服务器）"""
-    # 优先选择国内云服务器
-    for source in DLC_SOURCES:
-        if source.get("name") == "domestic_cloud" and source.get("enabled", False):
-            return source["url"].rstrip("/")
-    # 如果没有找到，选第一个启用的源
-    for source in DLC_SOURCES:
-        if source.get("enabled", False):
-            return source["url"].rstrip("/")
-    # 默认值
-    return "https://dlc.dlchelper.top"
-
-# 兼容性：保留原有配置作为默认源
-DLC_SERVER_URL = _get_best_source_url()
-DLC_INDEX_URL = f"{DLC_SERVER_URL.rstrip('/')}/index.json"
+# GitLink DLC API URL（仅支持GitLink单一源）
+DLC_API_URL = "https://gitlink.org.cn/api/signriver/file-warehouse/releases.json"
 
 # 更新服务器配置 - GitLink
 UPDATE_URL_BASE = get_config("server", "update_url_base", default="https://gitlink.org.cn/signriver/file-warehouse/releases/download/v/")
@@ -54,11 +29,6 @@ APPINFO_URL = get_config("server", "appinfo_url", default="https://gitlink.org.c
 REQUEST_TIMEOUT = get_config("server", "timeout", default=30)
 CHUNK_SIZE = get_config("network", "chunk_size", default=8192)
 RETRY_TIMES = get_config("network", "retry_times", default=3)
-
-# 下载源选择配置
-PREFERRED_SOURCE = get_config("download", "preferred_source", default=None)  # 用户手动指定的源，None表示自动选择
-SKIP_SPEED_TEST_ON_STARTUP = get_config("download", "skip_speed_test_on_startup", default=False)  # 是否跳过启动时测速
-SPEED_MONITOR_ENABLED = get_config("download", "speed_monitor_enabled", default=True)  # 是否启用下载速度监控
 
 # 缓存配置
 CACHE_DIR_NAME = get_config("cache", "dir_name", default="Stellaris_DLC_Cache")

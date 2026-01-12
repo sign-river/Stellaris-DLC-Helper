@@ -17,10 +17,9 @@ import os
 class SettingsDialog(ctk.CTkToplevel):
     """设置对话框"""
 
-    def __init__(self, parent, source_manager=None, main_logger=None, is_downloading_callback=None):
+    def __init__(self, parent, main_logger=None, is_downloading_callback=None):
         super().__init__(parent)
 
-        self.source_manager = source_manager
         self.main_logger = main_logger  # 主窗口的日志记录器
         self.is_downloading_callback = is_downloading_callback  # 检查下载状态的回调函数
         self.logger = logging.getLogger(__name__)
@@ -84,14 +83,12 @@ class SettingsDialog(ctk.CTkToplevel):
 
         # 添加选项卡（常规设置排在最前面）
         self.tabview.add("常规设置")
-        self.tabview.add("源管理")
         self.tabview.add("配置管理")
         # 可以添加更多选项卡
         # self.tabview.add("高级选项")
 
         # 创建选项卡内容
         self._create_general_settings_tab()
-        self._create_source_management_tab()
         self._create_config_tab()
 
         # 底部按钮
