@@ -6,7 +6,7 @@ Stellaris DLC Helper 打包脚本
 
 打包结构：
 Stellaris-DLC-Helper/
-├── Stellaris-DLC-Helper.exe  # 主程序
+├── 点击此处运行.exe         # 主程序
 ├── patches/                  # 补丁文件
 │   └── cream_api.ini
 ├── config.json               # 配置文件
@@ -208,7 +208,7 @@ class Packager:
                 str(python_exe), "-m", "PyInstaller",
                 "--onefile",  # 打包成单个exe文件
                 "--windowed",  # 不显示控制台窗口
-                "--name", "Stellaris-DLC-Helper",
+                "--name", "点击此处运行",
                 "--icon", f"{self.project_root}/assets/images/tea_Gray.ico",  # 程序图标
                 "--add-data", f"{self.project_root}/src{separator}src",  # 添加src目录
                 "--add-data", f"{self.project_root}/config.json{separator}config.json",  # 添加config.json文件
@@ -279,8 +279,8 @@ class Packager:
         self.final_path.mkdir()
 
         # 移动 exe 文件
-        exe_source = self.dist_path / "Stellaris-DLC-Helper.exe"
-        exe_target = self.final_path / "Stellaris-DLC-Helper.exe"
+        exe_source = self.dist_path / "点击此处运行.exe"
+        exe_target = self.final_path / "点击此处运行.exe"
         shutil.move(str(exe_source), str(exe_target))
 
         # 复制资源文件夹和文件
@@ -324,7 +324,7 @@ class Packager:
         readme_content = f"""Stellaris DLC Helper v{VERSION}
 
 使用说明：
-1. 运行 Stellaris-DLC-Helper.exe
+1. 运行 点击此处运行.exe
 2. 选择您的 Stellaris 游戏目录（默认自动检测）
 3. 选择要下载的 DLC（默认全部勾选）
 4. 点击"一键解锁"开始下载和安装（没别的需求的话你只需要干这个）
@@ -486,7 +486,7 @@ class Packager:
 
     def _should_rebuild_exe(self):
         """判断是否需要重新构建exe"""
-        exe_path = self.dist_path / "Stellaris-DLC-Helper.exe"
+        exe_path = self.dist_path / "点击此处运行.exe"
         if not exe_path.exists():
             return True
 
