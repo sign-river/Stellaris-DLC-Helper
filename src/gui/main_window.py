@@ -1327,7 +1327,7 @@ class MainWindowCTk:
         
         # 更新游戏版本信息
         if hasattr(self.dlc_manager, 'game_version') and self.dlc_manager.game_version:
-            self.version_label.configure(text=f"适配版本: {self.dlc_manager.game_version}")
+            self.version_label.configure(text=f"当前资源版本:stellaris {self.dlc_manager.game_version}")
         
         self.logger.info(f"DLC列表加载完成: 共{total}个，已安装{installed_count}个，可下载{available_count}个")
         

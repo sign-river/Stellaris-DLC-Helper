@@ -101,8 +101,8 @@ class DLCManager:
                 logger.warning("未找到tag为'ste'的Release")
                 return None
             
-            # 保存游戏版本信息（从release的name或body中获取）
-            self.game_version = release.get('name') or release.get('body', '').split('\n')[0] or '未知版本'
+            # 保存游戏版本信息（使用body字段）
+            self.game_version = release.get('body', '未知版本').strip()
             
             # 构建DLC列表
             dlc_list = []
