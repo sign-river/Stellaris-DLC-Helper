@@ -9,9 +9,8 @@ import os
 import json
 import requests
 from pathlib import Path
-from ..config import DLC_INDEX_URL, STELLARIS_APP_ID, REQUEST_TIMEOUT
+from ..config import STELLARIS_APP_ID, REQUEST_TIMEOUT
 from ..utils import PathUtils
-from .source_manager import SourceManager
 
 
 class DLCManager:
@@ -25,7 +24,6 @@ class DLCManager:
             game_path: 游戏路径
         """
         self.game_path = game_path
-        self.source_manager = SourceManager()
         self.dlc_names = {}  # DLC名称映射表，从pairings.json动态加载
         self._load_dlc_names()
     
@@ -123,28 +121,11 @@ class DLCManager:
                 base_url = "https://gitlink.org.cn"
                 file_url = base_url + attachment.get("url", "")
                 
-                # 获取所有源的下载URL
-                url_tuples = self.source_manager.get_download_urls_for_dlc(
-                    dlc_key, 
-                    {"name": dlc_name, "size": attachment.get("filesize", "未知")}
-                )
-                
-                # 分离主URL和备用URL
-                if url_tuples:
-                    main_url = url_tuples[0][0]
-                    main_source = url_tuples[0][1]
-                    fallback_urls = url_tuples[1:]
-                else:
-                    main_url = file_url
-                    main_source = "gitlink"
-                    fallback_urls = []
-                
                 dlc_list.append({
                     "key": dlc_key,
                     "name": dlc_name,
-                    "url": main_url,
-                    "source": main_source,
-                    "fallback_urls": fallback_urls,
+                    "url": file_url,
+                    "source": "gitlink",
                     "size": attachment.get("filesize", "未知")
                 })
             
@@ -156,180 +137,24 @@ class DLCManager:
             logging.getLogger(__name__).warning(f"从GitLink API获取失败: {e}")
             return None
     
-    def _fetch_from_index_json(self):
-        """
-        从index.json获取DLC列表（备用方式）
-        
-        返回:
-            list: DLC列表或None
-        """
-        try:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info("使用备用方式：从index.json获取DLC列表")
-            
-            domestic_source = self.source_manager.get_source_by_name("domestic_cloud")
-            if not domestic_source:
-                logger.warning("未找到国内云服务器配置")
-                return None
-            
-            data = self.source_manager.fetch_dlc_data_from_source(domestic_source)
-            if not data:
-                return None
-            
-            if STELLARIS_APP_ID not in data:
-                return None
-            
-            stellaris_data = data[STELLARIS_APP_ID]
-            dlcs = stellaris_data.get("dlcs", {})
-            
-            if not dlcs:
-                return None
-            
-            dlc_list = []
-            for key, info in dlcs.items():
-                url_tuples = self.source_manager.get_download_urls_for_dlc(key, info)
-                
-                if url_tuples:
-                    main_url = url_tuples[0][0]
-                    main_source = url_tuples[0][1]
-                    fallback_urls = url_tuples[1:]
-                else:
-                    main_url = ""
-                    main_source = "unknown"
-                    fallback_urls = []
-                
-                dlc_list.append({
-                    "key": key,
-                    "name": info.get("name", key),
-                    "url": main_url,
-                    "source": main_source,
-                    "fallback_urls": fallback_urls,
-                    "size": info.get("size", "未知")
-                })
-            
-            logger.info(f"✅ 从index.json成功获取 {len(dlc_list)} 个DLC")
-            return dlc_list
-            
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"从index.json获取失败: {e}")
-            return None
-    
     def fetch_dlc_list(self):
         """
-        获取DLC列表（优先使用GitLink API，失败时使用index.json）
+        获取DLC列表（从GitLink API）
         
         返回:
             list: DLC列表，每项包含 key, name, url, size
             
         抛出:
-            Exception: 所有方式都失败时抛出异常
+            Exception: 获取失败时抛出异常
         """
         import logging
         logger = logging.getLogger(__name__)
         
-        # 方式1：优先使用GitLink API
         dlc_list = self._fetch_from_gitlink_api()
         if dlc_list:
             return dlc_list
         
-        # 方式2：备用index.json
-        dlc_list = self._fetch_from_index_json()
-        if dlc_list:
-            return dlc_list
-        
-        # 所有方式都失败
-        raise Exception("无法获取DLC列表：GitLink API和index.json都失败了")
-    
-    def _original_fetch_dlc_list(self):
-        """
-        从国内服务器获取DLC列表
-        
-        返回:
-            list: DLC列表，每项包含 key, name, url, size
-            
-        抛出:
-            Exception: 网络错误或数据格式错误
-        """
-        import logging
-        # 打印当前 SourceManager 的 sources（DEBUG级别）以便排查运行时的源配置
-        logging.getLogger().debug(f"SourceManager.sources: {self.source_manager.sources}")
-        # 只从国内服务器获取DLC列表
-        domestic_source = self.source_manager.get_source_by_name("domestic_cloud")
-        # 记录 domestic_source 的值以帮助调试（DEBUG级别）
-        logging.getLogger().debug(f"domestic_source: {domestic_source}")
-        if not domestic_source:
-            raise Exception("未找到国内云服务器配置")
-        
-        data = self.source_manager.fetch_dlc_data_from_source(domestic_source)
-        if not data:
-            raise Exception("无法从国内服务器获取DLC数据")
-        
-        # 处理数据
-        if STELLARIS_APP_ID not in data:
-            raise Exception("服务器上暂无Stellaris的DLC数据")
-        
-        stellaris_data = data[STELLARIS_APP_ID]
-        dlcs = stellaris_data.get("dlcs", {})
-        
-        if not dlcs:
-            raise Exception("服务器上暂无可用DLC")
-        
-        dlc_list = []
-        for key, info in dlcs.items():
-            # 获取所有可用的下载URL（包括所有源的备用URL）
-            url_tuples = self.source_manager.get_download_urls_for_dlc(key, info)
-            
-            # 分离主URL和备用URL
-            if url_tuples:
-                main_url = url_tuples[0][0]  # 主URL
-                main_source = url_tuples[0][1]  # 主URL对应的源
-                fallback_urls = url_tuples[1:]  # 备用URL元组列表
-            else:
-                main_url = ""
-                main_source = "unknown"
-                fallback_urls = []
-            
-            dlc_list.append({
-                "key": key,
-                "name": info.get("name", key),
-                "url": main_url,  # 主URL
-                "source": main_source,  # 主URL对应的源名称
-                "urls": fallback_urls,  # 备用URL元组列表，用于fallback
-                "size": info.get("size", "未知"),
-                "checksum": info.get("checksum") or info.get("sha256") or info.get("hash"),
-                "_original_source": info.get("_source", "unknown")  # 原始源信息
-            })
-        
-        # 按DLC编号排序
-        dlc_list.sort(key=self._extract_dlc_number)
-        # 构建 URL 映射表并写入缓存，便于调试
-        try:
-            url_map = self.source_manager.build_dlc_url_map(dlc_list)
-            from ..utils import PathUtils
-            import json
-            cache_path = PathUtils.get_cache_dir()
-            import os
-            os.makedirs(cache_path, exist_ok=True)
-            with open(os.path.join(cache_path, 'dlc_urls.json'), 'w', encoding='utf-8') as f:
-                json.dump(url_map, f, ensure_ascii=False, indent=2)
-            # 将 url_map 每个DLC的sources字典嵌入到对应 dlc_list 项
-            for dlc in dlc_list:
-                k = dlc.get('key')
-                if k in url_map:
-                    # 只将 sources 映射嵌入到每个 dlc，便于 UI 直接遍历 source->url
-                    dlc['url_map'] = url_map[k].get('sources', {})
-        except Exception:
-            pass
-        return dlc_list
-    
-    @staticmethod
-    def _extract_dlc_number(dlc_item):
-        """从DLC键名中提取编号用于排序"""
-        import re
-        match = re.search(r'dlc(\d+)', dlc_item["key"])
-        return int(match.group(1)) if match else 9999
+        raise Exception("无法获取DLC列表：GitLink API访问失败")
     
     def get_installed_dlcs(self):
         """
