@@ -1976,9 +1976,9 @@ class MainWindowCTk:
 
                     # 下载DLC
                     try:
-                        self.logger.info(f"正在下载: {dlc['name']} (使用源: {self.best_download_source})... URL: {selected_url}")
+                        self.logger.info(f"正在下载: {dlc['name']}... URL: {selected_url}")
                         expected_hash = dlc.get('checksum') or dlc.get('sha256') or dlc.get('hash')
-                        cache_path = downloader.download_dlc(dlc['key'], selected_url, selected_fallback_urls, expected_hash=expected_hash, primary_source_name=current_source)
+                        cache_path = downloader.download_dlc(dlc['key'], selected_url, self.dlc_cache_folder, expected_hash=expected_hash)
                         if os.path.exists(cache_path):
                             self.logger.info("从本地缓存加载...")
                         else:
