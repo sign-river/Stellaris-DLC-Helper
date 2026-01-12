@@ -6,7 +6,7 @@
     "default_source": "github"
   },
   "server": {
-    "update_url_base": "https://gitlink.org.cn/signriver/file-warehouse/releases/download/v1.0.x/",
+    "update_url_base": "https://gitlink.org.cn/signriver/file-warehouse/releases/download/v/",
     "appinfo_url": "https://gitlink.org.cn/signriver/file-warehouse/releases/download/ste/stellaris_appinfo.json",
     "sources": [
       {

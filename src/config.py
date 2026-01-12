@@ -43,7 +43,7 @@ DLC_SERVER_URL = _get_best_source_url()
 DLC_INDEX_URL = f"{DLC_SERVER_URL.rstrip('/')}/index.json"
 
 # 更新服务器配置 - GitLink
-UPDATE_URL_BASE = get_config("server", "update_url_base", default="https://gitlink.org.cn/signriver/file-warehouse/releases/download/v1.0.x/")
+UPDATE_URL_BASE = get_config("server", "update_url_base", default="https://gitlink.org.cn/signriver/file-warehouse/releases/download/v/")
 UPDATE_CHECK_URL = f"{UPDATE_URL_BASE}version.json"
 ANNOUNCEMENT_URL = f"{UPDATE_URL_BASE}announcement.txt"
 
