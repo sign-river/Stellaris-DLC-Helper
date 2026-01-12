@@ -222,13 +222,14 @@ class DLCDownloader:
             expected_hash: 预期的文件哈希（可选）
             
         返回:
-            bool: 是否成功
+            str: 下载文件的路径
         """
         # 确定目标文件名
         filename = url.split('/')[-1] if '/' in url else f"{dlc_name}.zip"
         dest_path = os.path.join(dest_folder, filename)
         
         try:
-            return self.download(url, dest_path, expected_hash)
+            self.download(url, dest_path, expected_hash)
+            return dest_path  # 返回文件路径而不是布尔值
         except Exception as e:
             raise Exception(f"下载DLC {dlc_name} 失败: {str(e)}")

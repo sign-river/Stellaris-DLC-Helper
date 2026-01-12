@@ -1504,22 +1504,10 @@ class MainWindowCTk:
         self.is_downloading = True
         self.execute_btn.configure(text="⏸️ 暂停下载", state="normal")
         
-        # 检查是否跳过测速
-        try:
-            from .. import config_loader
-            skip_speed_test = config_loader.get_config("settings", "skip_speed_test", default=False)
-            default_source = config_loader.get_config("settings", "default_source", default="github")
-        except Exception:
-            skip_speed_test = False
-            default_source = "github"
-        
-        if skip_speed_test:
-            # 跳过测速，直接使用默认源
-            self.best_download_source = default_source
-            self.logger.info(f"已跳过测速，使用默认源: {default_source}")
-            # GitLink单一源，无需测速，直接下载
-            self.best_download_source = "gitlink"
-            self.root.after(0, lambda: self._continue_download_after_speed_test(selected))
+        # GitLink单一源，无需测速，直接下载
+        self.best_download_source = "gitlink"
+        self.logger.info("使用GitLink下载源")
+        self.root.after(0, lambda: self._continue_download_after_speed_test(selected))
     
     def _continue_download_after_speed_test(self, selected):
         """测速完成后继续下载流程"""

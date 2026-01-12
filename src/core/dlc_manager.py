@@ -126,10 +126,18 @@ class DLCManager:
                     "name": dlc_name,
                     "url": file_url,
                     "source": "gitlink",
-                    "size": attachment.get("filesize", "未知")
+                    "size": attachment.get("filesize", "未知"),
+                    "number": int(file_number)  # 添加数字用于排序
                 })
             
-            logger.info(f"✅ 从GitLink API成功获取 {len(dlc_list)} 个DLC")
+            # 按DLC编号排序（从小到大）
+            dlc_list.sort(key=lambda x: x.get("number", 0))
+            
+            # 移除临时的number字段
+            for dlc in dlc_list:
+                dlc.pop("number", None)
+            
+            logger.info(f"✅ 从GitLink API成功获取 {len(dlc_list)} 个DLC（已排序）")
             return dlc_list
             
         except Exception as e:
