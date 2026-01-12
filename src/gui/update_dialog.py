@@ -81,7 +81,7 @@ class UpdateDialog(ctk.CTkToplevel):
             # 设置窗口图标
             try:
                 from ..utils.path_utils import PathUtils
-                icon_path = PathUtils.get_resource_path("assets/images/tea_Gray.ico")
+                icon_path = PathUtils.get_resource_path("assets/images/icon.ico")
                 if os.path.exists(icon_path):
                     self.iconbitmap(icon_path)
             except Exception as e:

@@ -209,7 +209,7 @@ class Packager:
                 "--onefile",  # 打包成单个exe文件
                 "--windowed",  # 不显示控制台窗口
                 "--name", "点击此处运行",
-                "--icon", f"{self.project_root}/assets/images/tea_Gray.ico",  # 程序图标
+                "--icon", f"{self.project_root}/assets/images/icon.ico",  # 程序图标
                 "--add-data", f"{self.project_root}/src{separator}src",  # 添加src目录
                 "--add-data", f"{self.project_root}/config.json{separator}config.json",  # 添加config.json文件
                 "--add-data", f"{self.project_root}/pairings.json{separator}pairings.json",  # 添加pairings.json文件
@@ -531,16 +531,13 @@ class Packager:
             # 注意：保留虚拟环境以实现缓存效果
             # 如需清理虚拟环境，请手动删除 Stellaris_DLC_Cache/venv/build_venv/ 目录
 
-            # 删除spec文件
-            spec_file = self.project_root / "Stellaris-DLC-Helper.spec"
-            if spec_file.exists():
-                spec_file.unlink()
-                print("已删除 Stellaris-DLC-Helper.spec 文件")
-            
-            helper_spec_file = self.project_root / "updater_helper.spec"
-            if helper_spec_file.exists():
-                helper_spec_file.unlink()
-                print("已删除 updater_helper.spec 文件")
+            # 删除spec文件（使用通配符匹配所有.spec文件）
+            for spec_file in self.project_root.glob("*.spec"):
+                try:
+                    spec_file.unlink()
+                    print(f"已删除 {spec_file.name} 文件")
+                except Exception as e:
+                    print(f"删除 {spec_file.name} 失败: {e}")
 
             # 删除解压后的目录
             if self.final_path.exists():
@@ -557,9 +554,12 @@ class Packager:
             shutil.rmtree(self.venv_path)
         if self.dist_path.exists():
             shutil.rmtree(self.dist_path)
-        spec_file = self.project_root / "Stellaris-DLC-Helper.spec"
-        if spec_file.exists():
-            spec_file.unlink()
+        # 删除所有.spec文件
+        for spec_file in self.project_root.glob("*.spec"):
+            try:
+                spec_file.unlink()
+            except:
+                pass
         print("清理完成")
 
     def package(self):

@@ -42,7 +42,7 @@ class MainWindowCTk:
         # 设置窗口图标
         try:
             from ..utils.path_utils import PathUtils
-            icon_path = PathUtils.get_resource_path("assets/images/tea_Gray.ico")
+            icon_path = PathUtils.get_resource_path("assets/images/icon.ico")
             if os.path.exists(icon_path):
                 self.root.iconbitmap(icon_path)
         except Exception as e:
@@ -124,7 +124,7 @@ class MainWindowCTk:
         
         # 左上角图标
         try:
-            icon_path = PathUtils.get_resource_path("assets/images/tea_Gray.png")
+            icon_path = PathUtils.get_resource_path("assets/images/icon.png")
             if os.path.exists(icon_path):
                 icon_image = Image.open(icon_path)
                 # 调整图标大小
