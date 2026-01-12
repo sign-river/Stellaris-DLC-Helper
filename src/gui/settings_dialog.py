@@ -83,12 +83,14 @@ class SettingsDialog(ctk.CTkToplevel):
 
         # 添加选项卡（常规设置排在最前面）
         self.tabview.add("常规设置")
+        self.tabview.add("测速")
         self.tabview.add("配置管理")
         # 可以添加更多选项卡
         # self.tabview.add("高级选项")
 
         # 创建选项卡内容
         self._create_general_settings_tab()
+        self._create_speed_test_tab()
         self._create_config_tab()
 
         # 底部按钮
@@ -301,83 +303,6 @@ class SettingsDialog(ctk.CTkToplevel):
         )
         info_label.pack(pady=(10, 20))
 
-        # 获取当前配置
-        try:
-            from .. import config_loader
-            skip_test = config_loader.get_config("settings", "skip_speed_test", default=False)
-            default_source = config_loader.get_config("settings", "default_source", default="github")
-        except Exception:
-            skip_test = False
-            default_source = "github"
-
-        # 跳过启动测速设置框架
-        speed_test_frame = ctk.CTkFrame(scrollable_frame, fg_color="#FFFFFF", corner_radius=8)
-        speed_test_frame.pack(fill="x", padx=20, pady=(0, 15))
-
-        # 标题行
-        title_frame = ctk.CTkFrame(speed_test_frame, fg_color="transparent")
-        title_frame.pack(fill="x", padx=15, pady=(15, 10))
-
-        speed_title = ctk.CTkLabel(
-            title_frame,
-            text="⚡ 启动测速设置",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#1976D2"
-        )
-        speed_title.pack(side="left")
-
-        # 跳过测速开关
-        switch_frame = ctk.CTkFrame(speed_test_frame, fg_color="transparent")
-        switch_frame.pack(fill="x", padx=15, pady=(0, 10))
-
-        self.skip_test_var = ctk.BooleanVar(value=skip_test)
-        skip_test_switch = ctk.CTkSwitch(
-            switch_frame,
-            text="跳过启动时的源测速",
-            variable=self.skip_test_var,
-            command=self._on_skip_test_changed,
-            font=ctk.CTkFont(size=13),
-            switch_width=50,
-            switch_height=24
-        )
-        skip_test_switch.pack(side="left")
-
-        # 说明文本
-        desc_label = ctk.CTkLabel(
-            speed_test_frame,
-            text="启用后，程序启动时将不进行源测速，直接使用下方选择的默认源",
-            font=ctk.CTkFont(size=11),
-            text_color="#999999"
-        )
-        desc_label.pack(padx=15, pady=(0, 10), anchor="w")
-
-        # 分隔线
-        separator = ctk.CTkFrame(speed_test_frame, height=1, fg_color="#E0E0E0")
-        separator.pack(fill="x", padx=15, pady=10)
-
-        # 默认源选择
-        source_frame = ctk.CTkFrame(speed_test_frame, fg_color="transparent")
-        source_frame.pack(fill="x", padx=15, pady=(0, 15))
-
-        source_label = ctk.CTkLabel(
-            source_frame,
-            text="默认下载源:",
-            font=ctk.CTkFont(size=13),
-            text_color="#333333"
-        )
-        source_label.pack(side="left", padx=(0, 15))
-
-        # GitLink单一源配置（无需选择）
-        self.default_source_var = ctk.StringVar(value="gitlink")
-        
-        gitlink_label = ctk.CTkLabel(
-            source_frame,
-            text="GitLink（默认且唯一下载源）",
-            font=ctk.CTkFont(size=13),
-            text_color="#4CAF50"
-        )
-        gitlink_label.pack(side="left", padx=(0, 15))
-
         # 更新文件管理框架
         update_files_frame = ctk.CTkFrame(scrollable_frame, fg_color="#FFFFFF", corner_radius=8)
         update_files_frame.pack(fill="x", padx=20, pady=(15, 15))
@@ -463,85 +388,6 @@ class SettingsDialog(ctk.CTkToplevel):
 
         # 更新文件统计信息
         self._update_files_info()
-
-        # 保存按钮
-        save_frame = ctk.CTkFrame(scrollable_frame, fg_color="transparent")
-        save_frame.pack(fill="x", padx=20, pady=(10, 0))
-
-        save_btn = ctk.CTkButton(
-            save_frame,
-            text="💾 保存设置",
-            command=self._save_general_settings,
-            width=140,
-            height=36,
-            font=ctk.CTkFont(size=13, weight="bold"),
-            corner_radius=8,
-            fg_color="#4CAF50",
-            hover_color="#45a049"
-        )
-        save_btn.pack(side="left")
-
-        hint_label = ctk.CTkLabel(
-            save_frame,
-            text="提示: 修改设置后需要重启程序才能生效",
-            font=ctk.CTkFont(size=11),
-            text_color="#FF9800"
-        )
-        hint_label.pack(side="left", padx=15)
-
-    def _on_skip_test_changed(self):
-        """跳过测速选项改变时的回调"""
-        self._update_source_radios_state()
-
-    def _update_source_radios_state(self):
-        """根据跳过测速开关状态更新源选择单选按钮的启用状态"""
-        skip = self.skip_test_var.get()
-        # 查找所有单选按钮并设置状态
-        try:
-            tab = self.tabview.tab("常规设置")
-            for widget in tab.winfo_children():
-                self._update_radios_recursive(widget, "normal" if skip else "disabled")
-        except Exception:
-            pass
-
-    def _update_radios_recursive(self, widget, state):
-        """递归更新单选按钮状态"""
-        if isinstance(widget, ctk.CTkRadioButton):
-            widget.configure(state=state)
-        for child in widget.winfo_children():
-            self._update_radios_recursive(child, state)
-
-    def _save_general_settings(self):
-        """保存常规设置到config.json"""
-        try:
-            from .. import config_loader
-            import json
-
-            # 读取当前配置
-            config_path = config_loader._loader.config_path
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-
-            # 确保settings节点存在
-            if "settings" not in config:
-                config["settings"] = {}
-
-            # 更新设置
-            config["settings"]["skip_speed_test"] = self.skip_test_var.get()
-            config["settings"]["default_source"] = self.default_source_var.get()
-
-            # 写回配置文件
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
-
-            messagebox.showinfo("保存成功", "设置已保存！\n\n请重启程序使设置生效。")
-            self.logger.info(f"常规设置已保存: skip_speed_test={self.skip_test_var.get()}, default_source={self.default_source_var.get()}")
-
-        except Exception as e:
-            error_msg = str(e)
-            messagebox.showerror("保存失败", f"无法保存设置:\n{error_msg}")
-            import logging
-            logging.error(f"保存常规设置失败: {error_msg}", exc_info=True)
 
     def _create_config_tab(self):
         """创建配置管理选项卡内容（显示生效的 config.json 路径等）"""
@@ -891,3 +737,199 @@ class SettingsDialog(ctk.CTkToplevel):
         except Exception as e:
             self.logger.error(f"清理更新下载包失败: {e}", exc_info=True)
             messagebox.showerror("清理失败", f"清理更新下载包时出错:\n{str(e)}")
+
+    def _create_speed_test_tab(self):
+        """创建测速选项卡"""
+        tab = self.tabview.tab("测速")
+        
+        # 标题
+        title_label = ctk.CTkLabel(
+            tab,
+            text="🚀 GitLink源速度测试",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color="#1976D2"
+        )
+        title_label.pack(pady=(15, 5))
+        
+        # 创建可滚动容器
+        scrollable_frame = ctk.CTkScrollableFrame(
+            tab,
+            fg_color="#F8F9FA",
+            corner_radius=0
+        )
+        scrollable_frame.pack(fill="both", expand=True, padx=0, pady=(10, 0))
+        
+        # GitLink测速模块
+        speed_frame = ctk.CTkFrame(scrollable_frame, fg_color="#FFFFFF", corner_radius=8)
+        speed_frame.pack(fill="x", padx=20, pady=(10, 15))
+        
+        # 内容框架（左右布局）
+        content_frame = ctk.CTkFrame(speed_frame, fg_color="transparent")
+        content_frame.pack(fill="x", padx=20, pady=20)
+        
+        # 左侧：描述信息
+        left_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        left_frame.pack(side="left", fill="both", expand=True)
+        
+        title = ctk.CTkLabel(
+            left_frame,
+            text="📊 GitLink下载速度",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#333333",
+            anchor="w"
+        )
+        title.pack(anchor="w", pady=(0, 8))
+        
+        desc = ctk.CTkLabel(
+            left_frame,
+            text="测试GitLink源的下载速度\n测试文件: test.bin (约70MB)\n评估网络连接质量",
+            font=ctk.CTkFont(size=12),
+            text_color="#666666",
+            anchor="w",
+            justify="left"
+        )
+        desc.pack(anchor="w")
+        
+        # 右侧：速度显示
+        right_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        right_frame.pack(side="right", padx=(20, 0))
+        
+        # 速度标签（大号显示）
+        self.speed_value_label = ctk.CTkLabel(
+            right_frame,
+            text="--",
+            font=ctk.CTkFont(size=32, weight="bold"),
+            text_color="#4CAF50"
+        )
+        self.speed_value_label.pack(pady=(0, 5))
+        
+        # 单位标签
+        self.speed_unit_label = ctk.CTkLabel(
+            right_frame,
+            text="MB/s",
+            font=ctk.CTkFont(size=14),
+            text_color="#999999"
+        )
+        self.speed_unit_label.pack()
+        
+        # 状态标签
+        self.speed_status_label = ctk.CTkLabel(
+            right_frame,
+            text="未测试",
+            font=ctk.CTkFont(size=12),
+            text_color="#999999"
+        )
+        self.speed_status_label.pack(pady=(5, 0))
+        
+        # 测速按钮（在容器外）
+        button_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        button_frame.pack(fill="x", padx=20, pady=(0, 20))
+        
+        self.speed_test_btn = ctk.CTkButton(
+            button_frame,
+            text="🚀 开始测速",
+            command=self._start_speed_test,
+            width=150,
+            height=40,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            corner_radius=8,
+            fg_color="#4CAF50",
+            hover_color="#45A049"
+        )
+        self.speed_test_btn.pack()
+    
+    def _start_speed_test(self):
+        """开始GitLink源速度测试"""
+        import threading
+        import time
+        import requests
+        
+        def test_thread():
+            try:
+                # 禁用按钮
+                self.speed_test_btn.configure(state="disabled", text="测速中...")
+                
+                # 重置显示状态
+                self.speed_value_label.configure(text="0.00", text_color="#FF9800")
+                self.speed_status_label.configure(text="正在连接...", text_color="#FF9800")
+                
+                # GitLink test.bin URL (正确的URL)
+                test_url = "https://gitlink.org.cn/signriver/file-warehouse/releases/download/test/test.bin"
+                
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                }
+                
+                total_downloaded = 0
+                start_time = time.time()
+                last_update_time = start_time
+                
+                with requests.get(test_url, headers=headers, stream=True, timeout=(7.0, 10.0)) as response:
+                    if not response.ok:
+                        raise Exception(f"服务器返回状态码 {response.status_code}")
+                    
+                    self.speed_status_label.configure(text="正在测速...", text_color="#FF9800")
+                    
+                    for chunk in response.iter_content(chunk_size=64 * 1024):
+                        if not chunk:
+                            break
+                        
+                        total_downloaded += len(chunk)
+                        current_time = time.time()
+                        elapsed = current_time - start_time
+                        
+                        # 每0.3秒更新一次显示
+                        if current_time - last_update_time >= 0.3:
+                            if elapsed > 0.001:
+                                speed_mbps = (total_downloaded / (1024 * 1024)) / elapsed
+                                self.speed_value_label.configure(text=f"{speed_mbps:.2f}")
+                                last_update_time = current_time
+                        
+                        # 测速超过10秒或下载超过70MB就停止
+                        if elapsed >= 10.0 or total_downloaded >= 70 * 1024 * 1024:
+                            break
+                
+                # 计算最终速度
+                final_duration = time.time() - start_time
+                if final_duration <= 0.001:
+                    final_duration = 0.001
+                
+                speed_mbps = (total_downloaded / (1024 * 1024)) / final_duration
+                
+                # 更新最终速度显示
+                self.speed_value_label.configure(text=f"{speed_mbps:.2f}")
+                
+                # 根据速度设置评价和颜色
+                if speed_mbps >= 5:
+                    status_text = "优秀 ⭐⭐⭐⭐⭐"
+                    color = "#4CAF50"
+                elif speed_mbps >= 2:
+                    status_text = "良好 ⭐⭐⭐⭐"
+                    color = "#8BC34A"
+                elif speed_mbps >= 1:
+                    status_text = "一般 ⭐⭐⭐"
+                    color = "#FFC107"
+                elif speed_mbps >= 0.5:
+                    status_text = "较慢 ⭐⭐"
+                    color = "#FF9800"
+                else:
+                    status_text = "很慢 ⭐"
+                    color = "#F44336"
+                
+                self.speed_value_label.configure(text_color=color)
+                self.speed_status_label.configure(text=status_text, text_color=color)
+                
+                self.logger.info(f"GitLink测速完成: {speed_mbps:.2f} MB/s (下载 {total_downloaded/(1024*1024):.2f} MB)")
+                
+            except Exception as e:
+                self.logger.error(f"测速失败: {e}", exc_info=True)
+                self.speed_value_label.configure(text="失败", text_color="#F44336")
+                self.speed_status_label.configure(text=f"连接超时或网络错误", text_color="#F44336")
+            
+            finally:
+                # 恢复按钮
+                self.speed_test_btn.configure(state="normal", text="🚀 开始测速")
+        
+        # 在后台线程执行测速
+        threading.Thread(target=test_thread, daemon=True).start()
+
