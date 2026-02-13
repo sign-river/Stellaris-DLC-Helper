@@ -105,14 +105,19 @@ class DLCManager:
             
             # 构建DLC列表
             dlc_list = []
-            for attachment in release.get("attachments", []):
+            attachments = release.get("attachments", [])
+            logger.info(f"开始解析 {len(attachments)} 个附件...")
+            
+            for attachment in attachments:
                 filename = attachment.get("title", "")
                 if not filename.endswith(".zip"):
+                    logger.debug(f"跳过非zip文件: {filename}")
                     continue
                 
                 # 从文件名提取DLC编号：001.zip -> dlc001
                 file_number = filename.replace(".zip", "")
                 if not file_number.isdigit():
+                    logger.debug(f"跳过非数字文件名: {filename}")
                     continue
                 
                 dlc_key = f"dlc{file_number}"
@@ -196,10 +201,15 @@ class DLCManager:
         logger = logging.getLogger(__name__)
         
         dlc_list = self._fetch_from_gitlink_api()
-        if dlc_list:
-            return dlc_list
         
-        raise Exception("无法获取DLC列表：GitLink API访问失败")
+        # 区分API失败(None)和返回空列表([])
+        if dlc_list is None:
+            raise Exception("无法获取DLC列表：GitLink API访问失败")
+        
+        if not dlc_list:
+            raise Exception("服务器上暂无可用DLC（API返回为空）")
+        
+        return dlc_list
     
     def get_installed_dlcs(self):
         """
