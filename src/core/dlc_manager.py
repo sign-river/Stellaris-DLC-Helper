@@ -24,53 +24,23 @@ class DLCManager:
             game_path: 游戏路径
         """
         self.game_path = game_path
-        self.dlc_names = {}  # DLC名称映射表，从pairings.json动态加载
         self.game_version = None  # 游戏版本信息
-        self._load_dlc_names()
-    
-    def _load_dlc_names(self):
-        """从pairings.json加载DLC名称映射"""
-        try:
-            # 尝试从多个位置加载pairings.json
-            base_dir = Path(PathUtils.get_base_dir())
-            pairings_paths = [
-                base_dir / "pairings.json"
-            ]
-            
-            for path in pairings_paths:
-                if path.exists():
-                    with open(path, 'r', encoding='utf-8') as f:
-                        # 读取映射：dlc001_symbols_of_domination.zip -> 001.zip
-                        pairings = json.load(f)
-                        
-                        # 从文件名提取DLC名称
-                        for full_name in pairings.keys():
-                            if full_name.startswith('dlc') and '_' in full_name:
-                                parts = full_name.replace('.zip', '').split('_', 1)
-                                if len(parts) == 2:
-                                    dlc_key = parts[0]  # dlc001
-                                    name_part = parts[1]  # symbols_of_domination
-                                    # 转换为可读名称
-                                    readable_name = ' '.join(word.capitalize() for word in name_part.split('_'))
-                                    self.dlc_names[dlc_key] = readable_name
-                    break
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"加载DLC名称失败: {e}")
-            self.dlc_names = {}
-    
-    def _get_dlc_name(self, dlc_key):
+
+    @staticmethod
+    def _parse_dlc_filename(filename):
         """
-        从DLC编号获取名称（从pairings.json动态提取）
-        
-        参数:
-            dlc_key: DLC键名，如 'dlc001'
-            
-        返回:
-            str: DLC名称
+        从文件名解析 DLC key 和可读名称
+
+        支持格式：dlc001_symbols_of_domination.zip
+        返回：(dlc_key, readable_name) 或 (None, None)
         """
-        return self.dlc_names.get(dlc_key, dlc_key.replace('dlc', 'DLC '))
-        
+        base = filename.replace('.zip', '')
+        if not base.startswith('dlc') or '_' not in base:
+            return None, None
+        dlc_key, name_part = base.split('_', 1)
+        readable_name = ' '.join(w.capitalize() for w in name_part.split('_'))
+        return dlc_key, readable_name
+
     def _fetch_from_gitlink_api(self):
         """
         从GitLink API获取DLC列表（主要方式）
@@ -113,17 +83,12 @@ class DLCManager:
                 if not filename.endswith(".zip"):
                     logger.debug(f"跳过非zip文件: {filename}")
                     continue
-                
-                # 从文件名提取DLC编号：001.zip -> dlc001
-                file_number = filename.replace(".zip", "")
-                if not file_number.isdigit():
-                    logger.debug(f"跳过非数字文件名: {filename}")
+
+                # 从文件名解析 DLC key 和名称：dlc001_symbols_of_domination.zip
+                dlc_key, dlc_name = self._parse_dlc_filename(filename)
+                if dlc_key is None:
+                    logger.debug(f"跳过无法解析的文件名: {filename}")
                     continue
-                
-                dlc_key = f"dlc{file_number}"
-                
-                # 从pairings.json动态获取名称
-                dlc_name = self._get_dlc_name(dlc_key)
                 
                 # 构建完整URL
                 base_url = "https://gitlink.org.cn"
@@ -169,7 +134,7 @@ class DLCManager:
                     "source": "gitlink",
                     "size": size_display,  # 显示用的字符串
                     "size_bytes": file_size_bytes,  # 原始字节数
-                    "number": int(file_number)  # 添加数字用于排序
+                    "number": int(dlc_key.replace('dlc', '') or 0)  # 添加数字用于排序
                 })
             
             # 按DLC编号排序（从小到大）
