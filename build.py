@@ -212,7 +212,6 @@ class Packager:
                 "--icon", f"{self.project_root}/assets/images/icon.ico",  # 程序图标
                 "--add-data", f"{self.project_root}/src{separator}src",  # 添加src目录
                 "--add-data", f"{self.project_root}/config.json{separator}config.json",  # 添加config.json文件
-                "--add-data", f"{self.project_root}/pairings.json{separator}pairings.json",  # 添加pairings.json文件
                 "--add-data", f"{self.project_root}/assets{separator}assets",  # 添加assets目录
                 # Pillow 的 C 扩展和插件在部分环境下不会被自动收集，显式收集以避免 _imaging 缺失
                 "--collect-all", "PIL",
@@ -296,12 +295,6 @@ class Packager:
         config_dst = self.final_path / "config.json"
         if config_src.exists():
             shutil.copy2(str(config_src), str(config_dst))
-
-        # 将 pairings.json 也复制到发布包中，方便外部修改/更新映射文件而无需重新打包
-        pairings_src = self.project_root / "pairings.json"
-        pairings_dst = self.final_path / "pairings.json"
-        if pairings_src.exists():
-            shutil.copy2(str(pairings_src), str(pairings_dst))
 
         # 创建 libraries 文件夹（可选，用于存放额外库）
         libraries_path = self.final_path / "libraries"
@@ -579,8 +572,8 @@ class Packager:
             print("完整打包流程完成！")
             print("生成的文件：")
             zip_name = f"Stellaris-DLC-Helper-v{VERSION}.zip"
-            print(f"  📦 {zip_name}")
-            print("  💡 中间文件已清理（仅保留虚拟环境以加速下次打包）")
+            print(f"  [zip] {zip_name}")
+            print("  [*] 中间文件已清理（仅保留虚拟环境以加速下次打包）")
 
         except Exception as e:
             print(f"打包失败: {e}")
@@ -602,7 +595,7 @@ def main():
 
     if success:
         mode_desc = "快速模式" if args.fast else "标准模式"
-        print(f"\n打包成功！（{mode_desc}）发布文件已生成在项目根目录。")
+        print(f"\n打包成功！（{mode_desc}）发布文件已生成在项目根目录。", flush=True)
     else:
         print("\n打包失败！请检查错误信息。")
         sys.exit(1)

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-DLC管理模块
-负责获取DLC列表、检查已安装的DLC
+DLC 管理模块
+负责获取 DLC 列表、检查已安装的 DLC
 """
 
 import os
@@ -14,11 +14,11 @@ from ..utils import PathUtils
 
 
 class DLCManager:
-    """DLC管理类"""
+    """DLC 管理类"""
     
     def __init__(self, game_path):
         """
-        初始化DLC管理器
+        初始化 DLC 管理器
         
         参数:
             game_path: 游戏路径
@@ -43,23 +43,23 @@ class DLCManager:
 
     def _fetch_from_gitlink_api(self):
         """
-        从GitLink API获取DLC列表（主要方式）
+        从 GitLink API 获取 DLC 列表（主要方式）
         
         返回:
-            list: DLC列表或None
+            list: DLC 列表或 None
         """
         try:
             import logging
             logger = logging.getLogger(__name__)
             
             api_url = "https://gitlink.org.cn/api/signriver/file-warehouse/releases.json"
-            logger.info(f"正在从GitLink API获取DLC列表: {api_url}")
+            logger.info(f"正在从 GitLink API 获取 DLC 列表：{api_url}")
             
             response = requests.get(api_url, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
             data = response.json()
             
-            # 查找tag为"ste"的Release
+            # 查找 tag 为"ste"的 Release
             release = None
             for r in data.get("releases", []):
                 if r.get("tag_name") == "ste":
@@ -67,13 +67,13 @@ class DLCManager:
                     break
             
             if not release:
-                logger.warning("未找到tag为'ste'的Release")
+                logger.warning("未找到 tag 为'ste'的 Release")
                 return None
             
-            # 保存游戏版本信息（使用body字段）
+            # 保存游戏版本信息（使用 body 字段）
             self.game_version = release.get('body', '未知版本').strip()
             
-            # 构建DLC列表
+            # 构建 DLC 列表
             dlc_list = []
             attachments = release.get("attachments", [])
             logger.info(f"开始解析 {len(attachments)} 个附件...")
@@ -81,16 +81,16 @@ class DLCManager:
             for attachment in attachments:
                 filename = attachment.get("title", "")
                 if not filename.endswith(".zip"):
-                    logger.debug(f"跳过非zip文件: {filename}")
+                    logger.debug(f"跳过非 zip 文件：{filename}")
                     continue
 
                 # 从文件名解析 DLC key 和名称：dlc001_symbols_of_domination.zip
                 dlc_key, dlc_name = self._parse_dlc_filename(filename)
                 if dlc_key is None:
-                    logger.debug(f"跳过无法解析的文件名: {filename}")
+                    logger.debug(f"跳过无法解析的文件名：{filename}")
                     continue
                 
-                # 构建完整URL
+                # 构建完整 URL
                 base_url = "https://gitlink.org.cn"
                 file_url = base_url + attachment.get("url", "")
                 
@@ -101,7 +101,7 @@ class DLCManager:
                 try:
                     size_str = attachment.get("filesize", "")
                     if size_str:
-                        # GitLink API返回的是格式化字符串，如 "95.3 KB" 或 "28.5 MB"
+                        # GitLink API 返回的是格式化字符串，如 "95.3 KB" 或 "28.5 MB"
                         import re
                         match = re.search(r'([\d.]+)\s*(B|KB|MB|GB)', str(size_str), re.IGNORECASE)
                         if match:
@@ -118,7 +118,7 @@ class DLCManager:
                             elif unit == 'GB':
                                 file_size_bytes = int(size_value * 1024 * 1024 * 1024)
                             
-                            # 统一显示为MB（保留1位小数）
+                            # 统一显示为 MB（保留 1 位小数）
                             if file_size_bytes > 0:
                                 size_mb = file_size_bytes / (1024 * 1024)
                                 size_display = f"{size_mb:.1f} MB"
@@ -137,27 +137,27 @@ class DLCManager:
                     "number": int(dlc_key.replace('dlc', '') or 0)  # 添加数字用于排序
                 })
             
-            # 按DLC编号排序（从小到大）
+            # 按 DLC 编号排序（从小到大）
             dlc_list.sort(key=lambda x: x.get("number", 0))
             
-            # 移除临时的number字段
+            # 移除临时的 number 字段
             for dlc in dlc_list:
                 dlc.pop("number", None)
             
-            logger.info(f"✅ 从GitLink API成功获取 {len(dlc_list)} 个DLC（已排序）")
+            logger.info(f"✅ 从 GitLink API 成功获取 {len(dlc_list)} 个 DLC（已排序）")
             return dlc_list
             
         except Exception as e:
             import logging
-            logging.getLogger(__name__).warning(f"从GitLink API获取失败: {e}")
+            logging.getLogger(__name__).warning(f"从 GitLink API 获取失败：{e}")
             return None
     
     def fetch_dlc_list(self):
         """
-        获取DLC列表（从GitLink API）
+        获取 DLC 列表（从 GitLink API）
         
         返回:
-            list: DLC列表，每项包含 key, name, url, size
+            list: DLC 列表，每项包含 key, name, url, size
             
         抛出:
             Exception: 获取失败时抛出异常
@@ -167,21 +167,21 @@ class DLCManager:
         
         dlc_list = self._fetch_from_gitlink_api()
         
-        # 区分API失败(None)和返回空列表([])
+        # 区分 API 失败 (None) 和返回空列表 ([])
         if dlc_list is None:
-            raise Exception("无法获取DLC列表：GitLink API访问失败")
+            raise Exception("无法获取 DLC 列表：GitLink API 访问失败")
         
         if not dlc_list:
-            raise Exception("服务器上暂无可用DLC（API返回为空）")
+            raise Exception("服务器上暂无可用 DLC（API 返回为空）")
         
         return dlc_list
     
     def get_installed_dlcs(self):
         """
-        获取已安装的DLC列表
+        获取已安装的 DLC 列表
         
         返回:
-            set: 已安装的DLC键名集合
+            set: 已安装的 DLC 键名集合
         """
         try:
             dlc_folder = PathUtils.get_dlc_folder(self.game_path)
@@ -192,7 +192,7 @@ class DLCManager:
             for item in os.listdir(dlc_folder):
                 item_path = os.path.join(dlc_folder, item)
                 if os.path.isdir(item_path):
-                    # 提取DLC键名（如 dlc001_xxx -> dlc001）
+                    # 提取 DLC 键名（如 dlc001_xxx -> dlc001）
                     # 支持格式：dlc001, dlc001_name, dlc001_name_xxx
                     if item.startswith('dlc'):
                         # 取下划线前的部分作为键名
@@ -205,10 +205,10 @@ class DLCManager:
     
     def is_dlc_installed(self, dlc_key):
         """
-        检查指定DLC是否已安装
+        检查指定 DLC 是否已安装
         
         参数:
-            dlc_key: DLC键名
+            dlc_key: DLC 键名
             
         返回:
             bool: 是否已安装

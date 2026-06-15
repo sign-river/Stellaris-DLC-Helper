@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 下载模块
-负责下载DLC文件，支持断点续传
+负责下载 DLC 文件，支持断点续传
 """
 
 import os
@@ -14,7 +14,7 @@ from ..utils import PathUtils
 
 
 class DLCDownloader:
-    """DLC下载器类（简化版 - 仅支持单源GitLink）"""
+    """DLC 下载器类（简化版 - 仅支持单源 GitLink）"""
     
     def __init__(self, progress_callback=None):
         """
@@ -64,9 +64,9 @@ class DLCDownloader:
         下载文件（支持断点续传）
         
         参数:
-            url: 下载URL
+            url: 下载 URL
             dest_path: 目标文件路径
-            expected_hash: 预期的文件SHA256哈希（可选）
+            expected_hash: 预期的文件 SHA256 哈希（可选）
             expected_size: 预期的文件大小（字节，可选）
             
         返回:
@@ -76,15 +76,15 @@ class DLCDownloader:
             Exception: 下载失败
         """
         try:
-            print(f"开始下载: {url}")
+            print(f"开始下载：{url}")
             result = self._download_single_attempt(url, dest_path, expected_size)
             
             # 验证哈希（如果提供）
             if result and expected_hash:
                 ok = self._verify_file_hash(dest_path, expected_hash)
                 if not ok:
-                    raise Exception("校验失败: 文件哈希与期望值不匹配")
-                print(f"✅ 文件校验通过: {dest_path}")
+                    raise Exception("校验失败：文件哈希与期望值不匹配")
+                print(f"✅ 文件校验通过：{dest_path}")
             
             return result
         except Exception as e:
@@ -94,14 +94,14 @@ class DLCDownloader:
                     os.remove(dest_path)
             except Exception:
                 pass
-            raise Exception(f"下载失败: {str(e)}")
+            raise Exception(f"下载失败：{str(e)}")
     
     def _download_single_attempt(self, url, dest_path, expected_size=None):
         """
         单次下载尝试（内部方法）
         
         参数:
-            url: 下载URL
+            url: 下载 URL
             dest_path: 目标文件路径
             expected_size: 预期的文件大小（字节，可选）
             
@@ -118,55 +118,55 @@ class DLCDownloader:
         if os.path.exists(dest_path):
             existing_size = os.path.getsize(dest_path)
             if existing_size > 0:
-                # 验证ZIP文件完整性
+                # 验证 ZIP 文件完整性
                 try:
                     import zipfile
                     with zipfile.ZipFile(dest_path, 'r') as zip_ref:
-                        # testzip()返回第一个损坏文件的名称，如果都正常则返回None
+                        # testzip() 返回第一个损坏文件的名称，如果都正常则返回 None
                         bad_file = zip_ref.testzip()
                         if bad_file is None:
                             print(f"✓ 文件已存在且完整 ({existing_size / 1024 / 1024:.2f} MB)，使用缓存")
                             return True
                         else:
-                            print(f"⚠ ZIP文件损坏 (文件 {bad_file} 校验失败)，重新下载")
+                            print(f"⚠ ZIP 文件损坏 (文件 {bad_file} 校验失败)，重新下载")
                 except (zipfile.BadZipFile, Exception) as e:
-                    print(f"⚠ ZIP文件无效或损坏 ({e})，重新下载")
+                    print(f"⚠ ZIP 文件无效或损坏 ({e})，重新下载")
                 
                 # 文件损坏，删除重新下载
                 try:
                     os.remove(dest_path)
                 except Exception as e:
-                    print(f"⚠ 删除损坏文件失败: {e}")
+                    print(f"⚠ 删除损坏文件失败：{e}")
             else:
                 # 文件为空，删除重新下载
                 print(f"⚠ 检测到空文件，将重新下载")
                 try:
                     os.remove(dest_path)
                 except Exception as e:
-                    print(f"⚠ 删除空文件失败: {e}")
+                    print(f"⚠ 删除空文件失败：{e}")
         
         # 配置请求头
         headers = {
             'User-Agent': self.user_agent,
         }
         
-        # 发送请求（不使用Range）
+        # 发送请求（不使用 Range）
         response = self.session.get(url, headers=headers, stream=True, timeout=30)
         
         # 处理响应状态
         if response.status_code != 200:
-            raise Exception(f"HTTP错误: {response.status_code}")
+            raise Exception(f"HTTP 错误：{response.status_code}")
         
-        # 获取文件总大小（GitLink不返回Content-Length，使用expected_size）
+        # 获取文件总大小（GitLink 不返回 Content-Length，使用 expected_size）
         if 'Content-Length' in response.headers:
             total_size = int(response.headers['Content-Length'])
-            print(f"✓ 从服务器获取文件大小: {total_size} bytes ({total_size/1024/1024:.1f} MB)")
+            print(f"✓ 从服务器获取文件大小：{total_size} bytes ({total_size/1024/1024:.1f} MB)")
         elif expected_size:
             total_size = expected_size
-            print(f"✓ 使用预期文件大小: {total_size} bytes ({total_size/1024/1024:.1f} MB)")
+            print(f"✓ 使用预期文件大小：{total_size} bytes ({total_size/1024/1024:.1f} MB)")
         else:
             total_size = 0
-            print(f"⚠ 警告: 无法获取文件大小，进度条将不可用")
+            print(f"⚠ 警告：无法获取文件大小，进度条将不可用")
         
         # 下载文件（始终从头开始）
         downloaded = 0
@@ -187,19 +187,19 @@ class DLCDownloader:
                     f.write(chunk)
                     downloaded += len(chunk)
                     
-                    # 更新进度（节流：每0.1秒更新一次）
+                    # 更新进度（节流：每 0.1 秒更新一次）
                     current_time = time.time()
                     if current_time - last_update_time >= 0.1:
                         if self.progress_callback:
                             try:
                                 percent = int(downloaded / total_size * 100) if total_size > 0 else 0
-                                # 每5秒输出一次进度信息
+                                # 每 5 秒输出一次进度信息
                                 if not hasattr(self, '_last_log_time'):
                                     self._last_log_time = 0
                                 if current_time - self._last_log_time >= 5:
-                                    print(f"进度: {percent}% ({downloaded}/{total_size})")
+                                    print(f"进度：{percent}% ({downloaded}/{total_size})")
                                     self._last_log_time = current_time
-                                # 注意：progress_callback的参数顺序是(percent, downloaded, total)
+                                # 注意：progress_callback 的参数顺序是 (percent, downloaded, total)
                                 self.progress_callback(percent, downloaded, total_size)
                             except Exception:
                                 pass
@@ -208,14 +208,14 @@ class DLCDownloader:
         # 最终进度更新
         if self.progress_callback:
             try:
-                # 注意：progress_callback的参数顺序是(percent, downloaded, total)
+                # 注意：progress_callback 的参数顺序是 (percent, downloaded, total)
                 self.progress_callback(100, downloaded, total_size)
             except Exception:
                 pass
         
         elapsed_time = time.time() - start_time
         speed_mb = downloaded / 1024 / 1024 / max(elapsed_time, 0.001)
-        print(f"✅ 下载完成: {dest_path} (平均速度: {speed_mb:.2f} MB/s)")
+        print(f"✅ 下载完成：{dest_path} (平均速度：{speed_mb:.2f} MB/s)")
         return True
     
     def _verify_file_hash(self, file_path, expected_hash):
@@ -224,7 +224,7 @@ class DLCDownloader:
         
         参数:
             file_path: 文件路径
-            expected_hash: 期望的SHA256哈希值
+            expected_hash: 期望的 SHA256 哈希值
             
         返回:
             bool: 是否匹配
@@ -240,16 +240,16 @@ class DLCDownloader:
             actual_hash = sha256.hexdigest()
             return actual_hash.lower() == expected_hash.lower()
         except Exception as e:
-            print(f"哈希校验失败: {str(e)}")
+            print(f"哈希校验失败：{str(e)}")
             return False
     
     def download_dlc(self, dlc_name, url, dest_folder, expected_hash=None, expected_size=None):
         """
-        下载单个DLC
+        下载单个 DLC
         
         参数:
-            dlc_name: DLC名称
-            url: 下载URL
+            dlc_name: DLC 名称
+            url: 下载 URL
             dest_folder: 目标文件夹
             expected_hash: 预期的文件哈希（可选）
             expected_size: 预期的文件大小（字节，可选）
@@ -265,4 +265,4 @@ class DLCDownloader:
             self.download(url, dest_path, expected_hash, expected_size)
             return dest_path  # 返回文件路径而不是布尔值
         except Exception as e:
-            raise Exception(f"下载DLC {dlc_name} 失败: {str(e)}")
+            raise Exception(f"下载 DLC {dlc_name} 失败：{str(e)}")
