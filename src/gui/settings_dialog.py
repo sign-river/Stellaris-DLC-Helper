@@ -1095,7 +1095,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
         desc_label = ctk.CTkLabel(
             left_frame,
-            text="从 Paradox 官方下载最新版启动器安装包（约 170 MB）\n"
+            text="从 GitLink 国内镜像下载 Paradox 启动器安装包（约 170 MB）\n"
                  "适用于启动器损坏、无法打开或需要重装的情况",
             font=ctk.CTkFont(size=12),
             text_color="#666666",
@@ -1121,7 +1121,7 @@ class SettingsDialog(ctk.CTkToplevel):
         self.paradox_launcher_btn.pack()
 
     def _download_paradox_launcher(self):
-        """下载 Paradox 官方启动器安装包"""
+        """下载 Paradox 启动器安装包（GitLink 国内镜像）"""
         if self.is_downloading_callback and self.is_downloading_callback():
             messagebox.showwarning("提示", "DLC 下载进行中，请等待完成后再下载启动器。")
             return
@@ -1139,35 +1139,41 @@ class SettingsDialog(ctk.CTkToplevel):
 
         def download_thread():
             import requests
-            from ..config import (
-                PARADOX_LAUNCHER_URL,
-                PARADOX_LAUNCHER_FILENAME,
-                REQUEST_TIMEOUT,
-                CHUNK_SIZE,
+            from ..config import REQUEST_TIMEOUT, CHUNK_SIZE
+            from ..core.paradox_launcher import (
+                resolve_paradox_launcher_download,
+                is_launcher_file_complete,
+                validate_launcher_download,
             )
             from ..utils.path_utils import PathUtils
 
             dest_path = None
             try:
+                update_button_text("准备中...")
+                launcher_info = resolve_paradox_launcher_download()
+                download_url = launcher_info["url"]
+                filename = launcher_info["filename"]
+                expected_size = int(launcher_info.get("size") or 0)
+
                 download_dir = Path(PathUtils.get_cache_dir()) / "downloads"
                 download_dir.mkdir(parents=True, exist_ok=True)
-                dest_path = download_dir / PARADOX_LAUNCHER_FILENAME
+                dest_path = download_dir / filename
 
                 if self.main_logger:
-                    self.main_logger.info("正在获取 Paradox 启动器安装包信息...")
+                    self.main_logger.info(f"启动器安装包: {filename}")
 
-                head = requests.head(
-                    PARADOX_LAUNCHER_URL,
-                    timeout=REQUEST_TIMEOUT,
-                    allow_redirects=True,
-                )
-                head.raise_for_status()
-                expected_size = int(head.headers.get("Content-Length", 0))
+                if expected_size <= 0:
+                    head = requests.head(
+                        download_url,
+                        timeout=REQUEST_TIMEOUT,
+                        allow_redirects=True,
+                    )
+                    head.raise_for_status()
+                    expected_size = int(head.headers.get("Content-Length", 0))
 
                 if (
                     dest_path.exists()
-                    and expected_size > 0
-                    and dest_path.stat().st_size == expected_size
+                    and is_launcher_file_complete(dest_path.stat().st_size, expected_size)
                 ):
                     if self.main_logger:
                         self.main_logger.info(
@@ -1177,12 +1183,12 @@ class SettingsDialog(ctk.CTkToplevel):
                     if self.main_logger:
                         size_mb = expected_size / 1024 / 1024 if expected_size else 0
                         self.main_logger.info(
-                            f"正在下载 Paradox 启动器安装包"
+                            "正在下载 Paradox 启动器安装包"
                             + (f"（约 {size_mb:.0f} MB）..." if size_mb else "...")
                         )
 
                     response = requests.get(
-                        PARADOX_LAUNCHER_URL,
+                        download_url,
                         stream=True,
                         timeout=(10, max(REQUEST_TIMEOUT, 60)),
                     )
@@ -1210,12 +1216,7 @@ class SettingsDialog(ctk.CTkToplevel):
                                             f"Paradox 启动器下载进度: {percent}%"
                                         )
 
-                    if expected_size > 0 and downloaded != expected_size:
-                        raise Exception(
-                            f"下载不完整（{downloaded}/{expected_size} 字节）"
-                        )
-                    if downloaded < 100 * 1024 * 1024:
-                        raise Exception("下载的文件大小异常，可能已损坏")
+                    validate_launcher_download(downloaded, expected_size)
 
                     if self.main_logger:
                         self.main_logger.success(

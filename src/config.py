@@ -25,9 +25,10 @@ ANNOUNCEMENT_URL = f"{UPDATE_URL_BASE}announcement.txt"
 # AppInfo 配置 - GitLink (和 DLC 文件放在一起)
 APPINFO_URL = get_config("server", "appinfo_url", default="https://gitlink.org.cn/signriver/file-warehouse/releases/download/ste/stellaris_appinfo.json")
 
-# Paradox 启动器官方安装包
-PARADOX_LAUNCHER_URL = "https://launcher.paradoxinteractive.com/v2/paradox-launcher-installer-windows"
-PARADOX_LAUNCHER_FILENAME = "paradox-launcher-installer-windows.exe"
+# Paradox 启动器（GitLink launch Release，文件名随版本变化）
+PARADOX_LAUNCHER_RELEASE_TAG = "launch"
+PARADOX_LAUNCHER_DOWNLOAD_BASE = "https://gitlink.org.cn/signriver/file-warehouse/releases/download/launch/"
+PARADOX_LAUNCHER_FILENAME_PREFIX = "paradox-launcher-installer"
 
 # 网络配置
 REQUEST_TIMEOUT = get_config("server", "timeout", default=10)  # 减少超时时间，避免启动卡顿
