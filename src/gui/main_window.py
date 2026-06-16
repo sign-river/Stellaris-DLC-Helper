@@ -13,7 +13,7 @@ import threading
 from pathlib import Path
 from PIL import Image
 import requests
-from ..config import VERSION
+from ..config import VERSION, REQUEST_TIMEOUT, RETRY_TIMES
 from ..core import DLCManager, DLCDownloader, DLCInstaller, PatchManager
 from ..core.updater import AutoUpdater
 from .update_dialog import UpdateDialog
@@ -72,6 +72,7 @@ class MainWindowCTk:
         # - _one_click_patch_applied: 标记在本次一键流程里是否实际应用了补丁（用于决定最终弹窗内容）
         self._one_click_flow = False
         self._one_click_patch_applied = False
+        self._dlc_fetch_generation = 0
         
         # 核心组件
         self.dlc_manager = None
@@ -993,8 +994,8 @@ class MainWindowCTk:
         def refresh_thread():
             try:
                 self.logger.info("手动刷新：开始重新检测DLC和补丁状态...")
-                # 重新加载 DLC 列表（会在后台线程中完成并调用 display_dlc_list）
-                self._auto_load_dlc_list()
+                # 必须在主线程更新 UI
+                self.root.after(0, self._auto_load_dlc_list)
                 # 重新检查补丁状态并更新 UI
                 try:
                     self._check_patch_status()
@@ -1010,46 +1011,95 @@ class MainWindowCTk:
                 self.logger.log_exception("刷新状态失败", e)
         
         threading.Thread(target=refresh_thread, daemon=True).start()
-    
-    def _auto_load_dlc_list(self):
-        """自动加载DLC列表（内部方法，不弹窗提示）"""
-        if not self.game_path:
-            return
-        
-        self.logger.info("正在从服务器获取DLC列表...")
-        
-        # 在DLC列表框中显示加载状态
+
+    def _dlc_fetch_watchdog_ms(self):
+        """DLC 列表获取超时看门狗（毫秒）"""
+        return int((10 + REQUEST_TIMEOUT) * RETRY_TIMES + 15) * 1000
+
+    def _show_dlc_loading(self, text):
+        """在列表区域显示加载状态"""
         for widget in self.dlc_scrollable_frame.winfo_children():
             widget.destroy()
         loading_label = ctk.CTkLabel(
             self.dlc_scrollable_frame,
-            text="正在从服务器获取DLC列表...",
+            text=text,
             font=ctk.CTkFont(size=13),
             text_color="#757575"
         )
         loading_label.pack(pady=20)
-        
+
+    def _show_dlc_fetch_error(self, message):
+        """在列表区域显示错误信息"""
+        for widget in self.dlc_scrollable_frame.winfo_children():
+            widget.destroy()
+        error_label = ctk.CTkLabel(
+            self.dlc_scrollable_frame,
+            text=message,
+            font=ctk.CTkFont(size=13),
+            text_color="#D32F2F",
+            wraplength=600,
+            justify="left"
+        )
+        error_label.pack(pady=20, padx=20)
+
+    def _begin_dlc_list_fetch(self, loading_text="正在从服务器获取DLC列表...", error_log_prefix="无法加载DLC列表"):
+        """在后台获取 DLC 列表，带超时看门狗与错误展示"""
+        if not self.game_path:
+            return
+
+        if not self.dlc_manager:
+            self._show_dlc_fetch_error("请先选择有效的游戏路径")
+            return
+
+        with self._state_lock:
+            self._dlc_fetch_generation += 1
+            generation = self._dlc_fetch_generation
+
+        self._show_dlc_loading(loading_text)
+        self.logger.info(loading_text)
+
+        watchdog_ms = self._dlc_fetch_watchdog_ms()
+        watchdog_seconds = watchdog_ms // 1000
+
+        def watchdog():
+            if generation != self._dlc_fetch_generation:
+                return
+            self._show_dlc_fetch_error(
+                f"获取 DLC 列表超时，请检查网络后点击刷新重试\n（已等待约 {watchdog_seconds} 秒）"
+            )
+            self.logger.warning(f"DLC 列表获取超时（>{watchdog_seconds}s）")
+
+        self.root.after(watchdog_ms, watchdog)
+
         def fetch_thread():
             try:
-                # 获取DLC列表
-                self.dlc_list = self.dlc_manager.fetch_dlc_list()
-                self.root.after(0, self.display_dlc_list)
+                dlc_list = self.dlc_manager.fetch_dlc_list()
+
+                def on_success():
+                    if generation != self._dlc_fetch_generation:
+                        return
+                    self.dlc_list = dlc_list
+                    try:
+                        self.display_dlc_list()
+                    except Exception as e:
+                        self._show_dlc_fetch_error(f"显示列表失败: {str(e)}")
+                        self.logger.log_exception("显示 DLC 列表失败", e)
+
+                self.root.after(0, on_success)
             except Exception as e:
-                def show_error():
-                    for widget in self.dlc_scrollable_frame.winfo_children():
-                        widget.destroy()
-                    error_label = ctk.CTkLabel(
-                        self.dlc_scrollable_frame,
-                        text=f"加载失败: {str(e)}",
-                        font=ctk.CTkFont(size=13),
-                        text_color="#D32F2F"
-                    )
-                    error_label.pack(pady=20)
-                self.root.after(0, show_error)
-                # 记录并写入异常日志
-                self.logger.log_exception("无法加载DLC列表", e)
-        
+                def on_error():
+                    if generation != self._dlc_fetch_generation:
+                        return
+                    self._show_dlc_fetch_error(f"加载失败: {str(e)}")
+                    self.logger.log_exception(error_log_prefix, e)
+
+                self.root.after(0, on_error)
+
         threading.Thread(target=fetch_thread, daemon=True).start()
+    
+    def _auto_load_dlc_list(self):
+        """自动加载DLC列表（内部方法，不弹窗提示）"""
+        self._begin_dlc_list_fetch()
     
     def auto_detect_path(self):
         """自动检测游戏路径"""
@@ -1146,82 +1196,17 @@ class MainWindowCTk:
             messagebox.showwarning("提示", "请先选择游戏路径！")
             return
         
-        # 在DLC列表框中显示加载状态
-        for widget in self.dlc_scrollable_frame.winfo_children():
-            widget.destroy()
-        loading_label = ctk.CTkLabel(
-            self.dlc_scrollable_frame,
-            text="正在从服务器获取DLC列表...",
-            font=ctk.CTkFont(size=13),
-            text_color="#757575"
+        self._begin_dlc_list_fetch(
+            loading_text="正在从服务器获取DLC列表...",
+            error_log_prefix="无法加载DLC列表"
         )
-        loading_label.pack(pady=20)
-        
-        self.logger.info("正在连接DLC服务器...")
-        
-        def fetch_thread():
-            try:
-                # 获取DLC列表
-                self.dlc_list = self.dlc_manager.fetch_dlc_list()
-                self.root.after(0, self.display_dlc_list)
-                
-            except Exception as e:
-                def show_error():
-                    for widget in self.dlc_scrollable_frame.winfo_children():
-                        widget.destroy()
-                    error_label = ctk.CTkLabel(
-                        self.dlc_scrollable_frame,
-                        text=f"加载失败: {str(e)}",
-                        font=ctk.CTkFont(size=13),
-                        text_color="#D32F2F"
-                    )
-                    error_label.pack(pady=20)
-                self.root.after(0, show_error)
-                # 在主线程中记录异常并写入错误日志
-                self.root.after(0, lambda e=e: self.logger.log_exception("无法加载DLC列表", e))
-        
-        threading.Thread(target=fetch_thread, daemon=True).start()
     
     def _reload_dlc_list_after_download(self):
         """下载完成后重新加载DLC列表（内部方法，跳过下载状态检查）"""
-        if not self.game_path:
-            return
-        
-        self.logger.info("下载完成，正在刷新DLC列表...")
-        
-        # 在DLC列表框中显示加载状态
-        for widget in self.dlc_scrollable_frame.winfo_children():
-            widget.destroy()
-        loading_label = ctk.CTkLabel(
-            self.dlc_scrollable_frame,
-            text="正在刷新DLC列表...",
-            font=ctk.CTkFont(size=13),
-            text_color="#757575"
+        self._begin_dlc_list_fetch(
+            loading_text="正在刷新DLC列表...",
+            error_log_prefix="刷新DLC列表失败"
         )
-        loading_label.pack(pady=20)
-        
-        def fetch_thread():
-            try:
-                # 获取DLC列表
-                self.dlc_list = self.dlc_manager.fetch_dlc_list()
-                self.root.after(0, self.display_dlc_list)
-                
-            except Exception as e:
-                def show_error():
-                    for widget in self.dlc_scrollable_frame.winfo_children():
-                        widget.destroy()
-                    error_label = ctk.CTkLabel(
-                        self.dlc_scrollable_frame,
-                        text=f"刷新失败: {str(e)}",
-                        font=ctk.CTkFont(size=13),
-                        text_color="#D32F2F"
-                    )
-                    error_label.pack(pady=20)
-                self.root.after(0, show_error)
-                # 在主线程中记录异常并写入错误日志
-                self.root.after(0, lambda e=e: self.logger.log_exception("刷新DLC列表失败", e))
-        
-        threading.Thread(target=fetch_thread, daemon=True).start()
         
     def display_dlc_list(self):
         """显示DLC列表 - 两列布局"""

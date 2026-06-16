@@ -9,7 +9,7 @@ import os
 import json
 import requests
 from pathlib import Path
-from ..config import STELLARIS_APP_ID, REQUEST_TIMEOUT
+from ..config import STELLARIS_APP_ID, REQUEST_TIMEOUT, RETRY_TIMES
 from ..utils import PathUtils
 
 
@@ -55,7 +55,9 @@ class DLCManager:
             api_url = "https://gitlink.org.cn/api/signriver/file-warehouse/releases.json"
             logger.info(f"正在从 GitLink API 获取 DLC 列表：{api_url}")
             
-            response = requests.get(api_url, timeout=REQUEST_TIMEOUT)
+            # 连接与读取分开超时，避免 DNS/握手阶段长时间无响应
+            timeout = (10, REQUEST_TIMEOUT)
+            response = requests.get(api_url, timeout=timeout)
             response.raise_for_status()
             data = response.json()
             
@@ -163,18 +165,30 @@ class DLCManager:
             Exception: 获取失败时抛出异常
         """
         import logging
+        import time
         logger = logging.getLogger(__name__)
         
-        dlc_list = self._fetch_from_gitlink_api()
-        
-        # 区分 API 失败 (None) 和返回空列表 ([])
-        if dlc_list is None:
-            raise Exception("无法获取 DLC 列表：GitLink API 访问失败")
-        
-        if not dlc_list:
-            raise Exception("服务器上暂无可用 DLC（API 返回为空）")
-        
-        return dlc_list
+        last_error = None
+        for attempt in range(1, RETRY_TIMES + 1):
+            if attempt > 1:
+                logger.info(f"正在重试获取 DLC 列表 ({attempt}/{RETRY_TIMES})...")
+                time.sleep(1)
+
+            dlc_list = self._fetch_from_gitlink_api()
+
+            if dlc_list is None:
+                last_error = "GitLink API 访问失败"
+                continue
+
+            if not dlc_list:
+                last_error = "服务器上暂无可用 DLC（API 返回为空）"
+                continue
+
+            if attempt > 1:
+                logger.info(f"第 {attempt} 次重试成功获取 DLC 列表")
+            return dlc_list
+
+        raise Exception(f"无法获取 DLC 列表（已重试 {RETRY_TIMES} 次）：{last_error}")
     
     def get_installed_dlcs(self):
         """
