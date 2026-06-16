@@ -13,6 +13,12 @@ from ..utils import PathUtils, Logger
 STEAM_API64_DLL = 'steam_api64.dll'
 STEAM_API64_O_DLL = 'steam_api64_o.dll'
 
+# 补丁校验阈值
+PATCHED_DLL_MIN_SIZE = 1024 * 1024       # 补丁 DLL 应 > 1MB
+BACKUP_DLL_MAX_SIZE = 400 * 1024         # 原版备份应 < 400KB
+PATCH_SOURCE_MIN_SIZE = 1024 * 1024      # patches/ 下补丁源文件应 > 1MB
+MAX_PATCH_ATTEMPTS = 3                   # 打补丁最大重试次数
+
 
 class PatchManager:
     """补丁管理器类"""
@@ -34,6 +40,172 @@ class PatchManager:
         """获取补丁文件目录"""
         base_dir = PathUtils.get_base_dir()
         return os.path.join(base_dir, "patches")
+
+    @staticmethod
+    def _backup_path(dll_path):
+        """获取与 steam_api64.dll 对应的备份路径"""
+        dir_name = os.path.dirname(dll_path)
+        file_name = os.path.basename(dll_path)
+        backup_name = file_name.replace('.dll', '_o.dll')
+        return os.path.join(dir_name, backup_name)
+
+    @staticmethod
+    def _safe_file_size(path):
+        """安全获取文件大小，不存在时返回 0"""
+        try:
+            return os.path.getsize(path) if os.path.exists(path) else 0
+        except OSError:
+            return 0
+
+    def _format_size(self, size_bytes):
+        """格式化文件大小用于日志"""
+        if size_bytes >= 1024 * 1024:
+            return f"{size_bytes / (1024 * 1024):.1f} MB"
+        return f"{size_bytes / 1024:.1f} KB"
+
+    def _is_valid_patched_dll(self, dll_path):
+        """补丁 DLL 是否有效（已替换为 CreamAPI 版本）"""
+        return self._safe_file_size(dll_path) > PATCHED_DLL_MIN_SIZE
+
+    def _is_valid_backup(self, backup_path):
+        """原版备份是否有效"""
+        size = self._safe_file_size(backup_path)
+        return size > 0 and size < BACKUP_DLL_MAX_SIZE
+
+    def _verify_patch_source(self):
+        """校验 patches/ 目录下的补丁源文件"""
+        source_path = os.path.join(self.patch_dir, STEAM_API64_DLL)
+        if not os.path.exists(source_path):
+            raise FileNotFoundError(f"补丁文件不存在: {STEAM_API64_DLL}")
+        size = self._safe_file_size(source_path)
+        if size <= PATCH_SOURCE_MIN_SIZE:
+            raise ValueError(
+                f"补丁源文件大小异常 ({self._format_size(size)})，"
+                f"应大于 {self._format_size(PATCH_SOURCE_MIN_SIZE)}"
+            )
+
+    def _verify_patch_at_location(self, dll_path):
+        """
+        校验单个位置的补丁是否打成功
+
+        返回:
+            tuple: (是否通过, 失败原因)
+        """
+        backup_path = self._backup_path(dll_path)
+        reasons = []
+
+        dll_size = self._safe_file_size(dll_path)
+        if not self._is_valid_patched_dll(dll_path):
+            reasons.append(
+                f"steam_api64.dll 大小异常 ({self._format_size(dll_size)}，需 > 1MB)"
+            )
+
+        backup_size = self._safe_file_size(backup_path)
+        if not self._is_valid_backup(backup_path):
+            if backup_size == 0:
+                reasons.append("steam_api64_o.dll 备份不存在")
+            else:
+                reasons.append(
+                    f"steam_api64_o.dll 大小异常 ({self._format_size(backup_size)}，需 < 400KB)"
+                )
+
+        if reasons:
+            return False, "; ".join(reasons)
+        return True, ""
+
+    def _verify_config(self):
+        """校验 cream_api.ini 是否存在且有效"""
+        config_path = os.path.join(self.game_path, 'cream_api.ini')
+        if not os.path.exists(config_path):
+            return False, "cream_api.ini 不存在"
+        if self._safe_file_size(config_path) == 0:
+            return False, "cream_api.ini 为空"
+        return True, ""
+
+    def _ensure_valid_backup(self, dll_path):
+        """确保备份文件存在且大小合法"""
+        backup_path = self._backup_path(dll_path)
+
+        if self._is_valid_backup(backup_path):
+            return backup_path
+
+        if os.path.exists(backup_path):
+            self.logger.warning(
+                f"备份文件大小异常 ({self._format_size(self._safe_file_size(backup_path))})，将重建"
+            )
+            os.remove(backup_path)
+
+        dll_size = self._safe_file_size(dll_path)
+        if dll_size > 0 and dll_size < PATCHED_DLL_MIN_SIZE:
+            shutil.copy2(dll_path, backup_path)
+            self.logger.info(f"已从原版 DLL 创建备份: {backup_path}")
+        else:
+            fallback = os.path.join(self.patch_dir, STEAM_API64_O_DLL)
+            if not os.path.exists(fallback):
+                raise FileNotFoundError("无法创建备份：原版 DLL 不可用且 patches/steam_api64_o.dll 缺失")
+            shutil.copy2(fallback, backup_path)
+            self.logger.info(f"已从补丁目录创建备份: {backup_path}")
+
+        if not self._is_valid_backup(backup_path):
+            raise ValueError(f"备份创建后仍不符合要求: {backup_path}")
+
+        return backup_path
+
+    def _apply_patch_to_location(self, dll_path):
+        """对单个位置执行备份 + 覆盖补丁"""
+        self._ensure_valid_backup(dll_path)
+        self.copy_patch_steam_api64_dll(STEAM_API64_DLL, dll_path)
+
+    def _repair_patch_at_location(self, dll_path, reason):
+        """根据校验失败原因修复并重试"""
+        self.logger.info(f"尝试修复: {dll_path} ({reason})")
+        backup_path = self._backup_path(dll_path)
+
+        if "steam_api64_o.dll" in reason:
+            if os.path.exists(backup_path):
+                os.remove(backup_path)
+            self._ensure_valid_backup(dll_path)
+
+        if "steam_api64.dll" in reason:
+            self.copy_patch_steam_api64_dll(STEAM_API64_DLL, dll_path)
+
+        ok, new_reason = self._verify_patch_at_location(dll_path)
+        if not ok:
+            raise RuntimeError(f"修复后校验仍失败: {new_reason}")
+
+    def _write_cream_config(self, dlc_list):
+        """生成并写入 cream_api.ini"""
+        config_content = self.generate_cream_config(dlc_list)
+        config_path = os.path.join(self.game_path, 'cream_api.ini')
+        with open(config_path, 'w', encoding='utf-8') as f:
+            f.write(config_content)
+        self.logger.success("已生成配置文件: cream_api.ini")
+        return config_path
+
+    def _prepare_patch_targets(self):
+        """
+        扫描并准备需要打补丁的目标路径
+
+        返回:
+            list: steam_api64.dll 路径列表
+        """
+        locations = self.scan_steam_api64_locations()
+
+        if not locations['steam_api64']:
+            fallback_o = os.path.join(self.patch_dir, STEAM_API64_O_DLL)
+            if os.path.exists(fallback_o):
+                target_path = os.path.join(self.game_path, STEAM_API64_DLL)
+                shutil.copy2(fallback_o, target_path)
+                locations['steam_api64'].append(target_path)
+                self.logger.info(
+                    f"未在游戏目录发现 steam_api64.dll，已从补丁目录复制: {target_path}"
+                )
+            else:
+                raise FileNotFoundError(
+                    "未找到任何 steam_api64.dll 文件，且补丁目录中不存在 steam_api64_o.dll"
+                )
+
+        return locations['steam_api64']
     
     def scan_steam_api64_locations(self):
         """
@@ -87,14 +259,24 @@ class PatchManager:
         backup_name = file_name.replace('.dll', '_o.dll')
         backup_path = os.path.join(dir_name, backup_name)
         
-        # 如果备份已存在，说明已经打过补丁了，不再备份
-        if os.path.exists(backup_path):
-            self.logger.info(f"备份已存在，跳过: {backup_name}")
+        if self._is_valid_backup(backup_path):
+            self.logger.info(f"备份已存在且有效，跳过: {backup_name}")
             return backup_path
+
+        if os.path.exists(backup_path):
+            self.logger.warning(f"备份文件大小异常，将重建: {backup_name}")
+            os.remove(backup_path)
         
-        # 创建备份（原子拷贝行为，若失败则抛出异常供上层处理）
+        # 创建备份
         try:
-            shutil.copy2(dll_path, backup_path)
+            dll_size = self._safe_file_size(dll_path)
+            if dll_size > 0 and dll_size < PATCHED_DLL_MIN_SIZE:
+                shutil.copy2(dll_path, backup_path)
+            else:
+                fallback = os.path.join(self.patch_dir, STEAM_API64_O_DLL)
+                if not os.path.exists(fallback):
+                    raise FileNotFoundError("无法创建备份：原版 DLL 不可用")
+                shutil.copy2(fallback, backup_path)
             self.logger.info(f"已备份: {file_name} -> {backup_name}")
             return backup_path
         except Exception as e:
@@ -254,7 +436,7 @@ class PatchManager:
     
     def apply_patch(self, dlc_list):
         """
-        应用补丁
+        应用补丁（含校验与重试）
         
         参数:
             dlc_list: DLC列表
@@ -269,59 +451,70 @@ class PatchManager:
         failed = 0
         
         try:
-            # 1. 扫描DLL位置：定位所有需替换/备份的 steam_api64.dll 文件
-            locations = self.scan_steam_api64_locations()
+            self._verify_patch_source()
+            dll_paths = self._prepare_patch_targets()
 
-            # 如果没有找到任何目标 DLL，尝试使用 patches 目录下的 steam_api64_o.dll
-            # 这用于那些未安装原始 steam_api64.dll 的特殊情况（例如用户的安装路径不标准或被清理）
-            if not locations['steam_api64']:
-                fallback_o = os.path.join(self.patch_dir, STEAM_API64_O_DLL)
-                if os.path.exists(fallback_o):
-                    # 将其复制到游戏根目录作为 steam_api64.dll
-                    target_path = os.path.join(self.game_path, STEAM_API64_DLL)
+            for attempt in range(1, MAX_PATCH_ATTEMPTS + 1):
+                self.logger.info(f"补丁应用第 {attempt}/{MAX_PATCH_ATTEMPTS} 次尝试...")
+
+                for dll_path in dll_paths:
+                    ok, reason = self._verify_patch_at_location(dll_path)
+                    if ok:
+                        continue
                     try:
-                        shutil.copy2(fallback_o, target_path)
-                        locations['steam_api64'].append(target_path)
-                        self.logger.info(f"未在游戏目录发现 steam_api64.dll，已从补丁目录复制: {target_path}")
+                        if attempt == 1:
+                            self._apply_patch_to_location(dll_path)
+                        else:
+                            self._repair_patch_at_location(dll_path, reason)
                     except Exception as e:
-                        self.logger.log_exception(f"尝试使用补丁目录中的 steam_api64_o.dll 创建目标文件失败", e)
-                        return 0, 1
-                else:
-                    self.logger.log_exception("未找到任何 steam_api64.dll 文件！且补丁目录中不存在 steam_api64_o.dll", Exception("missing_dll"))
-                    return 0, 1
-            
-            # 2/3. 对每个定位到的文件执行备份与补丁替换流程（备份 -> 覆盖）
-            for dll_path in locations['steam_api64']:
+                        self.logger.log_exception(f"处理 {dll_path} 失败", e)
+
                 try:
-                    self.backup_steam_api64_dll(dll_path)
-                    self.copy_patch_steam_api64_dll(STEAM_API64_DLL, dll_path)
-                    success += 1
+                    self._write_cream_config(dlc_list)
                 except Exception as e:
-                    self.logger.log_exception(f"处理 steam_api64.dll 失败", e)
-                    failed += 1
-            
-            # 4. 生成并复制配置文件（只在游戏根目录）
-            try:
-                config_content = self.generate_cream_config(dlc_list)
-                config_path = os.path.join(self.game_path, 'cream_api.ini')
-                
-                with open(config_path, 'w', encoding='utf-8') as f:
-                    f.write(config_content)
-                
-                self.logger.success("已生成配置文件: cream_api.ini")
-                
-            except Exception as e:
-                self.logger.log_exception(f"生成配置文件失败", e)
-                failed += 1
+                    self.logger.log_exception("生成配置文件失败", e)
+
+                location_results = []
+                for dll_path in dll_paths:
+                    ok, reason = self._verify_patch_at_location(dll_path)
+                    location_results.append((dll_path, ok, reason))
+                    if not ok:
+                        self.logger.warning(f"校验未通过 [{dll_path}]: {reason}")
+
+                config_valid, config_reason = self._verify_config()
+                if not config_valid:
+                    self.logger.warning(f"配置校验未通过: {config_reason}")
+
+                all_locations_ok = all(ok for _, ok, _ in location_results)
+                if all_locations_ok and config_valid:
+                    success = len(dll_paths)
+                    failed = 0
+                    self.logger.success(f"补丁校验通过（第 {attempt} 次尝试）")
+                    break
+
+                if attempt < MAX_PATCH_ATTEMPTS:
+                    self.logger.info("校验未完全通过，准备重试...")
+                else:
+                    failed = sum(1 for _, ok, _ in location_results if not ok)
+                    if not config_valid:
+                        failed += 1
+                    success = 0
+                    self.logger.log_exception(
+                        f"补丁应用失败：已达最大重试次数 ({MAX_PATCH_ATTEMPTS})",
+                        Exception("patch_verification_failed")
+                    )
             
             self.logger.info("="*50)
-            self.logger.success(f"补丁应用完成！成功: {success}, 失败: {failed}")
+            if failed == 0 and success > 0:
+                self.logger.success(f"补丁应用完成！成功: {success}, 失败: {failed}")
+            else:
+                self.logger.warning(f"补丁应用结束。成功: {success}, 失败: {failed}")
             
             return success, failed
             
         except Exception as e:
             self.logger.log_exception(f"应用补丁失败", e)
-            return success, failed + 1
+            return success, max(failed, 1)
     
     def remove_patch(self):
         """
@@ -392,32 +585,53 @@ class PatchManager:
     
     def check_patch_status(self):
         """
-        检查补丁状态
+        检查补丁状态（严格校验）
+        
+        判定标准：
+        - steam_api64.dll 大小 > 1MB
+        - 同目录 steam_api64_o.dll 大小 < 400KB
+        - cream_api.ini 存在且非空
         
         返回:
             dict: {
-                'patched': bool,  # 是否已打补丁
-                'backup_exists': bool,  # 备份是否存在
-                'config_exists': bool  # 配置文件是否存在
+                'patched': bool,
+                'backup_exists': bool,
+                'config_exists': bool,
+                'valid_locations': int,
+                'total_locations': int
             }
         """
-        # 检查备份文件（仅 64 位）
-        # 如果找到备份或存在 cream_api.ini，则视为已打补丁（patched=True）
+        valid_locations = 0
+        total_locations = 0
         backup_exists = False
+
         for root, dirs, files in os.walk(self.game_path):
-            if STEAM_API64_O_DLL in files:
+            if STEAM_API64_DLL not in files:
+                continue
+
+            dll_path = os.path.join(root, STEAM_API64_DLL)
+            backup_path = self._backup_path(dll_path)
+            total_locations += 1
+
+            dll_ok = self._is_valid_patched_dll(dll_path)
+            backup_ok = self._is_valid_backup(backup_path)
+
+            if backup_ok:
                 backup_exists = True
-                break
-        
-        # 检查配置文件
+
+            if dll_ok and backup_ok:
+                valid_locations += 1
+
+        config_valid, _ = self._verify_config()
         config_path = os.path.join(self.game_path, 'cream_api.ini')
         config_exists = os.path.exists(config_path)
-        
-        # 如果有备份或配置文件，说明已打补丁
-        patched = backup_exists or config_exists
-        
+
+        patched = valid_locations > 0 and config_valid
+
         return {
             'patched': patched,
             'backup_exists': backup_exists,
-            'config_exists': config_exists
+            'config_exists': config_exists,
+            'valid_locations': valid_locations,
+            'total_locations': total_locations,
         }
