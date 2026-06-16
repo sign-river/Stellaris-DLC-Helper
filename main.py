@@ -66,6 +66,10 @@ from src import config_loader
 
 def main():
     """主函数"""
+    from src.utils.single_instance import ensure_single_instance
+    if not ensure_single_instance():
+        sys.exit(0)
+
     # 日志系统已在模块顶部初始化
     try:
         logger.info(f"日志文件路径：{get_default_log_file_path()}")
