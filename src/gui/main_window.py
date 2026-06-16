@@ -1076,14 +1076,23 @@ class MainWindowCTk:
         watchdog_ms = self._dlc_fetch_watchdog_ms()
         watchdog_seconds = watchdog_ms // 1000
         finished = [False]
+        watchdog_after_id = [None]
 
         def finish_once():
             if finished[0]:
                 return
             finished[0] = True
+            if watchdog_after_id[0] is not None:
+                try:
+                    self.root.after_cancel(watchdog_after_id[0])
+                except Exception:
+                    pass
+                watchdog_after_id[0] = None
             invoke_finished()
 
         def watchdog():
+            if finished[0]:
+                return
             if generation != self._dlc_fetch_generation:
                 return
             self._show_dlc_fetch_error(
@@ -1092,7 +1101,7 @@ class MainWindowCTk:
             self.logger.warning(f"DLC 列表获取超时（>{watchdog_seconds}s）")
             finish_once()
 
-        self.root.after(watchdog_ms, watchdog)
+        watchdog_after_id[0] = self.root.after(watchdog_ms, watchdog)
 
         def fetch_thread():
             try:

@@ -1071,7 +1071,218 @@ class SettingsDialog(ctk.CTkToplevel):
         
         # 补丁恢复模块
         self._create_patch_recovery_section(scrollable_frame)
+        self._create_paradox_launcher_section(scrollable_frame)
     
+    def _create_paradox_launcher_section(self, parent):
+        """创建 Paradox 启动器下载模块"""
+        section_frame = ctk.CTkFrame(parent, corner_radius=8, fg_color="#FFFFFF")
+        section_frame.pack(fill="x", padx=20, pady=(0, 15))
+
+        content_frame = ctk.CTkFrame(section_frame, fg_color="transparent")
+        content_frame.pack(fill="x", padx=15, pady=15)
+
+        left_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        left_frame.pack(side="left", fill="both", expand=True)
+
+        title_label = ctk.CTkLabel(
+            left_frame,
+            text="🚀 Paradox 启动器",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#1976D2",
+            anchor="w"
+        )
+        title_label.pack(anchor="w", pady=(0, 5))
+
+        desc_label = ctk.CTkLabel(
+            left_frame,
+            text="从 Paradox 官方下载最新版启动器安装包（约 170 MB）\n"
+                 "适用于启动器损坏、无法打开或需要重装的情况",
+            font=ctk.CTkFont(size=12),
+            text_color="#666666",
+            anchor="w",
+            justify="left"
+        )
+        desc_label.pack(anchor="w")
+
+        right_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        right_frame.pack(side="right", padx=(10, 0))
+
+        self.paradox_launcher_btn = ctk.CTkButton(
+            right_frame,
+            text="下载启动器",
+            command=self._download_paradox_launcher,
+            width=120,
+            height=35,
+            font=ctk.CTkFont(size=14),
+            corner_radius=8,
+            fg_color="#1976D2",
+            hover_color="#1565C0"
+        )
+        self.paradox_launcher_btn.pack()
+
+    def _download_paradox_launcher(self):
+        """下载 Paradox 官方启动器安装包"""
+        if self.is_downloading_callback and self.is_downloading_callback():
+            messagebox.showwarning("提示", "DLC 下载进行中，请等待完成后再下载启动器。")
+            return
+
+        self.paradox_launcher_btn.configure(state="disabled", text="下载中...")
+
+        def update_button_text(text):
+            self.after(0, lambda: self.paradox_launcher_btn.configure(text=text))
+
+        def restore_button():
+            self.after(0, lambda: self.paradox_launcher_btn.configure(
+                state="normal",
+                text="下载启动器"
+            ))
+
+        def download_thread():
+            import requests
+            from ..config import (
+                PARADOX_LAUNCHER_URL,
+                PARADOX_LAUNCHER_FILENAME,
+                REQUEST_TIMEOUT,
+                CHUNK_SIZE,
+            )
+            from ..utils.path_utils import PathUtils
+
+            dest_path = None
+            try:
+                download_dir = Path(PathUtils.get_cache_dir()) / "downloads"
+                download_dir.mkdir(parents=True, exist_ok=True)
+                dest_path = download_dir / PARADOX_LAUNCHER_FILENAME
+
+                if self.main_logger:
+                    self.main_logger.info("正在获取 Paradox 启动器安装包信息...")
+
+                head = requests.head(
+                    PARADOX_LAUNCHER_URL,
+                    timeout=REQUEST_TIMEOUT,
+                    allow_redirects=True,
+                )
+                head.raise_for_status()
+                expected_size = int(head.headers.get("Content-Length", 0))
+
+                if (
+                    dest_path.exists()
+                    and expected_size > 0
+                    and dest_path.stat().st_size == expected_size
+                ):
+                    if self.main_logger:
+                        self.main_logger.info(
+                            f"Paradox 启动器安装包已存在，跳过下载: {dest_path}"
+                        )
+                else:
+                    if self.main_logger:
+                        size_mb = expected_size / 1024 / 1024 if expected_size else 0
+                        self.main_logger.info(
+                            f"正在下载 Paradox 启动器安装包"
+                            + (f"（约 {size_mb:.0f} MB）..." if size_mb else "...")
+                        )
+
+                    response = requests.get(
+                        PARADOX_LAUNCHER_URL,
+                        stream=True,
+                        timeout=(10, max(REQUEST_TIMEOUT, 60)),
+                    )
+                    response.raise_for_status()
+
+                    if not expected_size and "Content-Length" in response.headers:
+                        expected_size = int(response.headers["Content-Length"])
+
+                    downloaded = 0
+                    last_log_percent = -1
+                    with open(dest_path, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                                if expected_size > 0:
+                                    percent = int(downloaded * 100 / expected_size)
+                                    update_button_text(f"下载中 {percent}%")
+                                    if (
+                                        self.main_logger
+                                        and percent // 10 > last_log_percent // 10
+                                    ):
+                                        last_log_percent = percent
+                                        self.main_logger.info(
+                                            f"Paradox 启动器下载进度: {percent}%"
+                                        )
+
+                    if expected_size > 0 and downloaded != expected_size:
+                        raise Exception(
+                            f"下载不完整（{downloaded}/{expected_size} 字节）"
+                        )
+                    if downloaded < 100 * 1024 * 1024:
+                        raise Exception("下载的文件大小异常，可能已损坏")
+
+                    if self.main_logger:
+                        self.main_logger.success(
+                            f"Paradox 启动器安装包下载完成: {dest_path}"
+                        )
+
+                def on_success():
+                    run_now = messagebox.askyesno(
+                        "下载完成",
+                        f"Paradox 启动器安装包已就绪。\n\n"
+                        f"保存位置:\n{dest_path}\n\n"
+                        "是否立即运行安装程序？"
+                    )
+                    if run_now:
+                        try:
+                            if os.name == "nt":
+                                os.startfile(str(dest_path))
+                            else:
+                                import subprocess
+                                subprocess.Popen(["xdg-open", str(dest_path)])
+                        except Exception as e:
+                            messagebox.showerror(
+                                "运行失败",
+                                f"无法启动安装程序:\n{e}\n\n请手动打开上述路径运行。"
+                            )
+                    else:
+                        messagebox.showinfo(
+                            "已保存",
+                            f"安装包已保存至:\n{dest_path}\n\n"
+                            "你可以稍后手动运行该文件完成安装。"
+                        )
+
+                self.after(0, on_success)
+
+            except requests.exceptions.RequestException as e:
+                error_msg = f"下载失败: {e}"
+                if self.main_logger:
+                    self.main_logger.error(error_msg)
+                if dest_path and dest_path.exists():
+                    try:
+                        dest_path.unlink()
+                    except OSError:
+                        pass
+                self.after(0, lambda: messagebox.showerror(
+                    "错误",
+                    f"下载 Paradox 启动器失败\n\n{error_msg}\n\n请检查网络连接后重试。"
+                ))
+
+            except Exception as e:
+                error_msg = str(e)
+                if self.main_logger:
+                    self.main_logger.error(f"下载 Paradox 启动器失败: {error_msg}")
+                if dest_path and dest_path.exists():
+                    try:
+                        dest_path.unlink()
+                    except OSError:
+                        pass
+                self.after(0, lambda: messagebox.showerror(
+                    "错误",
+                    f"下载 Paradox 启动器失败\n\n{error_msg}"
+                ))
+
+            finally:
+                restore_button()
+
+        threading.Thread(target=download_thread, daemon=True).start()
+
     def _create_patch_recovery_section(self, parent):
         """创建补丁恢复模块"""
         # 模块容器
