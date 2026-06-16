@@ -73,6 +73,7 @@ class MainWindowCTk:
         self._one_click_flow = False
         self._one_click_patch_applied = False
         self._dlc_fetch_generation = 0
+        self._refresh_in_progress = False
         
         # 核心组件
         self.dlc_manager = None
@@ -984,25 +985,33 @@ class MainWindowCTk:
 
     def _refresh_all_status(self):
         """刷新所有状态：重新检测 DLC 列表、补丁状态和下载状态等"""
-        # 检查是否正在下载，如果是则不允许刷新
         if self.is_downloading:
             self.logger.warning("下载进行中，无法刷新DLC列表。请等待下载完成后再刷新。")
             messagebox.showwarning("提示", "下载进行中，请等待下载完成后再刷新！")
             return
-        
-        # 在后台线程中执行刷新，避免阻塞UI
-        def refresh_thread():
-            try:
-                self.logger.info("手动刷新：开始重新检测DLC和补丁状态...")
-                # 必须在主线程更新 UI
-                self.root.after(0, self._auto_load_dlc_list)
-                self.root.after(0, self._check_patch_status)
-                self.root.after(0, self._check_pending_download_state)
-                self.logger.info("手动刷新：已触发所有检测任务")
-            except Exception as e:
-                self.logger.log_exception("刷新状态失败", e)
-        
-        threading.Thread(target=refresh_thread, daemon=True).start()
+
+        with self._state_lock:
+            if self._refresh_in_progress:
+                self.logger.info("刷新进行中，已忽略重复请求")
+                return
+            self._refresh_in_progress = True
+
+        def finish_refresh():
+            with self._state_lock:
+                self._refresh_in_progress = False
+
+        try:
+            self.logger.info("手动刷新：开始重新检测DLC和补丁状态...")
+            self._begin_dlc_list_fetch(
+                loading_text="正在刷新DLC列表...",
+                error_log_prefix="刷新DLC列表失败",
+                on_finished=finish_refresh,
+            )
+            self._check_patch_status()
+            self._check_pending_download_state()
+        except Exception as e:
+            finish_refresh()
+            self.logger.log_exception("刷新状态失败", e)
 
     def _dlc_fetch_watchdog_ms(self):
         """DLC 列表获取超时看门狗（毫秒）"""
@@ -1034,13 +1043,27 @@ class MainWindowCTk:
         )
         error_label.pack(pady=20, padx=20)
 
-    def _begin_dlc_list_fetch(self, loading_text="正在从服务器获取DLC列表...", error_log_prefix="无法加载DLC列表"):
+    def _begin_dlc_list_fetch(
+        self,
+        loading_text="正在从服务器获取DLC列表...",
+        error_log_prefix="无法加载DLC列表",
+        on_finished=None,
+    ):
         """在后台获取 DLC 列表，带超时看门狗与错误展示"""
+        def invoke_finished():
+            if on_finished:
+                try:
+                    on_finished()
+                except Exception:
+                    pass
+
         if not self.game_path:
+            invoke_finished()
             return
 
         if not self.dlc_manager:
             self._show_dlc_fetch_error("请先选择有效的游戏路径")
+            invoke_finished()
             return
 
         with self._state_lock:
@@ -1052,6 +1075,13 @@ class MainWindowCTk:
 
         watchdog_ms = self._dlc_fetch_watchdog_ms()
         watchdog_seconds = watchdog_ms // 1000
+        finished = [False]
+
+        def finish_once():
+            if finished[0]:
+                return
+            finished[0] = True
+            invoke_finished()
 
         def watchdog():
             if generation != self._dlc_fetch_generation:
@@ -1060,6 +1090,7 @@ class MainWindowCTk:
                 f"获取 DLC 列表超时，请检查网络后点击刷新重试\n（已等待约 {watchdog_seconds} 秒）"
             )
             self.logger.warning(f"DLC 列表获取超时（>{watchdog_seconds}s）")
+            finish_once()
 
         self.root.after(watchdog_ms, watchdog)
 
@@ -1076,6 +1107,7 @@ class MainWindowCTk:
                     except Exception as e:
                         self._show_dlc_fetch_error(f"显示列表失败: {str(e)}")
                         self.logger.log_exception("显示 DLC 列表失败", e)
+                    finish_once()
 
                 self.root.after(0, on_success)
             except Exception as e:
@@ -1084,6 +1116,7 @@ class MainWindowCTk:
                         return
                     self._show_dlc_fetch_error(f"加载失败: {str(e)}")
                     self.logger.log_exception(error_log_prefix, e)
+                    finish_once()
 
                 self.root.after(0, on_error)
 
