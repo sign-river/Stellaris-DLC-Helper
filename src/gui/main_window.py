@@ -996,16 +996,8 @@ class MainWindowCTk:
                 self.logger.info("手动刷新：开始重新检测DLC和补丁状态...")
                 # 必须在主线程更新 UI
                 self.root.after(0, self._auto_load_dlc_list)
-                # 重新检查补丁状态并更新 UI
-                try:
-                    self._check_patch_status()
-                except Exception:
-                    pass
-                # 检查是否有待恢复的下载状态
-                try:
-                    self._check_pending_download_state()
-                except Exception:
-                    pass
+                self.root.after(0, self._check_patch_status)
+                self.root.after(0, self._check_pending_download_state)
                 self.logger.info("手动刷新：已触发所有检测任务")
             except Exception as e:
                 self.logger.log_exception("刷新状态失败", e)
@@ -2193,25 +2185,33 @@ class MainWindowCTk:
         self.load_dlc_list()
         
     def _check_patch_status(self):
-        """检查并更新补丁按钮状态"""
+        """异步检查并更新补丁按钮状态，避免阻塞主线程"""
         if not self.patch_manager:
             return
-        
-        try:
-            status = self.patch_manager.check_patch_status()
-            
-            if status['patched']:
-                # 若已打补丁，execute_btn 应允许下载（无补丁操作）
-                self.execute_btn.configure(text="🔓 一键解锁", state="normal")
-                self.remove_patch_btn.configure(state="normal")
-                self.logger.info("检测到已应用补丁")
-            else:
-                self.execute_btn.configure(text="🔓 一键解锁", state="normal")
-                self.remove_patch_btn.configure(state="disabled")
-        except Exception as e:
-            # 如果检查失败，默认启用应用补丁按钮
-            self.execute_btn.configure(state="normal")
+
+        def worker():
+            try:
+                status = self.patch_manager.check_patch_status()
+                self.root.after(0, lambda s=status: self._apply_patch_status_ui(s))
+            except Exception:
+                self.root.after(0, self._apply_patch_status_ui_fallback)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_patch_status_ui(self, status):
+        """在主线程应用补丁状态到 UI"""
+        if status.get('patched'):
+            self.execute_btn.configure(text="🔓 一键解锁", state="normal")
+            self.remove_patch_btn.configure(state="normal")
+            self.logger.info("检测到已应用补丁")
+        else:
+            self.execute_btn.configure(text="🔓 一键解锁", state="normal")
             self.remove_patch_btn.configure(state="disabled")
+
+    def _apply_patch_status_ui_fallback(self):
+        """补丁状态检查失败时的 UI 回退"""
+        self.execute_btn.configure(state="normal")
+        self.remove_patch_btn.configure(state="disabled")
         
     def apply_patch(self):
         """应用CreamAPI补丁"""

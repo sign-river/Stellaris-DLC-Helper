@@ -19,6 +19,14 @@ BACKUP_DLL_MAX_SIZE = 400 * 1024         # 原版备份应 < 400KB
 PATCH_SOURCE_MIN_SIZE = 1024 * 1024      # patches/ 下补丁源文件应 > 1MB
 MAX_PATCH_ATTEMPTS = 3                   # 打补丁最大重试次数
 
+# Stellaris 游戏内的大型资源目录，不可能包含 steam_api64.dll
+_SKIP_SCAN_DIRS = frozenset({
+    'dlc', 'mod', 'mods', 'sound', 'music', 'gfx', 'interface', 'map',
+    'common', 'events', 'localisation', 'localization', 'graphics',
+    'fonts', 'flags', 'portraits', 'thumbnail', 'pdx_browser', 'tools',
+    'tutorial', 'prescripted_countries', 'setup', 'journals', 'specimens',
+})
+
 
 class PatchManager:
     """补丁管理器类"""
@@ -207,6 +215,31 @@ class PatchManager:
 
         return locations['steam_api64']
     
+    def _find_steam_api64_dll_paths(self):
+        """
+        快速定位 steam_api64.dll，避免 os.walk 扫描整个游戏目录导致 UI 卡死。
+        Stellaris 的 steam_api64.dll 通常位于游戏根目录。
+        """
+        paths = []
+        root_dll = os.path.join(self.game_path, STEAM_API64_DLL)
+        if os.path.isfile(root_dll):
+            paths.append(root_dll)
+
+        try:
+            for name in os.listdir(self.game_path):
+                subdir = os.path.join(self.game_path, name)
+                if not os.path.isdir(subdir):
+                    continue
+                if name.lower() in _SKIP_SCAN_DIRS:
+                    continue
+                candidate = os.path.join(subdir, STEAM_API64_DLL)
+                if os.path.isfile(candidate):
+                    paths.append(candidate)
+        except OSError:
+            pass
+
+        return paths
+
     def scan_steam_api64_locations(self):
         """
         递归扫描游戏目录，查找所有 steam_api64.dll 位置（仅 64 位）
@@ -225,11 +258,9 @@ class PatchManager:
         self.logger.info("正在扫描游戏目录...")
         
         try:
-            for root, dirs, files in os.walk(self.game_path):
-                if STEAM_API64_DLL in files:
-                    dll_path = os.path.join(root, STEAM_API64_DLL)
-                    locations['steam_api64'].append(dll_path)
-                    self.logger.info(f"找到 {STEAM_API64_DLL}: {dll_path}")
+            for dll_path in self._find_steam_api64_dll_paths():
+                locations['steam_api64'].append(dll_path)
+                self.logger.info(f"找到 {STEAM_API64_DLL}: {dll_path}")
             
             total = len(locations['steam_api64'])
             self.logger.info(f"扫描完成，共找到 {total} 个 DLL 文件（仅 64 位）")
@@ -605,11 +636,7 @@ class PatchManager:
         total_locations = 0
         backup_exists = False
 
-        for root, dirs, files in os.walk(self.game_path):
-            if STEAM_API64_DLL not in files:
-                continue
-
-            dll_path = os.path.join(root, STEAM_API64_DLL)
+        for dll_path in self._find_steam_api64_dll_paths():
             backup_path = self._backup_path(dll_path)
             total_locations += 1
 

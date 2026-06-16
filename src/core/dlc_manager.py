@@ -166,15 +166,29 @@ class DLCManager:
         """
         import logging
         import time
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
         logger = logging.getLogger(__name__)
         
         last_error = None
+        per_request_timeout = REQUEST_TIMEOUT + 15
+
         for attempt in range(1, RETRY_TIMES + 1):
             if attempt > 1:
                 logger.info(f"正在重试获取 DLC 列表 ({attempt}/{RETRY_TIMES})...")
                 time.sleep(1)
 
-            dlc_list = self._fetch_from_gitlink_api()
+            try:
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(self._fetch_from_gitlink_api)
+                    dlc_list = future.result(timeout=per_request_timeout)
+            except FuturesTimeoutError:
+                last_error = f"GitLink API 请求超时（>{per_request_timeout}s）"
+                logger.warning(last_error)
+                continue
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"获取 DLC 列表异常: {e}")
+                continue
 
             if dlc_list is None:
                 last_error = "GitLink API 访问失败"
