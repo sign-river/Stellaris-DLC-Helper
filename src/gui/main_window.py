@@ -124,22 +124,56 @@ class MainWindowCTk:
         header_frame.grid(row=0, column=0, sticky="ew")
         header_frame.grid_propagate(False)
         
-        # 左上角图标
+        # 左上角看板娘图标（按下切换为 icon_2，松开恢复）
         try:
             icon_path = PathUtils.get_resource_path("assets/images/icon.png")
+            icon_2_path = PathUtils.get_resource_path("assets/images/icon_2.png")
             if os.path.exists(icon_path):
-                icon_image = Image.open(icon_path)
-                # 调整图标大小
-                icon_image = icon_image.resize((80, 80), Image.Resampling.LANCZOS)
-                icon_photo = ctk.CTkImage(light_image=icon_image, dark_image=icon_image, size=(80, 80))
+                icon_size = (80, 80)
+
+                def _load_header_icon(path):
+                    img = Image.open(path)
+                    img = img.resize(icon_size, Image.Resampling.LANCZOS)
+                    return ctk.CTkImage(light_image=img, dark_image=img, size=icon_size)
+
+                self._header_icon_photo = _load_header_icon(icon_path)
+                self._header_icon_photo_2 = (
+                    _load_header_icon(icon_2_path)
+                    if os.path.exists(icon_2_path)
+                    else None
+                )
+
                 icon_label = ctk.CTkLabel(
                     header_frame,
-                    image=icon_photo,
-                    text=""
+                    image=self._header_icon_photo,
+                    text="",
+                    cursor="hand2" if self._header_icon_photo_2 else "arrow",
                 )
-                icon_label.place(x=40, y=25)  # 固定在左上角
-                # 保存引用避免被垃圾回收
+                icon_label.place(x=40, y=25)
                 self._header_icon = icon_label
+                self._header_icon_release_bind_id = None
+
+                if self._header_icon_photo_2:
+                    def _show_header_icon_normal(_event=None):
+                        icon_label.configure(image=self._header_icon_photo)
+                        if self._header_icon_release_bind_id is not None:
+                            self.root.unbind(
+                                "<ButtonRelease-1>",
+                                self._header_icon_release_bind_id,
+                            )
+                            self._header_icon_release_bind_id = None
+
+                    def _on_header_icon_press(_event):
+                        icon_label.configure(image=self._header_icon_photo_2)
+                        if self._header_icon_release_bind_id is None:
+                            self._header_icon_release_bind_id = self.root.bind(
+                                "<ButtonRelease-1>",
+                                _show_header_icon_normal,
+                                add="+",
+                            )
+
+                    icon_label.bind("<ButtonPress-1>", _on_header_icon_press)
+                    icon_label.bind("<ButtonRelease-1>", _show_header_icon_normal)
         except Exception as e:
             import logging
             logging.warning(f"加载左上角图标失败: {e}")
