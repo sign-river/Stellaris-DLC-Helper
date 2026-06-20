@@ -546,6 +546,49 @@ class PatchManager:
         except Exception as e:
             self.logger.log_exception(f"应用补丁失败", e)
             return success, max(failed, 1)
+
+    def purge_patch_files(self):
+        """
+        删除补丁相关文件（不还原原版，供一键修复使用）
+
+        返回:
+            tuple: (成功数量, 失败数量)
+        """
+        self.logger.info("正在删除补丁相关文件...")
+        success = 0
+        failed = 0
+
+        config_path = os.path.join(self.game_path, 'cream_api.ini')
+        if os.path.exists(config_path):
+            try:
+                os.remove(config_path)
+                success += 1
+                self.logger.success("已删除: cream_api.ini")
+            except Exception as e:
+                failed += 1
+                self.logger.log_exception("删除 cream_api.ini 失败", e)
+
+        checked_dirs = set()
+        candidate_paths = list(self._find_steam_api64_dll_paths())
+        for dll_path in candidate_paths:
+            checked_dirs.add(os.path.dirname(dll_path))
+
+        checked_dirs.add(self.game_path)
+
+        for dir_path in checked_dirs:
+            for file_name in (STEAM_API64_DLL, STEAM_API64_O_DLL):
+                file_path = os.path.join(dir_path, file_name)
+                if not os.path.exists(file_path):
+                    continue
+                try:
+                    os.remove(file_path)
+                    success += 1
+                    self.logger.success(f"已删除: {file_path}")
+                except Exception as e:
+                    failed += 1
+                    self.logger.log_exception(f"删除 {file_name} 失败", e)
+
+        return success, failed
     
     def remove_patch(self):
         """

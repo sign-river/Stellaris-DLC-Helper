@@ -734,6 +734,21 @@ class MainWindowCTk:
             text_color="#FFFFFF"
         )
         self.update_btn.pack(side="left", padx=(0, 10))
+
+        self.repair_btn = ctk.CTkButton(
+            right_btn_container,
+            text="🛠️ 一键修复",
+            command=self.one_click_repair,
+            state="disabled",
+            width=130,
+            height=45,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            corner_radius=8,
+            fg_color="#42A5F5",
+            hover_color="#1E88E5",
+            text_color="#FFFFFF"
+        )
+        self.repair_btn.pack(side="left", padx=(0, 10))
         
         # 执行按钮（合并补丁 & 下载功能）
         self.execute_btn = ctk.CTkButton(
@@ -1392,6 +1407,8 @@ class MainWindowCTk:
         
         # 启用执行按钮（执行补丁/下载）
         self.execute_btn.configure(state="normal")
+        if hasattr(self, "repair_btn"):
+            self.repair_btn.configure(state="normal")
 
         # 更新补丁按钮状态显示（自动检测）
         self._check_patch_status()
@@ -1401,6 +1418,110 @@ class MainWindowCTk:
             self.select_all_btn.configure(text="取消全选")
         else:
             self.select_all_btn.configure(text="全选")
+        
+    def _format_download_size(self, size_bytes):
+        """将字节数格式化为可读下载大小"""
+        if size_bytes <= 0:
+            return "未知"
+        gb = size_bytes / (1024 ** 3)
+        if gb >= 1:
+            return f"{gb:.2f} GB"
+        mb = size_bytes / (1024 ** 2)
+        return f"{mb:.1f} MB"
+
+    def _estimate_repair_download_size(self):
+        """估算一键修复后需重新下载的数据量"""
+        total_bytes = 0
+        unknown_count = 0
+        for dlc in self.dlc_list:
+            size_bytes = dlc.get("size_bytes", 0) or 0
+            if size_bytes > 0:
+                total_bytes += size_bytes
+            else:
+                unknown_count += 1
+        return total_bytes, len(self.dlc_list), unknown_count
+
+    def one_click_repair(self):
+        """一键修复：清理本地 DLC/补丁后重新执行一键解锁"""
+        if self.is_downloading:
+            messagebox.showwarning("提示", "下载进行中，请等待完成后再操作。")
+            return
+
+        if not self.game_path:
+            messagebox.showwarning("警告", "请先选择游戏路径！")
+            return
+
+        if not self.dlc_list:
+            messagebox.showinfo("提示", "正在加载 DLC 列表，请稍候...")
+            self.load_dlc_list()
+            messagebox.showinfo("提示", "请在 DLC 列表加载完成后，再次点击一键修复。")
+            return
+
+        if not self.dlc_installer or not self.patch_manager:
+            messagebox.showerror("错误", "组件未初始化，请重新选择游戏路径。")
+            return
+
+        total_bytes, dlc_count, unknown_count = self._estimate_repair_download_size()
+        size_text = self._format_download_size(total_bytes)
+        if unknown_count > 0:
+            if total_bytes > 0:
+                size_text = f"至少 {size_text}（{unknown_count} 个 DLC 大小未知）"
+            else:
+                size_text = "未知（部分 DLC 大小信息不可用）"
+
+        confirmed = messagebox.askyesno(
+            "一键修复",
+            "此操作将：\n"
+            "1. 删除游戏 dlc 目录下的所有 DLC\n"
+            "2. 删除 cream_api.ini、steam_api64.dll、steam_api64_o.dll\n"
+            "3. 重新打补丁并下载安装全部选中的 DLC\n\n"
+            f"预计需下载约 {size_text} 的数据（共 {dlc_count} 个 DLC）。\n\n"
+            "是否继续？"
+        )
+        if not confirmed:
+            return
+
+        self.repair_btn.configure(state="disabled")
+
+        def repair_thread():
+            try:
+                self.logger.info("\n" + "=" * 50)
+                self.logger.info("开始一键修复...")
+
+                dlc_success, dlc_failed = self.dlc_installer.purge_all_dlcs()
+                self.logger.info(f"已清理 dlc 目录：成功 {dlc_success} 项，失败 {dlc_failed} 项")
+
+                patch_success, patch_failed = self.patch_manager.purge_patch_files()
+                self.logger.info(
+                    f"已清理补丁文件：成功 {patch_success} 个，失败 {patch_failed} 个"
+                )
+
+                if dlc_failed > 0 or patch_failed > 0:
+                    self.logger.warning("部分文件清理失败，将继续尝试重新解锁")
+
+                def on_repair_done():
+                    self.display_dlc_list()
+                    for d in self.dlc_vars:
+                        if not d.get("installed", False):
+                            d["var"].set(True)
+                    if self.dlc_vars:
+                        self.select_all_btn.configure(text="取消全选")
+                    self._check_patch_status()
+                    self.logger.info("清理完成，开始重新解锁...")
+                    self.start_execute()
+                    if not self.is_downloading:
+                        self.repair_btn.configure(state="normal")
+
+                self.root.after(0, on_repair_done)
+            except Exception as e:
+                self.logger.log_exception("一键修复失败", e)
+                self.root.after(
+                    0,
+                    lambda: messagebox.showerror("错误", f"一键修复失败：\n{e}"),
+                )
+                self.root.after(0, lambda: self.repair_btn.configure(state="normal"))
+
+        threading.Thread(target=repair_thread, daemon=True).start()
         
     def toggle_select_all(self):
         """全选/取消全选（智能切换）"""
@@ -1522,6 +1643,8 @@ class MainWindowCTk:
                 if should_patch:
                     # 在打补丁时禁用执行按钮
                     self.root.after(0, lambda: self.execute_btn.configure(state="disabled"))
+                    if hasattr(self, "repair_btn"):
+                        self.root.after(0, lambda: self.repair_btn.configure(state="disabled"))
                     success, failed = self.patch_manager.apply_patch(self.dlc_list)
                     if success > 0:
                         # 记录补丁是否在本次一键解锁流程内被成功应用（用于最终统一弹窗的判断）
@@ -1578,6 +1701,8 @@ class MainWindowCTk:
         # 设置下载状态
         self.is_downloading = True
         self.execute_btn.configure(text="⏸️ 暂停下载", state="normal")
+        if hasattr(self, "repair_btn"):
+            self.repair_btn.configure(state="disabled")
         
         # GitLink单一源，无需测速，直接下载
         self.best_download_source = "gitlink"
@@ -2213,6 +2338,8 @@ class MainWindowCTk:
                 text="🔓 一键解锁", 
                 state="normal"
             ))
+            if hasattr(self, "repair_btn"):
+                self.root.after(0, lambda: self.repair_btn.configure(state="normal"))
         
         threading.Thread(target=download_thread, daemon=True).start()
     

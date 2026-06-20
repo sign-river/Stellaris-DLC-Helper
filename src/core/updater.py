@@ -444,12 +444,6 @@ class UpdateInstaller:
                     
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     
-                    # config.json 特殊处理：合并配置
-                    if rel_path.name == 'config.json':
-                        self._merge_config(item, dst)
-                        self.logger.info(f"已合并配置文件: {rel_path}")
-                        continue
-                    
                     # 尝试直接替换
                     try:
                         if dst.suffix == '.exe' and dst.exists():
@@ -488,58 +482,6 @@ class UpdateInstaller:
             if pattern in path_str:
                 return True
         return False
-    
-    def _merge_config(self, new_config_path: Path, old_config_path: Path):
-        """合并配置文件：使用新配置但保留用户自定义的值"""
-        try:
-            # 读取新配置
-            with open(new_config_path, 'r', encoding='utf-8') as f:
-                new_config = json.load(f)
-            
-            # 如果旧配置存在，读取并合并关键用户配置
-            if old_config_path.exists():
-                try:
-                    with open(old_config_path, 'r', encoding='utf-8') as f:
-                        old_config = json.load(f)
-                    
-                    # 保留用户可能自定义的配置项
-                    preserve_keys = [
-                        'game_path',  # 游戏路径
-                        'steam_path',  # Steam 路径
-                    ]
-                    
-                    for key in preserve_keys:
-                        if key in old_config and old_config[key]:
-                            new_config[key] = old_config[key]
-                            self.logger.debug(f"保留用户配置: {key} = {old_config[key]}")
-                    
-                    # 如果用户有自定义服务器配置，保留
-                    if 'server' in old_config and 'server' in new_config:
-                        if 'sources' in old_config['server']:
-                            # 检查用户是否修改过源配置
-                            old_sources = old_config['server']['sources']
-                            new_sources = new_config['server']['sources']
-                            if old_sources != new_sources:
-                                # 用户修改过，保留用户配置
-                                new_config['server']['sources'] = old_sources
-                                self.logger.debug("保留用户自定义的服务器源配置")
-                    
-                except Exception as e:
-                    self.logger.warning(f"读取旧配置失败，使用新配置: {e}")
-            
-            # 写入合并后的配置
-            with open(old_config_path, 'w', encoding='utf-8') as f:
-                json.dump(new_config, f, ensure_ascii=False, indent=4)
-            
-            self.logger.info("配置文件已合并")
-            
-        except Exception as e:
-            self.logger.error(f"合并配置文件失败: {e}")
-            # 失败时直接复制新配置
-            try:
-                shutil.copy2(new_config_path, old_config_path)
-            except Exception:
-                pass
     
     def _start_helper(self, replacements: List[tuple]) -> bool:
         """启动 updater_helper 执行延迟替换"""

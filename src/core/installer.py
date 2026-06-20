@@ -168,3 +168,31 @@ class DLCInstaller:
             self.operation_log.clear()
         
         return success, total
+
+    def purge_all_dlcs(self):
+        """
+        删除游戏 dlc 目录下的所有内容（供一键修复使用）
+
+        返回:
+            tuple: (成功数量, 失败数量)
+        """
+        dlc_folder = PathUtils.get_dlc_folder(self.game_path)
+        if not os.path.exists(dlc_folder):
+            self.operation_log.clear()
+            return 0, 0
+
+        success = 0
+        failed = 0
+        for item in os.listdir(dlc_folder):
+            item_path = os.path.join(dlc_folder, item)
+            try:
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                else:
+                    os.remove(item_path)
+                success += 1
+            except Exception:
+                failed += 1
+
+        self.operation_log.clear()
+        return success, failed
