@@ -173,6 +173,19 @@ def create_icon_button(
     return btn
 
 
+def set_icon_button_state(btn, state: str, *, disabled_text_color="#B0BEC5"):
+    """同步图标按钮的启用/禁用状态（含内部标签颜色与层级）"""
+    btn.configure(state=state)
+    if not is_icon_button(btn):
+        return
+
+    normal_color = getattr(btn, "_ib_text_color", "#FFFFFF")
+    color = normal_color if state == "normal" else disabled_text_color
+    btn._ib_icon.configure(text_color=color)
+    btn._ib_text.configure(text_color=color)
+    btn._ib_content.lift()
+
+
 def update_icon_button(btn, icon: str, text: str, *, text_color=None):
     """更新 create_icon_button 创建的按钮文案"""
     if not is_icon_button(btn):

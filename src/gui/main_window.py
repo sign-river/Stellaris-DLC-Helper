@@ -17,7 +17,7 @@ from ..config import VERSION, REQUEST_TIMEOUT, RETRY_TIMES
 from ..core import DLCManager, DLCDownloader, DLCInstaller, PatchManager
 from ..core.updater import AutoUpdater
 from .update_dialog import UpdateDialog
-from .ui_helpers import create_icon_button, update_icon_button, pack_section_header, pack_description_lines, set_button_content, is_icon_button
+from .ui_helpers import create_icon_button, update_icon_button, pack_section_header, pack_description_lines, set_button_content, is_icon_button, set_icon_button_state
 from ..utils import Logger, PathUtils, SteamUtils
 
 
@@ -741,7 +741,19 @@ class MainWindowCTk:
         self.execute_btn.pack(side="left", padx=(0, 10))
         
         # 下载安装按钮的行为已合并到 execute_btn 中，此按钮移除
-        
+
+    def _set_repair_btn_enabled(self, enabled: bool):
+        """启用/禁用一键修复按钮"""
+        if not hasattr(self, "repair_btn"):
+            return
+        set_icon_button_state(self.repair_btn, "normal" if enabled else "disabled")
+
+    def _restore_action_buttons_after_flow(self):
+        """一键解锁/下载流程结束后恢复操作按钮"""
+        self.execute_btn.configure(state="normal")
+        if not self.is_downloading:
+            self._set_repair_btn_enabled(True)
+
     def _set_execute_btn_label(self, mode: str):
         """更新主操作按钮的图标与文字"""
         labels = {
@@ -1394,7 +1406,7 @@ class MainWindowCTk:
         # 启用执行按钮（执行补丁/下载）
         self.execute_btn.configure(state="normal")
         if hasattr(self, "repair_btn"):
-            self.repair_btn.configure(state="normal")
+            self._set_repair_btn_enabled(True)
 
         # 更新补丁按钮状态显示（自动检测）
         self._check_patch_status()
@@ -1467,7 +1479,7 @@ class MainWindowCTk:
         if not confirmed:
             return
 
-        self.repair_btn.configure(state="disabled")
+        self._set_repair_btn_enabled(False)
 
         def repair_thread():
             try:
@@ -1496,7 +1508,7 @@ class MainWindowCTk:
                     self.logger.info("清理完成，开始重新解锁...")
                     self.start_execute()
                     if not self.is_downloading:
-                        self.repair_btn.configure(state="normal")
+                        self._set_repair_btn_enabled(True)
 
                 self.root.after(0, on_repair_done)
             except Exception as e:
@@ -1505,7 +1517,7 @@ class MainWindowCTk:
                     0,
                     lambda: messagebox.showerror("错误", f"一键修复失败：\n{e}"),
                 )
-                self.root.after(0, lambda: self.repair_btn.configure(state="normal"))
+                self.root.after(0, lambda: self._set_repair_btn_enabled(True))
 
         threading.Thread(target=repair_thread, daemon=True).start()
         
@@ -1630,7 +1642,7 @@ class MainWindowCTk:
                     # 在打补丁时禁用执行按钮
                     self.root.after(0, lambda: self.execute_btn.configure(state="disabled"))
                     if hasattr(self, "repair_btn"):
-                        self.root.after(0, lambda: self.repair_btn.configure(state="disabled"))
+                        self.root.after(0, lambda: self._set_repair_btn_enabled(False))
                     success, failed = self.patch_manager.apply_patch(self.dlc_list)
                     if success > 0:
                         # 记录补丁是否在本次一键解锁流程内被成功应用（用于最终统一弹窗的判断）
@@ -1670,11 +1682,35 @@ class MainWindowCTk:
                         self._one_click_patch_applied = False
                         self._one_click_flow = False
             finally:
-                # 确保执行按钮启用
-                self.root.after(0, lambda: self.execute_btn.configure(state="normal"))
+                self.root.after(0, self._restore_action_buttons_after_flow)
 
         threading.Thread(target=execute_thread, daemon=True).start()
     
+    def _finalize_download_ui(self, success: int, failed: int):
+        """下载流程结束后的 UI 收尾（成功或异常都会调用）"""
+        try:
+            self.downloading_label.grid_remove()
+            self.progress_bar.grid_remove()
+            self.speed_label.grid_remove()
+            self.source_label.grid_remove()
+        except Exception:
+            pass
+
+        self.logger.info(f"\n{'='*50}")
+        self.logger.info(f"下载完成！成功: {success}, 失败: {failed}")
+
+        self.current_download_url = None
+        self.is_downloading = False
+        self.download_paused = False
+        self.current_downloader = None
+        self._set_execute_btn_label("unlock")
+        self._set_repair_btn_enabled(True)
+
+        if self._one_click_flow:
+            self._one_click_flow = False
+
+        self._reload_dlc_list_after_download()
+
     def start_download(self):
         """开始下载"""
         # 检查是否已经在下载中，防止重复点击
@@ -1692,7 +1728,7 @@ class MainWindowCTk:
         self.execute_btn.configure(state="normal")
         self._set_execute_btn_label("pause")
         if hasattr(self, "repair_btn"):
-            self.repair_btn.configure(state="disabled")
+            self._set_repair_btn_enabled(False)
         
         # GitLink单一源，无需测速，直接下载
         self.best_download_source = "gitlink"
@@ -1939,7 +1975,7 @@ class MainWindowCTk:
         def download_thread():
             success = 0
             failed = 0
-            
+
             # 显示进度组件
             self.root.after(0, lambda: self.downloading_label.grid())
             self.root.after(0, lambda: self.progress_bar.grid())
@@ -2294,39 +2330,11 @@ class MainWindowCTk:
             except Exception:
                 pass
 
-            # 完成，隐藏进度组件
-            self.root.after(0, lambda: self.downloading_label.grid_remove())
-            self.root.after(0, lambda: self.progress_bar.grid_remove())
-            self.root.after(0, lambda: self.speed_label.grid_remove())
-            self.root.after(0, lambda: self.source_label.grid_remove())
-            self.logger.info(f"\n{'='*50}")
-            self.logger.info(f"下载完成！成功: {success}, 失败: {failed}")
-            
-            # 清除当前下载URL
-            self.current_download_url = None
-            
-            # 一键流程的统一最终模态：
-            # - If downloads succeeded (success>0) during one-click flow, show a unified success message.
-            # - This complements the patch-success path which, if patch was applied but no download occurred,
-            #   已在 start_execute() 中触发过统一成功消息。
+            # 完成，隐藏进度组件并恢复按钮
             if (self._one_click_flow) and success > 0:
                 self.root.after(0, lambda: messagebox.showinfo("成功", "解锁成功！"))
-            
-            # 重置下载状态（在刷新列表之前重置，确保刷新不会被阻止）
-            self.is_downloading = False
-            self.download_paused = False
-            self.current_downloader = None
-            
-            # 在展示最终模态后清除一键流程标志
-            if self._one_click_flow:
-                self._one_click_flow = False
-            
-            # 重新加载DLC列表（在主线程中执行，确保下载状态已重置）
-            # 使用 after(0) 确保在主线程的下一个事件循环中执行
-            self.root.after(0, self._reload_dlc_list_after_download)
-            self.root.after(0, lambda: self._set_execute_btn_label("unlock"))
-            if hasattr(self, "repair_btn"):
-                self.root.after(0, lambda: self.repair_btn.configure(state="normal"))
+
+            self.root.after(0, lambda s=success, f=failed: self._finalize_download_ui(s, f))
         
         threading.Thread(target=download_thread, daemon=True).start()
     
