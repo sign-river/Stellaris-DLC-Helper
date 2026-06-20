@@ -465,6 +465,20 @@ class PatchManager:
         
         return config
     
+    def update_cream_config(self, dlc_list):
+        """
+        更新 cream_api.ini（不修改 steam_api64.dll / steam_api64_o.dll）
+
+        返回:
+            bool: 是否写入成功
+        """
+        try:
+            self._write_cream_config(dlc_list)
+            return True
+        except Exception as e:
+            self.logger.log_exception("更新 cream_api.ini 失败", e)
+            return False
+
     def apply_patch(self, dlc_list):
         """
         应用补丁（含校验与重试）
@@ -488,6 +502,9 @@ class PatchManager:
             for attempt in range(1, MAX_PATCH_ATTEMPTS + 1):
                 self.logger.info(f"补丁应用第 {attempt}/{MAX_PATCH_ATTEMPTS} 次尝试...")
 
+                # 无论 DLL 备份/补丁是否已就绪，每次尝试都刷新 cream_api.ini
+                self.update_cream_config(dlc_list)
+
                 for dll_path in dll_paths:
                     ok, reason = self._verify_patch_at_location(dll_path)
                     if ok:
@@ -499,11 +516,6 @@ class PatchManager:
                             self._repair_patch_at_location(dll_path, reason)
                     except Exception as e:
                         self.logger.log_exception(f"处理 {dll_path} 失败", e)
-
-                try:
-                    self._write_cream_config(dlc_list)
-                except Exception as e:
-                    self.logger.log_exception("生成配置文件失败", e)
 
                 location_results = []
                 for dll_path in dll_paths:

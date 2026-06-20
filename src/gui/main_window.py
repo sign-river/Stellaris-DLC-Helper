@@ -1653,6 +1653,9 @@ class MainWindowCTk:
                         self.root.after(0, lambda: messagebox.showwarning("提示", "补丁应用失败或无变更，请查看日志"))
                     # 重新检查补丁状态
                     self.root.after(0, self._check_patch_status)
+                elif selected_to_download:
+                    # 补丁已就绪时下载 DLC，仍需刷新 cream_api.ini
+                    self.patch_manager.update_cream_config(self.dlc_list)
                 # 在打补丁后或已打补丁情况下开始下载
                 if selected_to_download:
                     # 使用一键标志以便在下载完成时显示统一成功弹窗
