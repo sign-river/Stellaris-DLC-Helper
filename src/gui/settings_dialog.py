@@ -8,20 +8,35 @@
 import customtkinter as ctk
 from tkinter import messagebox
 import threading
+import os
 from pathlib import Path
 from typing import Optional
 import logging
-import os
+from .ui_helpers import (
+    create_icon_button,
+    pack_section_header,
+    pack_description_lines,
+    update_icon_button,
+)
 
 
 class SettingsDialog(ctk.CTkToplevel):
     """设置对话框"""
 
-    def __init__(self, parent, main_logger=None, is_downloading_callback=None):
+    def __init__(
+        self,
+        parent,
+        main_logger=None,
+        is_downloading_callback=None,
+        check_update_callback=None,
+        clear_cache_callback=None,
+    ):
         super().__init__(parent)
 
         self.main_logger = main_logger  # 主窗口的日志记录器
         self.is_downloading_callback = is_downloading_callback  # 检查下载状态的回调函数
+        self.check_update_callback = check_update_callback
+        self.clear_cache_callback = clear_cache_callback
         self.logger = logging.getLogger(__name__)
 
         self.title("设置")
@@ -193,34 +208,35 @@ class SettingsDialog(ctk.CTkToplevel):
         button_frame.pack(fill="x", padx=10, pady=10)
 
         # 测速所有源按钮
-        test_all_btn = ctk.CTkButton(
+        self.test_all_btn = create_icon_button(
             button_frame,
-            text="🚀 测速所有源",
-            command=self._test_all_sources,
+            "🚀",
+            "测速所有源",
+            self._test_all_sources,
             width=140,
             height=36,
-            font=ctk.CTkFont(size=13, weight="bold"),
+            text_font=ctk.CTkFont(size=13, weight="bold"),
             corner_radius=8,
             fg_color="#4CAF50",
             hover_color="#45a049",
-            text_color="#FFFFFF"
+            text_color="#FFFFFF",
         )
-        test_all_btn.pack(side="left", padx=5)
+        self.test_all_btn.pack(side="left", padx=5)
 
         # 刷新按钮
-        refresh_btn = ctk.CTkButton(
+        create_icon_button(
             button_frame,
-            text="🔄 刷新",
-            command=self._refresh_sources,
+            "↻",
+            "刷新",
+            self._refresh_sources,
             width=100,
             height=36,
-            font=ctk.CTkFont(size=13),
+            text_font=ctk.CTkFont(size=13),
             corner_radius=8,
             fg_color="#42A5F5",
             hover_color="#1E88E5",
-            text_color="#FFFFFF"
-        )
-        refresh_btn.pack(side="left", padx=5)
+            text_color="#FFFFFF",
+        ).pack(side="left", padx=5)
 
         # 保存引用
         self.sources_frame = sources_frame
@@ -308,16 +324,14 @@ class SettingsDialog(ctk.CTkToplevel):
         announcement_frame.pack(fill="x", padx=20, pady=(0, 15))
 
         # 标题行
-        announcement_title_frame = ctk.CTkFrame(announcement_frame, fg_color="transparent")
-        announcement_title_frame.pack(fill="x", padx=15, pady=(15, 10))
-
-        announcement_title = ctk.CTkLabel(
-            announcement_title_frame,
-            text="📢    公告显示设置",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#1976D2"
+        announcement_header = ctk.CTkFrame(announcement_frame, fg_color="transparent")
+        announcement_header.pack(fill="x", padx=15, pady=(15, 10))
+        pack_section_header(
+            announcement_header,
+            "📢",
+            "公告显示设置",
+            bottom_padding=0,
         )
-        announcement_title.pack(side="left")
 
         # 内容区域
         announcement_content_frame = ctk.CTkFrame(announcement_frame, fg_color="transparent")
@@ -327,23 +341,13 @@ class SettingsDialog(ctk.CTkToplevel):
         left_frame = ctk.CTkFrame(announcement_content_frame, fg_color="transparent")
         left_frame.pack(side="left", fill="both", expand=True)
 
-        desc_line1 = ctk.CTkLabel(
+        pack_description_lines(
             left_frame,
-            text="启动时显示系统公告",
-            font=ctk.CTkFont(size=13),
-            text_color="#333333",
-            anchor="w"
-        )
-        desc_line1.pack(anchor="w", pady=(0, 3))
-        
-        desc_line2 = ctk.CTkLabel(
-            left_frame,
-            text="每个版本的公告独立控制",
-            font=ctk.CTkFont(size=12),
+            ["启动时显示系统公告", "每个版本的公告独立控制"],
+            font_size=12,
             text_color="#666666",
-            anchor="w"
+            line_spacing=10,
         )
-        desc_line2.pack(anchor="w")
 
         # 右侧：开关按钮
         right_frame = ctk.CTkFrame(announcement_content_frame, fg_color="transparent")
@@ -376,79 +380,82 @@ class SettingsDialog(ctk.CTkToplevel):
         )
         self.announcement_status_label.pack(pady=(5, 0))
 
+        self._create_clear_cache_section(scrollable_frame)
+        self._create_check_update_section(scrollable_frame)
+
         # 更新文件管理框架
         update_files_frame = ctk.CTkFrame(scrollable_frame, fg_color="#FFFFFF", corner_radius=8)
         update_files_frame.pack(fill="x", padx=20, pady=(15, 15))
 
         # 标题行
-        update_title_frame = ctk.CTkFrame(update_files_frame, fg_color="transparent")
-        update_title_frame.pack(fill="x", padx=15, pady=(15, 10))
-
-        update_title = ctk.CTkLabel(
-            update_title_frame,
-            text="🗂️    更新文件管理",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#1976D2"
+        update_header = ctk.CTkFrame(update_files_frame, fg_color="transparent")
+        update_header.pack(fill="x", padx=15, pady=(15, 10))
+        pack_section_header(
+            update_header,
+            "🗂",
+            "更新文件管理",
+            bottom_padding=0,
         )
-        update_title.pack(side="left")
 
         # 说明文本
-        update_desc_label = ctk.CTkLabel(
-            update_files_frame,
-            text="清理更新过程中产生的临时文件和残留文件",
-            font=ctk.CTkFont(size=11),
-            text_color="#999999"
+        update_desc_wrap = ctk.CTkFrame(update_files_frame, fg_color="transparent")
+        update_desc_wrap.pack(fill="x", padx=15, pady=(0, 10))
+        pack_description_lines(
+            update_desc_wrap,
+            ["清理更新过程中产生的临时文件和残留文件"],
+            font_size=11,
+            text_color="#999999",
+            line_spacing=10,
         )
-        update_desc_label.pack(padx=15, pady=(0, 10), anchor="w")
 
         # 按钮容器
         update_btn_frame = ctk.CTkFrame(update_files_frame, fg_color="transparent")
         update_btn_frame.pack(fill="x", padx=15, pady=(0, 15))
 
         # 清理临时文件按钮
-        clean_temp_btn = ctk.CTkButton(
+        create_icon_button(
             update_btn_frame,
-            text="🗑️ 清理临时文件",
-            command=self._clean_temp_files,
+            "🗑",
+            "清理临时文件",
+            self._clean_temp_files,
             width=150,
             height=36,
-            font=ctk.CTkFont(size=13),
+            text_font=ctk.CTkFont(size=13),
             corner_radius=8,
             fg_color="#1976D2",
             hover_color="#1565C0",
-            text_color="#FFFFFF"
-        )
-        clean_temp_btn.pack(side="left", padx=(0, 10))
+            text_color="#FFFFFF",
+        ).pack(side="left", padx=(0, 10))
 
         # 清理备份文件按钮
-        clean_backup_btn = ctk.CTkButton(
+        create_icon_button(
             update_btn_frame,
-            text="🗑️ 清理备份文件",
-            command=self._clean_backup_files,
+            "🗑",
+            "清理备份文件",
+            self._clean_backup_files,
             width=150,
             height=36,
-            font=ctk.CTkFont(size=13),
+            text_font=ctk.CTkFont(size=13),
             corner_radius=8,
             fg_color="#1976D2",
             hover_color="#1565C0",
-            text_color="#FFFFFF"
-        )
-        clean_backup_btn.pack(side="left", padx=(0, 10))
+            text_color="#FFFFFF",
+        ).pack(side="left", padx=(0, 10))
 
         # 清理更新下载包按钮
-        clean_update_pkg_btn = ctk.CTkButton(
+        create_icon_button(
             update_btn_frame,
-            text="🗑️ 清理更新下载包",
-            command=self._clean_update_packages,
-            width=150,
+            "🗑",
+            "清理更新下载包",
+            self._clean_update_packages,
+            width=170,
             height=36,
-            font=ctk.CTkFont(size=13),
+            text_font=ctk.CTkFont(size=13),
             corner_radius=8,
             fg_color="#1976D2",
             hover_color="#1565C0",
-            text_color="#FFFFFF"
-        )
-        clean_update_pkg_btn.pack(side="left")
+            text_color="#FFFFFF",
+        ).pack(side="left")
 
         # 文件统计信息
         self.update_files_info_label = ctk.CTkLabel(
@@ -898,22 +905,22 @@ class SettingsDialog(ctk.CTkToplevel):
         
         title = ctk.CTkLabel(
             left_frame,
-            text="📊 GitLink下载速度",
+            text="GitLink下载速度",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color="#333333",
             anchor="w"
         )
-        title.pack(anchor="w", pady=(0, 8))
-        
-        desc = ctk.CTkLabel(
+        title.pack(anchor="w", pady=(0, 10))
+
+        pack_description_lines(
             left_frame,
-            text="测试GitLink源的下载速度\n测试文件: test.bin (约70MB)\n评估网络连接质量",
-            font=ctk.CTkFont(size=12),
-            text_color="#666666",
-            anchor="w",
-            justify="left"
+            [
+                "测试 GitLink 源的下载速度",
+                "测试文件: test.bin (约 70 MB)",
+                "评估网络连接质量",
+            ],
+            line_spacing=10,
         )
-        desc.pack(anchor="w")
         
         # 右侧：速度显示
         right_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
@@ -950,16 +957,18 @@ class SettingsDialog(ctk.CTkToplevel):
         button_frame = ctk.CTkFrame(tab, fg_color="transparent")
         button_frame.pack(fill="x", padx=20, pady=(0, 20))
         
-        self.speed_test_btn = ctk.CTkButton(
+        self.speed_test_btn = create_icon_button(
             button_frame,
-            text="🚀 开始测速",
-            command=self._start_speed_test,
+            "🚀",
+            "开始测速",
+            self._start_speed_test,
             width=150,
             height=40,
-            font=ctk.CTkFont(size=14, weight="bold"),
+            text_font=ctk.CTkFont(size=14, weight="bold"),
             corner_radius=8,
             fg_color="#4CAF50",
-            hover_color="#45A049"
+            hover_color="#45A049",
+            text_color="#FFFFFF",
         )
         self.speed_test_btn.pack()
     
@@ -972,7 +981,8 @@ class SettingsDialog(ctk.CTkToplevel):
         def test_thread():
             try:
                 # 禁用按钮
-                self.speed_test_btn.configure(state="disabled", text="测速中...")
+                self.speed_test_btn.configure(state="disabled")
+                update_icon_button(self.speed_test_btn, "🚀", "测速中...")
                 
                 # 重置显示状态
                 self.speed_value_label.configure(text="0.00", text_color="#FF9800")
@@ -1053,10 +1063,97 @@ class SettingsDialog(ctk.CTkToplevel):
             
             finally:
                 # 恢复按钮
-                self.speed_test_btn.configure(state="normal", text="🚀 开始测速")
+                self.speed_test_btn.configure(state="normal")
+                update_icon_button(self.speed_test_btn, "🚀", "开始测速")
         
         # 在后台线程执行测速
         threading.Thread(target=test_thread, daemon=True).start()
+
+    def _create_clear_cache_section(self, parent):
+        """创建清理 DLC 缓存模块"""
+        section_frame = ctk.CTkFrame(parent, fg_color="#FFFFFF", corner_radius=8)
+        section_frame.pack(fill="x", padx=20, pady=(0, 15))
+
+        content_frame = ctk.CTkFrame(section_frame, fg_color="transparent")
+        content_frame.pack(fill="x", padx=15, pady=15)
+
+        left_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        left_frame.pack(side="left", fill="both", expand=True)
+
+        pack_section_header(left_frame, "🗑", "清理 DLC 缓存", bottom_padding=10)
+        pack_description_lines(
+            left_frame,
+            [
+                "删除已下载的 DLC 压缩包缓存",
+                "清理后下次下载需重新从服务器获取",
+            ],
+            line_spacing=10,
+        )
+
+        right_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        right_frame.pack(side="right", padx=(10, 0))
+
+        self.clear_cache_btn = ctk.CTkButton(
+            right_frame,
+            text="清理缓存",
+            command=self._on_clear_cache,
+            width=120,
+            height=35,
+            font=ctk.CTkFont(size=14),
+            corner_radius=8,
+            fg_color="#42A5F5",
+            hover_color="#1E88E5",
+        )
+        self.clear_cache_btn.pack()
+
+    def _create_check_update_section(self, parent):
+        """创建检查更新模块"""
+        section_frame = ctk.CTkFrame(parent, fg_color="#FFFFFF", corner_radius=8)
+        section_frame.pack(fill="x", padx=20, pady=(0, 15))
+
+        content_frame = ctk.CTkFrame(section_frame, fg_color="transparent")
+        content_frame.pack(fill="x", padx=15, pady=15)
+
+        left_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        left_frame.pack(side="left", fill="both", expand=True)
+
+        pack_section_header(left_frame, "↻", "检查更新", bottom_padding=10)
+        pack_description_lines(
+            left_frame,
+            [
+                "检查程序新版本与系统公告",
+                "如有更新可在对话框中下载安装",
+            ],
+            line_spacing=10,
+        )
+
+        right_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        right_frame.pack(side="right", padx=(10, 0))
+
+        self.check_update_btn = ctk.CTkButton(
+            right_frame,
+            text="检查更新",
+            command=self._on_check_update,
+            width=120,
+            height=35,
+            font=ctk.CTkFont(size=14),
+            corner_radius=8,
+            fg_color="#42A5F5",
+            hover_color="#1E88E5",
+        )
+        self.check_update_btn.pack()
+
+    def _on_clear_cache(self):
+        if not self.clear_cache_callback:
+            messagebox.showwarning("提示", "清理缓存功能不可用")
+            return
+        self.clear_cache_callback()
+
+    def _on_check_update(self):
+        if not self.check_update_callback:
+            messagebox.showwarning("提示", "检查更新功能不可用")
+            return
+        self.check_update_callback(status_button=self.check_update_btn)
 
     def _create_advanced_tab(self):
         """创建高级功能选项卡"""
@@ -1084,25 +1181,15 @@ class SettingsDialog(ctk.CTkToplevel):
         left_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
         left_frame.pack(side="left", fill="both", expand=True)
 
-        title_label = ctk.CTkLabel(
+        pack_section_header(left_frame, "🚀", "Paradox 启动器", bottom_padding=10)
+        pack_description_lines(
             left_frame,
-            text="🚀 Paradox 启动器",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#1976D2",
-            anchor="w"
+            [
+                "从 GitLink 国内镜像下载 Paradox 启动器安装包（约 170 MB）",
+                "适用于启动器损坏、无法打开或需要重装的情况",
+            ],
+            line_spacing=10,
         )
-        title_label.pack(anchor="w", pady=(0, 5))
-
-        desc_label = ctk.CTkLabel(
-            left_frame,
-            text="从 GitLink 国内镜像下载 Paradox 启动器安装包（约 170 MB）\n"
-                 "适用于启动器损坏、无法打开或需要重装的情况",
-            font=ctk.CTkFont(size=12),
-            text_color="#666666",
-            anchor="w",
-            justify="left"
-        )
-        desc_label.pack(anchor="w")
 
         right_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
         right_frame.pack(side="right", padx=(10, 0))
@@ -1298,23 +1385,12 @@ class SettingsDialog(ctk.CTkToplevel):
         left_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
         left_frame.pack(side="left", fill="both", expand=True)
         
-        title_label = ctk.CTkLabel(
+        pack_section_header(left_frame, "🔧", "补丁恢复", bottom_padding=10)
+        pack_description_lines(
             left_frame,
-            text="🔧 补丁恢复",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#1976D2",
-            anchor="w"
+            ["如果补丁文件被杀毒软件误删，可以点击右侧按钮重新下载"],
+            line_spacing=10,
         )
-        title_label.pack(anchor="w", pady=(0, 5))
-        
-        desc_label = ctk.CTkLabel(
-            left_frame,
-            text="如果补丁文件被杀毒软件误删，可以点击右侧按钮重新下载",
-            font=ctk.CTkFont(size=12),
-            text_color="#666666",
-            anchor="w"
-        )
-        desc_label.pack(anchor="w")
         
         # 右侧：恢复按钮
         right_frame = ctk.CTkFrame(content_frame, fg_color="transparent")

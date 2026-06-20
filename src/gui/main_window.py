@@ -17,6 +17,7 @@ from ..config import VERSION, REQUEST_TIMEOUT, RETRY_TIMES
 from ..core import DLCManager, DLCDownloader, DLCInstaller, PatchManager
 from ..core.updater import AutoUpdater
 from .update_dialog import UpdateDialog
+from .ui_helpers import create_icon_button, update_icon_button, pack_section_header, pack_description_lines, set_button_content, is_icon_button
 from ..utils import Logger, PathUtils, SteamUtils
 
 
@@ -670,103 +671,87 @@ class MainWindowCTk:
         left_btn_container = ctk.CTkFrame(button_frame, fg_color="transparent")
         left_btn_container.grid(row=0, column=0, sticky="w", padx=(15, 10), pady=(12, 12))
         
-        # 卸载DLC按钮（次要 - 浅蓝）
-        restore_btn = ctk.CTkButton(
+        # 卸载本程序安装的 DLC（次要 - 浅蓝）
+        create_icon_button(
             left_btn_container,
-            text="🔄 卸载DLC",
-            command=self.restore_game,
-            width=130,
+            "↺",
+            "卸载程序DLC",
+            self.restore_game,
+            width=150,
             height=45,
-            font=ctk.CTkFont(size=14, weight="bold"),
+            text_font=ctk.CTkFont(size=14, weight="bold"),
             corner_radius=8,
             fg_color="#42A5F5",
             hover_color="#1E88E5",
-            text_color="#FFFFFF"
-        )
-        restore_btn.pack(side="left", padx=(0, 10))
+            text_color="#FFFFFF",
+        ).pack(side="left", padx=(0, 10))
         
         # 移除补丁按钮（次要 - 浅蓝）
-        self.remove_patch_btn = ctk.CTkButton(
+        self.remove_patch_btn = create_icon_button(
             left_btn_container,
-            text="❌ 移除补丁",
-            command=self.remove_patch,
+            "✕",
+            "移除补丁",
+            self.remove_patch,
             state="disabled",
             width=130,
             height=45,
-            font=ctk.CTkFont(size=14, weight="bold"),
+            text_font=ctk.CTkFont(size=14, weight="bold"),
             corner_radius=8,
             fg_color="#42A5F5",
             hover_color="#1E88E5",
-            text_color="#FFFFFF"
+            text_color="#FFFFFF",
         )
         self.remove_patch_btn.pack(side="left", padx=(0, 10))
-        
-        # 清理缓存按钮（次要 - 浅蓝）
-        self.clear_cache_btn = ctk.CTkButton(
-            left_btn_container,
-            text="🗑️ 清理缓存",
-            command=self._clear_cache,
-            width=130,
-            height=45,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            corner_radius=8,
-            fg_color="#42A5F5",
-            hover_color="#1E88E5",
-            text_color="#FFFFFF"
-        )
-        self.clear_cache_btn.pack(side="left")
         
         # 右侧按钮组(前进/执行区)
         right_btn_container = ctk.CTkFrame(button_frame, fg_color="transparent")
         right_btn_container.grid(row=0, column=1, sticky="e", padx=(10, 15), pady=(12, 12))
-        
-        # 更新按钮
-        self.update_btn = ctk.CTkButton(
-            right_btn_container,
-            text="🔄 检查更新",
-            command=self.check_update,
-            width=130,
-            height=45,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            corner_radius=8,
-            fg_color="#42A5F5",
-            hover_color="#1E88E5",
-            text_color="#FFFFFF"
-        )
-        self.update_btn.pack(side="left", padx=(0, 10))
 
-        self.repair_btn = ctk.CTkButton(
+        self.repair_btn = create_icon_button(
             right_btn_container,
-            text="🛠️ 一键修复",
-            command=self.one_click_repair,
+            "🛠",
+            "一键修复",
+            self.one_click_repair,
             state="disabled",
             width=130,
             height=45,
-            font=ctk.CTkFont(size=14, weight="bold"),
+            text_font=ctk.CTkFont(size=14, weight="bold"),
             corner_radius=8,
             fg_color="#42A5F5",
             hover_color="#1E88E5",
-            text_color="#FFFFFF"
+            text_color="#FFFFFF",
         )
         self.repair_btn.pack(side="left", padx=(0, 10))
         
         # 执行按钮（合并补丁 & 下载功能）
-        self.execute_btn = ctk.CTkButton(
+        self.execute_btn = create_icon_button(
             right_btn_container,
-            text="🔓 一键解锁",
-            command=self.toggle_execute,
+            "🔓",
+            "一键解锁",
+            self.toggle_execute,
             state="disabled",
             width=280,
             height=45,
-            font=ctk.CTkFont(size=14, weight="bold"),
+            text_font=ctk.CTkFont(size=14, weight="bold"),
             corner_radius=8,
             fg_color="#1976D2",
             hover_color="#1565C0",
-            text_color="#FFFFFF"
+            text_color="#FFFFFF",
         )
         self.execute_btn.pack(side="left", padx=(0, 10))
         
         # 下载安装按钮的行为已合并到 execute_btn 中，此按钮移除
+        
+    def _set_execute_btn_label(self, mode: str):
+        """更新主操作按钮的图标与文字"""
+        labels = {
+            "unlock": ("🔓", "一键解锁"),
+            "pause": ("⏸", "暂停下载"),
+            "continue": ("▶", "继续下载"),
+            "updating": ("↻", "更新中..."),
+        }
+        icon, text = labels.get(mode, labels["unlock"])
+        update_icon_button(self.execute_btn, icon, text)
         
     def _create_log_section(self, parent):
         """创建日志区域"""
@@ -896,7 +881,7 @@ class MainWindowCTk:
             },
             'disk': {
                 'title': '磁盘空间不足',
-                'message': '磁盘空间不足，无法完成操作\n\n建议：\n• 清理磁盘空间\n• 更换安装目录\n• 使用「清理缓存」功能释放空间'
+                'message': '磁盘空间不足，无法完成操作\n\n建议：\n• 清理磁盘空间\n• 更换安装目录\n• 在「设置 → 常规设置」中清理 DLC 缓存'
             },
             'permission': {
                 'title': '权限不足',
@@ -1012,7 +997,8 @@ class MainWindowCTk:
                     # 设置下载暂停状态
                     self.download_paused = True
                     # 更新按钮文本
-                    self.execute_btn.configure(text="▶️ 继续下载")
+                    self.execute_btn.configure(state="normal")
+                    self._set_execute_btn_label("continue")
                     # 删除状态文件
                     state_file.unlink()
                     self.logger.info("下载状态已恢复")
@@ -1700,7 +1686,8 @@ class MainWindowCTk:
         
         # 设置下载状态
         self.is_downloading = True
-        self.execute_btn.configure(text="⏸️ 暂停下载", state="normal")
+        self.execute_btn.configure(state="normal")
+        self._set_execute_btn_label("pause")
         if hasattr(self, "repair_btn"):
             self.repair_btn.configure(state="disabled")
         
@@ -1716,7 +1703,7 @@ class MainWindowCTk:
         
         self.is_downloading = True
         self.download_paused = False
-        self.execute_btn.configure(text="⏸️ 暂停下载")
+        self._set_execute_btn_label("pause")
         self.logger.info(f"\n开始下载 {len(selected)} 个DLC...")
         # 在下载开始前，将当前选择的最佳源显示在UI（若已选择）
         try:
@@ -1983,7 +1970,7 @@ class MainWindowCTk:
                         if getattr(self, 'download_paused', False):
                             try:
                                 self.download_paused = False
-                                self.root.after(0, lambda: self.execute_btn.configure(text='⏸️ 暂停下载'))
+                                self.root.after(0, lambda: self._set_execute_btn_label("pause"))
                                 self.logger.info('重新开始下载')
                             except Exception:
                                 pass
@@ -2062,7 +2049,7 @@ class MainWindowCTk:
                                                             # 标记 UI 为暂停状态
                                                             self.download_paused = True
                                                             self.current_downloader.pause()
-                                                            self.root.after(0, lambda: self.execute_btn.configure(text='▶️ 继续下载'))
+                                                            self.root.after(0, lambda: self._set_execute_btn_label("continue"))
                                                             # 显示重测状态
                                                             self.root.after(0, lambda: self._start_retest_ui("暂停并测速..."))
                                                             self.logger.info('下载已暂停，正在切换源...')
@@ -2090,7 +2077,7 @@ class MainWindowCTk:
                                                             self.logger.info('未发现更快源，恢复当前下载')
                                                             self.current_downloader.resume()
                                                             self.download_paused = False
-                                                            self.root.after(0, lambda: self.execute_btn.configure(text='⏸️ 暂停下载'))
+                                                            self.root.after(0, lambda: self._set_execute_btn_label("pause"))
                                                             # 恢复UI状态
                                                             self.root.after(0, self._hide_server_error)
                                                             # 结束重测UI
@@ -2334,10 +2321,7 @@ class MainWindowCTk:
             # 重新加载DLC列表（在主线程中执行，确保下载状态已重置）
             # 使用 after(0) 确保在主线程的下一个事件循环中执行
             self.root.after(0, self._reload_dlc_list_after_download)
-            self.root.after(0, lambda: self.execute_btn.configure(
-                text="🔓 一键解锁", 
-                state="normal"
-            ))
+            self.root.after(0, lambda: self._set_execute_btn_label("unlock"))
             if hasattr(self, "repair_btn"):
                 self.root.after(0, lambda: self.repair_btn.configure(state="normal"))
         
@@ -2348,7 +2332,7 @@ class MainWindowCTk:
         if self.current_downloader:
             self.current_downloader.pause()
             self.download_paused = True
-            self.execute_btn.configure(text="▶️ 继续下载")
+            self._set_execute_btn_label("continue")
             self.logger.info("下载已暂停")
     
     def resume_download(self):
@@ -2356,7 +2340,7 @@ class MainWindowCTk:
         if self.current_downloader:
             self.current_downloader.resume()
             self.download_paused = False
-            self.execute_btn.configure(text="⏸️ 暂停下载")
+            self._set_execute_btn_label("pause")
             self.logger.info("继续下载...")
         
     def restore_game(self):
@@ -2369,7 +2353,7 @@ class MainWindowCTk:
         operations = self.dlc_installer.operation_log.get_operations()
         
         if not operations:
-            messagebox.showinfo("提示", "没有需要卸载的DLC")
+            messagebox.showinfo("提示", "没有通过本程序安装的 DLC")
             return
         
         result = messagebox.askyesno("确认", 
@@ -2404,11 +2388,13 @@ class MainWindowCTk:
     def _apply_patch_status_ui(self, status):
         """在主线程应用补丁状态到 UI"""
         if status.get('patched'):
-            self.execute_btn.configure(text="🔓 一键解锁", state="normal")
+            self.execute_btn.configure(state="normal")
+            self._set_execute_btn_label("unlock")
             self.remove_patch_btn.configure(state="normal")
             self.logger.info("检测到已应用补丁")
         else:
-            self.execute_btn.configure(text="🔓 一键解锁", state="normal")
+            self.execute_btn.configure(state="normal")
+            self._set_execute_btn_label("unlock")
             self.remove_patch_btn.configure(state="disabled")
 
     def _apply_patch_status_ui_fallback(self):
@@ -2689,7 +2675,9 @@ class MainWindowCTk:
             settings = SettingsDialog(
                 self.root, 
                 main_logger=self.logger,
-                is_downloading_callback=lambda: self.is_downloading
+                is_downloading_callback=lambda: self.is_downloading,
+                check_update_callback=self.check_update,
+                clear_cache_callback=self._clear_cache,
             )
             
         except Exception as e:
@@ -2760,16 +2748,25 @@ class MainWindowCTk:
         updater = AutoUpdater()
         updater.check_for_updates(on_update_check_complete)
     
-    def check_update(self):
+    def check_update(self, status_button=None):
         """检查程序更新"""
-        # 显示检查中提示
-        self.update_btn.configure(state="disabled", text="🔄 检查中...")
-        self.root.update()
+        btn = status_button or getattr(self, "update_btn", None)
+        if btn is not None:
+            btn.configure(state="disabled")
+            if is_icon_button(btn):
+                set_button_content(btn, icon="↻", text="检查中...")
+            else:
+                btn.configure(text="检查中...")
+            self.root.update()
 
         def on_update_check_complete(update_info, announcement):
-            # 使用 after 确保在主线程中更新UI
             def update_ui():
-                self.update_btn.configure(state="normal", text="🔄 检查更新")
+                if btn is not None:
+                    btn.configure(state="normal")
+                    if is_icon_button(btn):
+                        set_button_content(btn, icon="↻", text="检查更新")
+                    else:
+                        btn.configure(text="检查更新")
 
                 try:
                     # 手动检查时，即使公告被禁用也要显示（用户主动请求）

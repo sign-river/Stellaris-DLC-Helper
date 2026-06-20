@@ -19,6 +19,7 @@ import json
 import time
 
 from ..core.updater import AutoUpdater, UpdateInfo
+from .ui_helpers import update_icon_button, set_button_content
 
 
 class UpdateDialog(ctk.CTkToplevel):
@@ -118,7 +119,11 @@ class UpdateDialog(ctk.CTkToplevel):
         """禁用主窗口的下载功能"""
         try:
             if hasattr(self.master, 'execute_btn'):
-                self.master.execute_btn.configure(state="disabled", text="🔄 更新中...")
+                self.master.execute_btn.configure(state="disabled")
+                if hasattr(self.master, '_set_execute_btn_label'):
+                    self.master._set_execute_btn_label("updating")
+                else:
+                    set_button_content(self.master.execute_btn, icon="↻", text="更新中...")
             if hasattr(self.master, 'update_btn'):
                 self.master.update_btn.configure(state="disabled")
         except Exception as e:
@@ -128,15 +133,24 @@ class UpdateDialog(ctk.CTkToplevel):
         """重新启用主窗口的下载功能"""
         try:
             if hasattr(self.master, 'execute_btn'):
-                # 根据当前状态设置正确的按钮文本
+                self.master.execute_btn.configure(state="normal")
                 if hasattr(self.master, 'download_paused') and self.master.download_paused:
-                    self.master.execute_btn.configure(state="normal", text="▶️ 继续下载")
+                    if hasattr(self.master, '_set_execute_btn_label'):
+                        self.master._set_execute_btn_label("continue")
+                    else:
+                        set_button_content(self.master.execute_btn, icon="▶", text="继续下载")
                 elif hasattr(self.master, 'is_downloading') and self.master.is_downloading:
-                    self.master.execute_btn.configure(state="normal", text="⏸️ 暂停下载")
+                    if hasattr(self.master, '_set_execute_btn_label'):
+                        self.master._set_execute_btn_label("pause")
+                    else:
+                        set_button_content(self.master.execute_btn, icon="⏸", text="暂停下载")
+                elif hasattr(self.master, '_set_execute_btn_label'):
+                    self.master._set_execute_btn_label("unlock")
                 else:
-                    self.master.execute_btn.configure(state="normal", text="🔓 一键解锁")
+                    set_button_content(self.master.execute_btn, icon="🔓", text="一键解锁")
             if hasattr(self.master, 'update_btn'):
-                self.master.update_btn.configure(state="normal", text="🔄 检查更新")
+                self.master.update_btn.configure(state="normal")
+                set_button_content(self.master.update_btn, icon="↻", text="检查更新")
         except Exception as e:
             self.logger.warning(f"启用下载功能失败: {e}")
 

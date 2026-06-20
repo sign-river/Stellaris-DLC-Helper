@@ -3,7 +3,7 @@
   "stellaris_app_id": "281990",
   "settings": {
     "default_source": "gitlink",
-    "dismissed_announcement_version": "1.0.4"
+    "dismissed_announcement_version": "1.0.7"
   },
   "server": {
     "update_url_base": "https://gitlink.org.cn/signriver/file-warehouse/releases/download/v/",
@@ -31,9 +31,23 @@
     "log_subdir": "operation_logs"
   },
   "fonts": {
-    "font1": ["Microsoft YaHei UI", 20, "bold"],
-    "font2": ["Microsoft YaHei UI", 16, "bold"],
-    "font3": ["Microsoft YaHei UI", 12],
-    "font4": ["Microsoft YaHei UI", 10]
+    "font1": [
+      "Microsoft YaHei UI",
+      20,
+      "bold"
+    ],
+    "font2": [
+      "Microsoft YaHei UI",
+      16,
+      "bold"
+    ],
+    "font3": [
+      "Microsoft YaHei UI",
+      12
+    ],
+    "font4": [
+      "Microsoft YaHei UI",
+      10
+    ]
   }
 }
