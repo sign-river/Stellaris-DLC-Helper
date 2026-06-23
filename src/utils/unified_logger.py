@@ -121,8 +121,9 @@ class UnifiedLogger:
             encoding='utf-8'
         )
         error_handler.setLevel(logging.ERROR)
-        error_formatter = logging.Formatter(
-            '[%(asctime)s] %(name)s - %(levelname)s: %(message)s\n%(pathname)s:%(lineno)d\n',
+        error_formatter = _ErrorFormatter(
+            '[%(asctime)s] %(name)s - %(levelname)s: %(message)s\n'
+            '位置: %(pathname)s:%(lineno)d\n',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         error_handler.setFormatter(error_formatter)
@@ -309,6 +310,18 @@ class UnifiedLogger:
             return str(self.log_dir / 'errors.log')
         else:
             return str(self.log_dir / 'stellaris_dlc_helper.log')
+
+
+class _ErrorFormatter(logging.Formatter):
+    """错误日志格式化器，自动附加异常堆栈"""
+
+    def format(self, record):
+        formatted = super().format(record)
+        if record.exc_info:
+            formatted += self.formatException(record.exc_info)
+        elif record.stack_info:
+            formatted += self.formatStack(record.stack_info)
+        return formatted + "\n"
 
 
 class GUIHandler(logging.Handler):

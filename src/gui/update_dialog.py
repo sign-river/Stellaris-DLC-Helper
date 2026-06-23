@@ -55,6 +55,8 @@ class UpdateDialog(ctk.CTkToplevel):
         self.updater = AutoUpdater()
         self.logger = logging.getLogger(__name__)
         self.dont_show_again_var = ctk.BooleanVar(value=False)
+        self._closed = False
+        self._download_in_progress = False
         
         try:
             # 根据是否有更新设置标题
@@ -321,6 +323,7 @@ class UpdateDialog(ctk.CTkToplevel):
         if self.dont_show_again_var.get():
             self._save_announcement_dismissed()
         
+        self._closed = True
         try:
             self.grab_release()  # 释放模态锁
         except Exception:
@@ -389,6 +392,7 @@ class UpdateDialog(ctk.CTkToplevel):
                 )
                 if res:
                     # 仅关闭更新对话框，不重新打开
+                    self._closed = True
                     try:
                         self.grab_release()  # 释放模态锁
                     except Exception:
@@ -399,6 +403,7 @@ class UpdateDialog(ctk.CTkToplevel):
                     # 取消关闭，继续保留更新对话
                     return
             else:
+                self._closed = True
                 try:
                     self.grab_release()  # 释放模态锁
                 except Exception:
@@ -407,6 +412,7 @@ class UpdateDialog(ctk.CTkToplevel):
                 self.destroy()
         except Exception as e:
             self.logger.warning(f"处理稍后提醒时出错: {e}")
+            self._closed = True
             try:
                 self.grab_release()  # 释放模态锁
             except Exception:
@@ -427,20 +433,27 @@ class UpdateDialog(ctk.CTkToplevel):
 
         # 开始下载
         def download_thread():
+            self._download_in_progress = True
             try:
                 zip_path = self.updater.download_update(
                     self.update_info,
-                    self._update_progress
+                    self._update_progress,
+                    cancel_check=lambda: self._closed,
                 )
 
+                if self._closed:
+                    return
                 if zip_path:
                     self.after(0, lambda: self._show_install_ui(zip_path))
                 else:
                     self.after(0, lambda: self._show_error("下载失败"))
 
             except Exception as e:
-                self.logger.error(f"下载更新失败: {e}")
-                self.after(0, lambda: self._show_error(f"下载失败: {e}"))
+                if not self._closed:
+                    self.logger.error(f"下载更新失败: {e}", exc_info=True)
+                    self.after(0, lambda: self._show_error(f"下载失败: {e}"))
+            finally:
+                self._download_in_progress = False
 
         thread = threading.Thread(target=download_thread, daemon=True)
         thread.start()
@@ -466,29 +479,41 @@ class UpdateDialog(ctk.CTkToplevel):
         self._indeterminate_animation = None
 
     def _update_progress(self, current: int, total: int):
-        """更新下载进度"""
-        if total > 0:
-            # 有总大小：显示百分比进度
-            if self._indeterminate_animation:
-                self.after_cancel(self._indeterminate_animation)
-                self._indeterminate_animation = None
-            
-            progress = current / total
-            self.progress_bar.set(progress)
-            percentage = int(progress * 100)
-            
-            # 转换为可读的大小格式
-            current_mb = current / (1024 * 1024)
-            total_mb = total / (1024 * 1024)
-            self.progress_label.configure(text=f"{percentage}% ({current_mb:.1f}/{total_mb:.1f} MB)")
-        else:
-            # 无总大小：显示已下载量 + 不确定进度条动画
-            current_mb = current / (1024 * 1024)
-            self.progress_label.configure(text=f"正在下载... ({current_mb:.1f} MB)")
-            
-            # 启动不确定进度条动画（如果还没启动）
-            if not self._indeterminate_animation:
-                self._start_indeterminate_animation()
+        """更新下载进度（线程安全：由主线程执行）"""
+        if self._closed:
+            return
+
+        def _apply():
+            if self._closed:
+                return
+            try:
+                if not self.winfo_exists():
+                    return
+                if total > 0:
+                    if self._indeterminate_animation:
+                        self.after_cancel(self._indeterminate_animation)
+                        self._indeterminate_animation = None
+
+                    progress = current / total
+                    self.progress_bar.set(progress)
+                    percentage = int(progress * 100)
+                    current_mb = current / (1024 * 1024)
+                    total_mb = total / (1024 * 1024)
+                    self.progress_label.configure(
+                        text=f"{percentage}% ({current_mb:.1f}/{total_mb:.1f} MB)"
+                    )
+                else:
+                    current_mb = current / (1024 * 1024)
+                    self.progress_label.configure(text=f"正在下载... ({current_mb:.1f} MB)")
+                    if not self._indeterminate_animation:
+                        self._start_indeterminate_animation()
+            except Exception:
+                pass
+
+        try:
+            self.after(0, _apply)
+        except Exception:
+            pass
     
     def _start_indeterminate_animation(self):
         """启动不确定进度条的动画效果"""
@@ -731,6 +756,10 @@ class UpdateDialog(ctk.CTkToplevel):
             )
             if not res:
                 return
+
+        self._closed = True
+        if self._download_in_progress:
+            self.logger.info("用户关闭更新对话框，取消进行中的下载")
 
         try:
             self.grab_release()  # 释放模态锁

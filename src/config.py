@@ -9,7 +9,7 @@
 from .config_loader import get_config
 
 # 版本号（从 config.json 读取）
-VERSION = get_config("version", default="1.0.7")
+VERSION = get_config("version", default="1.0.8")
 
 # Stellaris 游戏 AppID
 STELLARIS_APP_ID = get_config("stellaris_app_id", default="281990")

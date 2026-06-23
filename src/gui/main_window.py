@@ -1846,121 +1846,20 @@ class MainWindowCTk:
                         elif display_speed > 100:
                             display_speed = 99.99
                         
-                        # 服务器质量检测逻辑
-                        # 只有在下载时间超过10秒后才开始检测服务器问题，避免小文件误判和频繁测速
-                        # 使用 download_start_time 计算实际下载时长
+                        # 慢速提醒（GitLink 单源，不再尝试切换源或暂停下载）
                         download_duration = current_time - (progress_callback.download_start_time or progress_callback.last_time)
-                        
-                        # 优化检测条件：
-                        # 1. 下载时间 > 10秒（从5秒改为10秒，避免过早触发）
-                        # 2. 速度 < 0.3 MB/s（从1.0降低到0.3，只有极慢的情况才触发）
-                        # 3. 已下载数据 > 5MB（避免刚开始下载时网络不稳定导致误判）
-                        if (not self.download_paused and 
-                            download_duration > 10.0 and 
-                            display_speed < 0.3 and 
+                        if (not self.download_paused and
+                            download_duration > 30.0 and
+                            display_speed < 0.1 and
                             downloaded > 5 * 1024 * 1024):
-                            progress_callback.slow_speed_count += 1
-                            
-                            # 如果连续5次慢速（从3次改为5次），才检测服务器连接
-                            if progress_callback.slow_speed_count >= 5 and not progress_callback.server_issue_detected:
-                                # 每30秒最多检查一次服务器（从10秒改为30秒，大幅降低频率）
-                                if current_time - progress_callback.last_server_check >= 30:
-                                    progress_callback.last_server_check = current_time
-                                    
-                                    # 检测服务器连接质量
-                                    if self._check_server_connection(self.current_download_url):
-                                        # 服务器正常，重置计数
-                                        progress_callback.slow_speed_count = 0
-                                    else:
-                                        # 服务器有问题，重新测速并切换源
-                                        progress_callback.server_issue_detected = True
-                                        self.logger.warning("检测到当前下载源速度异常，正在重新测速选择新源...")
-                                        
-                                        # 在后台线程中重新测速
-                                        def retest_thread():
-                                            try:
-                                                # 在 UI 上显示测速状态并暂停当前下载，以免并发状态冲突
-                                                try:
-                                                    self.root.after(0, lambda: self._start_retest_ui("正在测速..."))
-                                                    if hasattr(self, 'current_downloader') and self.current_downloader:
-                                                        try:
-                                                            self.current_downloader.pause()
-                                                        except Exception:
-                                                            pass
-                                                except Exception:
-                                                    pass
-
-                                                new_source, new_test_url = self.dlc_manager.source_manager.get_best_download_source(
-                                                    silent=True,
-                                                    log_callback=self.logger.info
-                                                )
-                                                # 结束 re-test UI
-                                                try:
-                                                    self.root.after(0, self._stop_retest_ui)
-                                                except Exception:
-                                                    pass
-
-                                                if new_source != self.best_download_source:
-                                                    self.best_download_source = new_source
-                                                    self.logger.info(f"切换到新下载源: {new_source}")
-                                                    # 通知UI更新源显示
-                                                    if hasattr(progress_callback, 'update_source'):
-                                                        display_name = {
-                                                            "r2": "R2云存储",
-                                                            "domestic_cloud": "国内云服务器", 
-                                                            "gitee": "Gitee",
-                                                            "github": "GitHub"
-                                                        }.get(new_source, new_source)
-                                                        progress_callback.update_source(display_name)
-                                                    
-                                                    # 标记 pending switch, 停止当前下载器，让它重新开始
-                                                    try:
-                                                        self._pending_switch_url = new_test_url
-                                                        self._pending_switch_source = new_source
-                                                    except Exception:
-                                                        pass
-                                                    if hasattr(self, 'current_downloader') and self.current_downloader:
-                                                        # 停止当前下载器（但保留 session），保留当前 file 的 tmp 以便尝试续传
-                                                        self.current_downloader.stop()
-                                                        # 尝试保留当前下载文件的 tmp
-                                                        try:
-                                                            if self.current_download_url:
-                                                                preserve_filename = self.current_download_url.split('/')[-1]
-                                                            else:
-                                                                preserve_filename = None
-                                                        except Exception:
-                                                            preserve_filename = None
-                                                        # 清理其它未完成临时文件，但保留当前文件的临时文件
-                                                        self._cleanup_partial_downloads(preserve_filename=preserve_filename)
-                                                    
-                                                    # 重置服务器问题标志
-                                                    progress_callback.server_issue_detected = False
-                                                    progress_callback.slow_speed_count = 0
-                                                else:
-                                                    # 测速结果相同，说明这是最优源了，不再重新测速
-                                                    # 记录一个标志，避免再次触发测速
-                                                    progress_callback.server_issue_detected = True  # 保持True避免重复测速
-                                                    progress_callback.slow_speed_count = 0  # 重置计数
-                                                    # 给用户一个提示：当前已是最佳源
-                                                    self.logger.warning(f"当前源({self.best_download_source})已是测速最优选择，将继续使用")
-                                            except Exception as e:
-                                                self.logger.error(f"重新测速失败: {e}")
-                                                # 发生错误时也要避免重复触发
-                                                progress_callback.server_issue_detected = True
-                                        
-                                        import threading
-                                        threading.Thread(target=retest_thread, daemon=True).start()
-                        else:
-                            # 速度恢复正常，重置计数
-                            if progress_callback.slow_speed_count > 0:
-                                progress_callback.slow_speed_count -= 1
-                            
-                            # 如果之前检测到服务器问题，现在检查是否恢复（阈值调整为0.3 MB/s）
-                            if progress_callback.server_issue_detected and display_speed >= 0.3:
-                                # 速度恢复到0.3 MB/s以上，认为服务器恢复正常
-                                progress_callback.server_issue_detected = False
-                                self.logger.info("下载速度已恢复正常")
-                                self.root.after(0, self._hide_server_error)
+                            last_warn = getattr(progress_callback, 'last_slow_warning', 0)
+                            if current_time - last_warn >= 60:
+                                progress_callback.last_slow_warning = current_time
+                                mb = downloaded / (1024 * 1024)
+                                self.logger.warning(
+                                    f"下载速度较慢 ({display_speed:.2f} MB/s)，"
+                                    f"已下载 {mb:.1f} MB，请耐心等待或检查网络"
+                                )
                         
                         # 更新速度显示
                         self.root.after(0, lambda s=display_speed: self.speed_label.configure(text=f"{s:.2f} MB/s"))
@@ -2015,7 +1914,8 @@ class MainWindowCTk:
                                 pass
                         # 重置downloader状态以准备新的DLC下载（保留session连接）
                         if attempt == 1:  # 只在开始新DLC时重置，重试时不重置
-                            downloader.reset_for_new_dlc()
+                            downloader.stopped = False
+                            downloader.paused = False
                     except Exception:
                         pass
                     self.logger.info(f"\n{'='*50}")
@@ -2057,92 +1957,6 @@ class MainWindowCTk:
                     except Exception:
                         pass
 
-                    # 如果当前选定的是 Gitee 源，启动一个后台线程在下载过程中定期快速检测其它源速度（不影响当前下载）
-                    # 如果发现更快的源（例如速度 > 5MB/s），则切换到该源
-                    gitee_fast_switch_event = None
-                    gitee_retest_thread = None
-                    if current_source == 'gitee':
-                        import threading
-                        gitee_fast_switch_event = threading.Event()
-
-                        def _gitee_quick_retest(stop_event: threading.Event, dlc_key=dlc['key'], current_source_name=current_source):
-                            try:
-                                # 每次检查间隔 (秒)
-                                check_interval = 10
-                                required_speed = 5.0
-                                while not stop_event.is_set():
-                                    try:
-                                        res = self.dlc_manager.source_manager.find_first_source_above(required_speed, exclude=[current_source_name], silent=True, log_callback=self.logger.info, max_seconds=2.0, max_bytes=2*1024*1024)
-                                        if res:
-                                            new_source, new_url, measured_speed = res
-                                            # 如果找到更快的源，记录并触发切换
-                                            if new_source and new_source != getattr(self, 'best_download_source', None):
-                                                self.logger.info(f"检测到更快源: {new_source} ({measured_speed:.2f} MB/s)，准备切换")
-                                                self.best_download_source = new_source
-                                                # 记录等待切换的信息，先暂停当前下载器
-                                                try:
-                                                    self._pending_switch_url = new_url
-                                                    self._pending_switch_source = new_source
-                                                    if hasattr(self, 'current_downloader') and self.current_downloader:
-                                                        try:
-                                                            # 标记 UI 为暂停状态
-                                                            self.download_paused = True
-                                                            self.current_downloader.pause()
-                                                            self.root.after(0, lambda: self._set_execute_btn_label("continue"))
-                                                            # 显示重测状态
-                                                            self.root.after(0, lambda: self._start_retest_ui("暂停并测速..."))
-                                                            self.logger.info('下载已暂停，正在切换源...')
-                                                        except Exception:
-                                                            pass
-                                                except Exception:
-                                                    pass
-                                                # 现在开始停止以便主线程在下一次重试时重新创建 downloader 并使用新 URL
-                                                if hasattr(self, 'current_downloader') and self.current_downloader:
-                                                    try:
-                                                        self.current_downloader.stop()
-                                                    except Exception:
-                                                        pass
-                                                # 结束重测 UI（由主线程恢复状态）
-                                                try:
-                                                    self.root.after(0, self._stop_retest_ui)
-                                                except Exception:
-                                                    pass
-                                                return
-                                            else:
-                                                # 没有找到更快的源，恢复暂停的下载，并显示服务器错误
-                                                try:
-                                                    if hasattr(self, 'current_downloader') and self.current_downloader:
-                                                        try:
-                                                            self.logger.info('未发现更快源，恢复当前下载')
-                                                            self.current_downloader.resume()
-                                                            self.download_paused = False
-                                                            self.root.after(0, lambda: self._set_execute_btn_label("pause"))
-                                                            # 恢复UI状态
-                                                            self.root.after(0, self._hide_server_error)
-                                                            # 结束重测UI
-                                                            try:
-                                                                self.root.after(0, self._stop_retest_ui)
-                                                            except Exception:
-                                                                pass
-                                                        except Exception:
-                                                            pass
-                                                except Exception:
-                                                    pass
-                                    except Exception as _e:
-                                        # 记录异常但继续循环
-                                        self.logger.debug(f"gitee quick re-test 错误: {_e}")
-                                        # 等待下一次检测
-                                    for _ in range(int(check_interval)):
-                                        if stop_event.is_set():
-                                            break
-                                        time.sleep(1)
-                            except Exception as e:
-                                self.logger.debug(f"gitee quick re-test 线程终止: {e}")
-
-                        import time
-                        gitee_retest_thread = threading.Thread(target=_gitee_quick_retest, args=(gitee_fast_switch_event,), daemon=True)
-                        gitee_retest_thread.start()
-                    
                     # 在每次下载前重置进度回调相关状态，避免连续多个小文件之间共享计数导致误判
                     try:
                         progress_callback.last_time = None
@@ -2222,60 +2036,16 @@ class MainWindowCTk:
                         # 每个 DLC 安装成功后，标记需要刷新，但不立即刷新避免阻塞下载线程
                         # 将在所有下载完成后统一刷新
                         self._dlc_list_needs_refresh = True
-                        # 成功则停止 gitee 线程（如有）并跳出重试循环
-                        try:
-                            if gitee_fast_switch_event:
-                                gitee_fast_switch_event.set()
-                        except Exception:
-                            pass
-                        # 下载成功则跳出重试循环
+                        # 成功则跳出重试循环
                         break
                     except Exception as e:
                         last_exception = e
-                        # 结束时确保快速重测线程（gitee）停止，避免其跨文件持续运行
-                        try:
-                            if gitee_fast_switch_event:
-                                gitee_fast_switch_event.set()
-                        except Exception:
-                            pass
-
-                        # 如果是停止导致的异常（通过 stop() 发起），尝试刷新最佳源并继续重试
                         err_str = str(e)
-                        # 检测 stop 情况或连接异常
-                        if "下载已停止" in err_str or "Connection aborted" in err_str or "Read timed out" in err_str:
-                            # 重新测速选择源，如果选择了新源则尝试继续
-                            try:
-                                new_source, _ = self.dlc_manager.source_manager.get_best_download_source(
-                                    silent=True, log_callback=self.logger.info
-                                )
-                                if new_source and new_source != getattr(self, 'best_download_source', None):
-                                    self.best_download_source = new_source
-                                    self.logger.info(f"重试: 切换到新下载源: {new_source}")
-                                    # 更新 selected_url 和 fallback_urls
-                                    new_url = self.dlc_manager.source_manager.get_url_for_source(dlc['key'], dlc, new_source)
-                                    if new_url:
-                                        selected_url = new_url
-                                        selected_fallback_urls = [(u, s) for u, s in all_urls if s != new_source]
-                                        # 清理可能的残留临时文件并换源进行下一次重试
-                                        if hasattr(self, 'current_downloader') and self.current_downloader:
-                                            self.current_downloader.stop()
-                                            try:
-                                                if self.current_download_url:
-                                                    preserve_filename = self.current_download_url.split('/')[-1]
-                                                else:
-                                                    preserve_filename = None
-                                            except Exception:
-                                                preserve_filename = None
-                                            self._cleanup_partial_downloads(preserve_filename=preserve_filename)
-                                        # 继续下一次重试（attempt 增加）
-                                        continue
-                            except Exception as _e:
-                                self.logger.warning(f"重试测速选择源失败: {_e}")
-                        # 不是停止/切换导致的，或者没有找到新源则记录并进一步重试
-                        self.logger.warning(f"尝试下载第 {attempt} 次失败: {e}")
+                        self.logger.warning(
+                            f"尝试下载第 {attempt}/{max_attempts} 次失败: {dlc['name']} - {err_str}"
+                        )
                         if attempt >= max_attempts:
                             raise
-                        # 小延时后重试
                         import time
                         time.sleep(0.8)
                 
@@ -2310,18 +2080,6 @@ class MainWindowCTk:
                         self.logger.error(friendly_msg)
                         self.root.after(0, lambda e=e, msg=friendly_msg: self.logger.log_exception(msg, e))
                         failed += 1
-            
-            # 停止任何仍在运行的 gitee 快速重测线程（如果存在）
-            try:
-                if 'gitee_fast_switch_event' in locals() and gitee_fast_switch_event:
-                    gitee_fast_switch_event.set()
-                if 'gitee_retest_thread' in locals() and gitee_retest_thread and gitee_retest_thread.is_alive():
-                    try:
-                        gitee_retest_thread.join(timeout=1)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
             
             # 批量下载完成后关闭downloader释放连接
             try:

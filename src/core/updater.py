@@ -180,7 +180,8 @@ class ReliableDownloader:
         url: str,
         dest: Path,
         progress_callback: Optional[Callable[[int, int], None]] = None,
-        chunk_size: int = 8192
+        chunk_size: int = 8192,
+        cancel_check: Optional[Callable[[], bool]] = None,
     ) -> bool:
         """
         下载文件，失败后重新开始
@@ -188,36 +189,54 @@ class ReliableDownloader:
         返回:
             成功返回 True，失败返回 False
         """
+        downloaded = 0
+        total_size = 0
         try:
             # 如果文件已存在，删除重新下载
             if dest.exists():
-                self.logger.info(f"删除旧文件，重新下载")
+                self.logger.info(f"删除旧文件，重新下载: {dest.name}")
                 dest.unlink()
             
-            # 开始下载
-            response = self.session.get(url, stream=True, timeout=30)
+            self.logger.info(f"开始下载: {url} -> {dest}")
+            # connect 10s, read 120s（大文件慢网络需要更长读超时）
+            response = self.session.get(url, stream=True, timeout=(10, 120))
             response.raise_for_status()
             
             # 获取总大小
             total_size = int(response.headers.get('Content-Length', 0))
+            if total_size:
+                self.logger.info(f"文件大小: {total_size} bytes ({total_size / 1024 / 1024:.1f} MB)")
             
             downloaded = 0
             start_time = time.time()
             last_report_time = start_time
+            last_log_time = start_time
             
             dest.parent.mkdir(parents=True, exist_ok=True)
             
             with open(dest, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=chunk_size):
+                    if cancel_check and cancel_check():
+                        self.logger.info(f"下载已取消: {url} (已下载 {downloaded} bytes)")
+                        return False
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
                         
-                        # 进度回调（限流：每0.5秒更新一次）
                         current_time = time.time()
                         if progress_callback and (current_time - last_report_time) >= 0.5:
                             progress_callback(downloaded, total_size)
                             last_report_time = current_time
+                        # 每 30 秒记录一次进度心跳
+                        if current_time - last_log_time >= 30:
+                            pct = f"{downloaded * 100 // total_size}%" if total_size else "未知"
+                            elapsed = current_time - start_time
+                            speed = downloaded / elapsed if elapsed > 0 else 0
+                            self.logger.info(
+                                f"下载进度: {downloaded}/{total_size or '?'} bytes ({pct}), "
+                                f"速度 {speed / 1024:.1f} KB/s, 已耗时 {elapsed:.0f}s"
+                            )
+                            last_log_time = current_time
             
             # 最后一次进度回调
             if progress_callback:
@@ -225,12 +244,17 @@ class ReliableDownloader:
             
             elapsed = time.time() - start_time
             speed = downloaded / elapsed if elapsed > 0 else 0
-            self.logger.info(f"下载完成: {downloaded} bytes, 耗时: {elapsed:.2f}s, 速度: {speed/1024:.2f} KB/s")
+            self.logger.info(
+                f"下载完成: {downloaded} bytes, 耗时: {elapsed:.2f}s, 速度: {speed/1024:.2f} KB/s"
+            )
             
             return True
             
         except Exception as e:
-            self.logger.error(f"下载失败: {e}", exc_info=True)
+            self.logger.error(
+                f"下载失败: url={url}, 已下载={downloaded}/{total_size or '?'} bytes, 错误={e}",
+                exc_info=True,
+            )
             # 清理失败的下载文件
             if dest.exists():
                 try:
@@ -800,7 +824,7 @@ class AutoUpdater:
         
         self.manager.check_for_updates(_callback)
     
-    def download_update(self, update_info, progress_callback):
+    def download_update(self, update_info, progress_callback, cancel_check=None):
         """下载更新（兼容旧接口）"""
         # 转换为新的 UpdateManifest
         manifest = UpdateManifest(
@@ -824,9 +848,12 @@ class AutoUpdater:
             success = self.manager.downloader.download(
                 manifest.download_url,
                 download_path,
-                progress_callback=lambda d, t: progress_callback(d, t)
+                progress_callback=lambda d, t: progress_callback(d, t),
+                cancel_check=cancel_check,
             )
             
+            if cancel_check and cancel_check():
+                return None
             if success and manifest.checksum:
                 if FileVerifier.verify_checksum(download_path, manifest.checksum):
                     return download_path
