@@ -761,47 +761,10 @@ class AutoUpdater:
             update_url=UPDATE_CHECK_URL,
             use_https=True  # 强制 HTTPS
         )
-        
-        # 启动时清理残留文件
-        self._cleanup_leftover_new_files()
     
     def _cleanup_leftover_new_files(self):
-        """清理残留的 .new 文件"""
-        try:
-            app_root = self.manager.installer.get_app_root()
-            new_files = list(app_root.glob('*.new'))
-            
-            if new_files:
-                self.logger.info(f"发现 {len(new_files)} 个残留的 .new 文件")
-                for new_file in new_files:
-                    try:
-                        target_name = new_file.name[:-4]  # 移除 .new
-                        target_file = app_root / target_name
-                        
-                        # 不替换正在运行的主程序
-                        if getattr(sys, 'frozen', False):
-                            if target_file.resolve() == Path(sys.executable).resolve():
-                                self.logger.warning(f"跳过主程序: {target_file.name}")
-                                continue
-                        
-                        # 执行替换
-                        if target_file.exists():
-                            backup = target_file.with_suffix(target_file.suffix + '.old')
-                            target_file.rename(backup)
-                            new_file.rename(target_file)
-                            try:
-                                backup.unlink()
-                            except Exception:
-                                pass
-                            self.logger.info(f"✅ 已完成替换: {target_file.name}")
-                        else:
-                            new_file.rename(target_file)
-                            self.logger.info(f"✅ 已恢复文件: {target_file.name}")
-                            
-                    except Exception as e:
-                        self.logger.warning(f"处理 {new_file.name} 失败: {e}")
-        except Exception as e:
-            self.logger.warning(f"清理残留文件失败: {e}")
+        """兼容保留：文件清理已统一由启动流程中的 update_cleanup 处理"""
+        pass
     
     def check_for_updates(self, callback: Callable):
         """检查更新（兼容旧接口）"""

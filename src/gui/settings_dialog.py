@@ -662,8 +662,8 @@ class SettingsDialog(ctk.CTkToplevel):
             from pathlib import Path
             cache_dir = Path(PathUtils.get_cache_dir())
             
-            # 统计 .new 文件（临时文件）
-            temp_files = list(cache_dir.parent.glob("*.new"))
+            # 统计 .new / .old 临时文件
+            temp_files = list(cache_dir.parent.glob("*.new")) + list(cache_dir.parent.glob("*.old"))
             temp_size = sum(f.stat().st_size for f in temp_files if f.is_file())
             
             # 统计备份文件
@@ -709,7 +709,9 @@ class SettingsDialog(ctk.CTkToplevel):
             # 确认对话框
             result = messagebox.askyesno(
                 "确认清理",
-                "确定要清理临时文件吗？\n\n此操作将删除程序目录中的 *.new 文件。\n\n此操作不可恢复！",
+                "确定要清理临时文件吗？\n\n"
+                "此操作将删除程序目录中的 *.new、*.old 及过期的更新批处理配置。\n\n"
+                "此操作不可恢复！",
                 icon="warning"
             )
             
@@ -717,22 +719,28 @@ class SettingsDialog(ctk.CTkToplevel):
                 return
             
             from ..utils.path_utils import PathUtils
+            from ..utils.update_cleanup import run_startup_update_cleanup
             from pathlib import Path
-            cache_dir = Path(PathUtils.get_cache_dir())
+            app_root = Path(PathUtils.get_base_dir())
             deleted_count = 0
             deleted_size = 0
-            
-            # 清理 .new 文件
-            for new_file in cache_dir.parent.glob("*.new"):
-                if new_file.is_file():
-                    try:
-                        size = new_file.stat().st_size
-                        new_file.unlink()
-                        deleted_count += 1
-                        deleted_size += size
-                        self.logger.info(f"已删除: {new_file.name}")
-                    except Exception as e:
-                        self.logger.warning(f"删除文件失败 {new_file}: {e}")
+
+            def _delete_file(path: Path):
+                nonlocal deleted_count, deleted_size
+                if not path.is_file():
+                    return
+                try:
+                    size = path.stat().st_size
+                    path.unlink()
+                    deleted_count += 1
+                    deleted_size += size
+                    self.logger.info(f"已删除: {path.name}")
+                except Exception as e:
+                    self.logger.warning(f"删除文件失败 {path}: {e}")
+
+            run_startup_update_cleanup(app_root, self.logger)
+            for leftover in app_root.glob("*.new"):
+                _delete_file(leftover)
             
             # 格式化大小
             def format_size(size_bytes):

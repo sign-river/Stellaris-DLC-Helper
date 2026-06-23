@@ -6,6 +6,7 @@
 """
 
 import os
+import logging
 import tkinter as tk
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
@@ -100,12 +101,9 @@ class MainWindowCTk:
         
         # 延迟检测游戏路径并加载DLC列表（优先显示界面）
         self.root.after(500, self.auto_detect_and_load)
-        
-        # 检查是否刚刚完成更新
-        self.root.after(800, self._check_recent_update)
 
-        # 最后检查更新和公告（避免阻塞界面启动）
-        self.root.after(1500, self._auto_check_update)
+        # 启动维护（.new/.old 清理）→ 更新成功提示 → 公告检查，顺序执行避免模态冲突
+        self.root.after(100, self._run_startup_maintenance)
 
     def _open_error_docs(self, event=None):
         """在用户默认浏览器中打开在线错误/调试文档。
@@ -2464,44 +2462,67 @@ class MainWindowCTk:
             handle_error("打开设置失败", exc=e)
             messagebox.showerror("错误", f"打开设置失败:\n{str(e)}")
     
-    def _check_recent_update(self):
-        """检查是否刚刚完成更新，如果是则显示提示"""
+    def _run_startup_maintenance(self):
+        """后台清理更新残留文件，完成后串联启动提示流程"""
+        def worker():
+            try:
+                import sys
+                from pathlib import Path
+                from ..utils.update_cleanup import run_startup_update_cleanup
+                if getattr(sys, 'frozen', False):
+                    app_root = Path(sys.executable).parent
+                    run_startup_update_cleanup(app_root, logging.getLogger(__name__))
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"启动维护失败: {e}")
+            finally:
+                self.root.after(0, self._on_startup_update_flow)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_startup_update_flow(self):
+        """更新成功提示与公告检查顺序执行，避免 grab 冲突导致卡死"""
+        had_recent_update = self._check_recent_update()
+        # 刚弹完更新成功框时稍等再开公告，避免两个模态窗口争抢
+        delay = 600 if had_recent_update else 0
+        self.root.after(delay, self._auto_check_update)
+
+    def _check_recent_update(self) -> bool:
+        """检查是否刚刚完成更新，如果是则显示提示。返回是否显示了提示。"""
         try:
             import json
             from ..utils import PathUtils
-            
-            # 检查更新标记文件
+
             update_marker = PathUtils.get_cache_dir() / "update_completed.json"
-            if update_marker.exists():
+            if not update_marker.exists():
+                return False
+
+            try:
+                with open(update_marker, 'r', encoding='utf-8') as f:
+                    marker_data = json.load(f)
+
+                old_version = marker_data.get('old_version', '未知')
+                new_version = marker_data.get('new_version', VERSION)
+                message = (
+                    f"✅ 更新成功！\n\n"
+                    f"原版本：{old_version}\n"
+                    f"当前版本：{new_version}\n\n"
+                    f"程序已成功更新到最新版本。"
+                )
+                messagebox.showinfo("更新成功", message)
+            except Exception as e:
+                self.logger.log_exception("读取更新标记失败", e)
+            finally:
                 try:
-                    with open(update_marker, 'r', encoding='utf-8') as f:
-                        marker_data = json.load(f)
-                    
-                    old_version = marker_data.get('old_version', '未知')
-                    new_version = marker_data.get('new_version', VERSION)
-                    update_time = marker_data.get('timestamp', '')
-                    
-                    # 显示更新成功提示
-                    message = f"✅ 更新成功！\n\n"
-                    message += f"原版本：{old_version}\n"
-                    message += f"当前版本：{new_version}\n\n"
-                    message += f"程序已成功更新到最新版本。"
-                    
-                    messagebox.showinfo("更新成功", message)
-                    
-                    # 删除标记文件
-                    update_marker.unlink()
-                    
-                except Exception as e:
-                    self.logger.log_exception("读取更新标记失败", e)
-                    # 仍然删除标记文件
-                    try:
+                    update_marker.unlink(missing_ok=True)
+                except TypeError:
+                    # Python < 3.8 兼容
+                    if update_marker.exists():
                         update_marker.unlink()
-                    except:
-                        pass
-        except Exception as e:
-            # 静默失败，不影响程序正常启动
-            pass
+                except Exception:
+                    pass
+            return True
+        except Exception:
+            return False
     
     def _auto_check_update(self):
         """自动检查更新（启动时调用）"""
