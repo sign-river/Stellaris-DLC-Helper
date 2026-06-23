@@ -748,6 +748,13 @@ class MainWindowCTk:
             return
         set_icon_button_state(self.repair_btn, "normal" if enabled else "disabled")
 
+    def _sync_download_button_ui(self):
+        """下载进行中时同步主操作按钮为暂停/继续状态"""
+        if not self.is_downloading:
+            return
+        self.execute_btn.configure(state="normal")
+        self._set_execute_btn_label("continue" if self.download_paused else "pause")
+
     def _restore_action_buttons_after_flow(self):
         """一键解锁/下载流程结束后恢复操作按钮"""
         self.execute_btn.configure(state="normal")
@@ -1403,10 +1410,13 @@ class MainWindowCTk:
         
         self.logger.info(f"DLC列表加载完成: 共{total}个，已安装{installed_count}个，可下载{available_count}个")
         
-        # 启用执行按钮（执行补丁/下载）
-        self.execute_btn.configure(state="normal")
-        if hasattr(self, "repair_btn"):
-            self._set_repair_btn_enabled(True)
+        # 启用执行按钮（下载进行中时不覆盖暂停/继续状态）
+        if self.is_downloading:
+            self._sync_download_button_ui()
+        else:
+            self.execute_btn.configure(state="normal")
+            if hasattr(self, "repair_btn"):
+                self._set_repair_btn_enabled(True)
 
         # 更新补丁按钮状态显示（自动检测）
         self._check_patch_status()
@@ -1507,8 +1517,6 @@ class MainWindowCTk:
                     self._check_patch_status()
                     self.logger.info("清理完成，开始重新解锁...")
                     self.start_execute()
-                    if not self.is_downloading:
-                        self._set_repair_btn_enabled(True)
 
                 self.root.after(0, on_repair_done)
             except Exception as e:
@@ -1682,7 +1690,10 @@ class MainWindowCTk:
                         self._one_click_patch_applied = False
                         self._one_click_flow = False
             finally:
-                self.root.after(0, self._restore_action_buttons_after_flow)
+                def _maybe_restore_buttons():
+                    if not self.is_downloading:
+                        self._restore_action_buttons_after_flow()
+                self.root.after(0, _maybe_restore_buttons)
 
         threading.Thread(target=execute_thread, daemon=True).start()
     
@@ -1725,8 +1736,7 @@ class MainWindowCTk:
         
         # 设置下载状态
         self.is_downloading = True
-        self.execute_btn.configure(state="normal")
-        self._set_execute_btn_label("pause")
+        self._sync_download_button_ui()
         if hasattr(self, "repair_btn"):
             self._set_repair_btn_enabled(False)
         
@@ -1742,7 +1752,7 @@ class MainWindowCTk:
         
         self.is_downloading = True
         self.download_paused = False
-        self._set_execute_btn_label("pause")
+        self._sync_download_button_ui()
         self.logger.info(f"\n开始下载 {len(selected)} 个DLC...")
         # 在下载开始前，将当前选择的最佳源显示在UI（若已选择）
         try:
@@ -1875,6 +1885,8 @@ class MainWindowCTk:
             success = 0
             failed = 0
 
+            self.root.after(0, self._sync_download_button_ui)
+
             # 显示进度组件
             self.root.after(0, lambda: self.downloading_label.grid())
             self.root.after(0, lambda: self.progress_bar.grid())
@@ -1904,18 +1916,10 @@ class MainWindowCTk:
                     attempt += 1
                     # 在每次尝试前重置downloader状态（但复用session连接）
                     try:
-                        # 如果之前因为重测而暂停了下载，则在开始新尝试前恢复UI和状态
-                        if getattr(self, 'download_paused', False):
-                            try:
-                                self.download_paused = False
-                                self.root.after(0, lambda: self._set_execute_btn_label("pause"))
-                                self.logger.info('重新开始下载')
-                            except Exception:
-                                pass
-                        # 重置downloader状态以准备新的DLC下载（保留session连接）
                         if attempt == 1:  # 只在开始新DLC时重置，重试时不重置
                             downloader.stopped = False
-                            downloader.paused = False
+                            if not self.download_paused:
+                                downloader.paused = False
                     except Exception:
                         pass
                     self.logger.info(f"\n{'='*50}")
@@ -2101,7 +2105,7 @@ class MainWindowCTk:
         if self.current_downloader:
             self.current_downloader.pause()
             self.download_paused = True
-            self._set_execute_btn_label("continue")
+            self._sync_download_button_ui()
             self.logger.info("下载已暂停")
     
     def resume_download(self):
@@ -2109,7 +2113,7 @@ class MainWindowCTk:
         if self.current_downloader:
             self.current_downloader.resume()
             self.download_paused = False
-            self._set_execute_btn_label("pause")
+            self._sync_download_button_ui()
             self.logger.info("继续下载...")
         
     def restore_game(self):
@@ -2157,18 +2161,24 @@ class MainWindowCTk:
     def _apply_patch_status_ui(self, status):
         """在主线程应用补丁状态到 UI"""
         if status.get('patched'):
-            self.execute_btn.configure(state="normal")
-            self._set_execute_btn_label("unlock")
             self.remove_patch_btn.configure(state="normal")
             self.logger.info("检测到已应用补丁")
         else:
+            self.remove_patch_btn.configure(state="disabled")
+
+        if self.is_downloading:
+            self._sync_download_button_ui()
+        else:
             self.execute_btn.configure(state="normal")
             self._set_execute_btn_label("unlock")
-            self.remove_patch_btn.configure(state="disabled")
 
     def _apply_patch_status_ui_fallback(self):
         """补丁状态检查失败时的 UI 回退"""
-        self.execute_btn.configure(state="normal")
+        if not self.is_downloading:
+            self.execute_btn.configure(state="normal")
+            self._set_execute_btn_label("unlock")
+        else:
+            self._sync_download_button_ui()
         self.remove_patch_btn.configure(state="disabled")
         
     def apply_patch(self):
