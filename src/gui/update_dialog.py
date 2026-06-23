@@ -90,9 +90,7 @@ class UpdateDialog(ctk.CTkToplevel):
             except Exception as e:
                 self.logger.warning(f"设置窗口图标失败: {e}")
 
-            # 设置模态
-            self.grab_set()
-            self.focus_set()
+            self.transient(parent)
 
             # 禁用主窗口的下载功能
             if update_info and update_info.has_update(self.updater.current_version):
@@ -101,8 +99,9 @@ class UpdateDialog(ctk.CTkToplevel):
             self._create_widgets()
             self._center_window(parent)
             
-            # 居中完成后再显示窗口
+            # 居中完成后再显示窗口；grab 延后到界面就绪，避免与启动任务争抢主线程
             self.deiconify()
+            self.after(80, self._activate_modal)
             
         except Exception as e:
             # 如果初始化失败，确保释放grab并销毁窗口
@@ -116,6 +115,16 @@ class UpdateDialog(ctk.CTkToplevel):
             except:
                 pass
             raise  # 重新抛出异常让调用者知道失败了
+
+    def _activate_modal(self):
+        """界面渲染完成后再获取模态锁，降低启动阶段卡死概率"""
+        if self._closed:
+            return
+        try:
+            self.grab_set()
+            self.focus_set()
+        except Exception as e:
+            self.logger.warning(f"设置模态窗口失败: {e}")
 
     def _disable_main_window_download(self):
         """禁用主窗口的下载功能"""

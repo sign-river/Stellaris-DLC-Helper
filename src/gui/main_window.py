@@ -76,6 +76,15 @@ class MainWindowCTk:
         self._one_click_patch_applied = False
         self._dlc_fetch_generation = 0
         self._refresh_in_progress = False
+        # 启动阶段协调：避免 DLC 渲染与公告弹窗 grab 冲突导致卡死
+        self._startup_maintenance_done = False
+        self._startup_path_detect_done = False
+        self._startup_expects_dlc_fetch = False
+        self._dlc_fetch_in_progress = False
+        self._dlc_fetch_completed = False
+        self._pending_startup_dialog = None
+        self._startup_dialog_shown = False
+        self._startup_dialog_fallback_id = None
         
         # 核心组件
         self.dlc_manager = None
@@ -99,10 +108,7 @@ class MainWindowCTk:
         # 创建主内容区域
         self._create_content_area()
         
-        # 延迟检测游戏路径并加载DLC列表（优先显示界面）
-        self.root.after(500, self.auto_detect_and_load)
-
-        # 启动维护（.new/.old 清理）→ 更新成功提示 → 公告检查，顺序执行避免模态冲突
+        # 启动维护（.new/.old 清理）→ 串行启动流程（更新→路径→DLC），避免多路网络并发卡死
         self.root.after(100, self._run_startup_maintenance)
 
     def _open_error_docs(self, event=None):
@@ -975,11 +981,13 @@ class MainWindowCTk:
         self._check_pending_download_state()
         
         def detect_and_load_thread():
+            expects_dlc = False
             try:
                 # 1. 自动检测游戏路径
                 game_path = SteamUtils.auto_detect_stellaris()
                 
                 if game_path:
+                    expects_dlc = True
                     # 在主线程中更新路径
                     self.root.after(0, lambda: self._set_game_path(game_path))
                     self.root.after(0, lambda: self.logger.success(f"已找到游戏: {game_path}"))
@@ -994,6 +1002,8 @@ class MainWindowCTk:
             except Exception as e:
                 # 在主线程中记录异常并写入错误日志
                 self.root.after(0, lambda e=e: self.logger.log_exception("自动检测失败", e))
+            finally:
+                self.root.after(0, lambda: self._mark_startup_path_detect_done(expects_dlc))
         
         threading.Thread(target=detect_and_load_thread, daemon=True).start()
     
@@ -1122,6 +1132,7 @@ class MainWindowCTk:
             self._dlc_fetch_generation += 1
             generation = self._dlc_fetch_generation
 
+        self._dlc_fetch_in_progress = True
         self._show_dlc_loading(loading_text)
         self.logger.info(loading_text)
 
@@ -1142,6 +1153,13 @@ class MainWindowCTk:
                 watchdog_after_id[0] = None
             invoke_finished()
 
+        def mark_dlc_fetch_ui_done():
+            """DLC 获取/展示结束（成功、失败或超时）"""
+            self._dlc_fetch_in_progress = False
+            if self._startup_expects_dlc_fetch:
+                self._dlc_fetch_completed = True
+            self._try_show_startup_dialog()
+
         def watchdog():
             if finished[0]:
                 return
@@ -1151,6 +1169,7 @@ class MainWindowCTk:
                 f"获取 DLC 列表超时，请检查网络后点击刷新重试\n（已等待约 {watchdog_seconds} 秒）"
             )
             self.logger.warning(f"DLC 列表获取超时（>{watchdog_seconds}s）")
+            mark_dlc_fetch_ui_done()
             finish_once()
 
         watchdog_after_id[0] = self.root.after(watchdog_ms, watchdog)
@@ -1164,10 +1183,11 @@ class MainWindowCTk:
                         return
                     self.dlc_list = dlc_list
                     try:
-                        self.display_dlc_list()
+                        self.display_dlc_list(on_complete=mark_dlc_fetch_ui_done)
                     except Exception as e:
                         self._show_dlc_fetch_error(f"显示列表失败: {str(e)}")
                         self.logger.log_exception("显示 DLC 列表失败", e)
+                        mark_dlc_fetch_ui_done()
                     finish_once()
 
                 self.root.after(0, on_success)
@@ -1177,6 +1197,7 @@ class MainWindowCTk:
                         return
                     self._show_dlc_fetch_error(f"加载失败: {str(e)}")
                     self.logger.log_exception(error_log_prefix, e)
+                    mark_dlc_fetch_ui_done()
                     finish_once()
 
                 self.root.after(0, on_error)
@@ -1294,25 +1315,41 @@ class MainWindowCTk:
             error_log_prefix="刷新DLC列表失败"
         )
         
-    def display_dlc_list(self):
-        """显示DLC列表 - 两列布局"""
-        # 清空现有列表
+    def display_dlc_list(self, on_complete=None):
+        """显示 DLC 列表（分批渲染，避免一次性创建大量控件阻塞主线程）"""
         for widget in self.dlc_scrollable_frame.winfo_children():
             widget.destroy()
         self.dlc_vars = []
-        
-        # 检查已安装的DLC
+
+        if not self.dlc_list:
+            if on_complete:
+                on_complete()
+            return
+
         installed_dlcs = self.dlc_manager.get_installed_dlcs()
-        
-        # 创建DLC复选框 - 两列布局
-        row_frame = None
-        for idx, dlc in enumerate(self.dlc_list):
-            # 检查是否已安装
+        self._dlc_display_state = {
+            'installed_dlcs': installed_dlcs,
+            'row_frame': None,
+            'label_font': ctk.CTkFont(size=11),
+            'on_complete': on_complete,
+        }
+        self._render_dlc_list_batch(0)
+
+    def _render_dlc_list_batch(self, start_idx):
+        """分批渲染 DLC 复选框"""
+        state = self._dlc_display_state
+        installed_dlcs = state['installed_dlcs']
+        label_font = state['label_font']
+        row_frame = state['row_frame']
+        batch_size = 9
+
+        end_idx = min(start_idx + batch_size, len(self.dlc_list))
+
+        for idx in range(start_idx, end_idx):
+            dlc = self.dlc_list[idx]
             is_installed = dlc["key"] in installed_dlcs
-            
-            # 默认选中未安装的DLC
             var = tk.BooleanVar(value=not is_installed)
-            
+
             dlc_info = {
                 "var": var,
                 "key": dlc["key"],
@@ -1321,94 +1358,90 @@ class MainWindowCTk:
                 "source": dlc.get("source", "unknown"),
                 "urls": dlc.get("urls", []),
                 "size": dlc["size"],
-                "size_bytes": dlc.get("size_bytes", 0),  # 添加这个字段！
+                "size_bytes": dlc.get("size_bytes", 0),
                 "installed": is_installed
             }
-            
-            # 每三个创建一个新行
+
             if idx % 3 == 0:
                 row_frame = ctk.CTkFrame(self.dlc_scrollable_frame, fg_color="transparent", height=22)
                 row_frame.pack(fill="x", pady=0, padx=5)
                 row_frame.grid_columnconfigure(0, weight=1, uniform="dlc_col")
                 row_frame.grid_columnconfigure(1, weight=1, uniform="dlc_col")
                 row_frame.grid_columnconfigure(2, weight=1, uniform="dlc_col")
-            
-            # 确定列位置
+
             col = idx % 3
-            
-            # 创建DLC项容器
             item_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
             item_frame.grid(row=0, column=col, sticky="w", padx=(0, 8) if col < 2 else 0)
-            
+
             if is_installed:
-                # 已安装的DLC显示为禁用状态
-                cb = ctk.CTkCheckBox(item_frame, text="", variable=var, 
-                                     state="disabled", width=16, height=16,
-                                     checkbox_width=16, checkbox_height=16)
+                cb = ctk.CTkCheckBox(
+                    item_frame, text="", variable=var,
+                    state="disabled", width=16, height=16,
+                    checkbox_width=16, checkbox_height=16
+                )
                 cb.pack(side="left", pady=2)
                 label_text = f"{dlc['name']} (已安装)"
-                label = ctk.CTkLabel(item_frame, text=label_text,
-                                    font=ctk.CTkFont(size=11),
-                                    text_color="#9E9E9E",
-                                    height=20)  # 浅灰色
+                label = ctk.CTkLabel(
+                    item_frame, text=label_text, font=label_font,
+                    text_color="#9E9E9E", height=20
+                )
             else:
-                cb = ctk.CTkCheckBox(item_frame, text="", variable=var, width=16, height=16,
-                                     checkbox_width=16, checkbox_height=16,
-                                     fg_color="#1976D2", hover_color="#1565C0")
+                cb = ctk.CTkCheckBox(
+                    item_frame, text="", variable=var, width=16, height=16,
+                    checkbox_width=16, checkbox_height=16,
+                    fg_color="#1976D2", hover_color="#1565C0"
+                )
                 cb.pack(side="left", pady=2)
                 label_text = f"{dlc['name']} ({dlc['size']})"
-                label = ctk.CTkLabel(item_frame, text=label_text,
-                                    font=ctk.CTkFont(size=11),
-                                    text_color="#212121",
-                                    height=20)  # 深色文字
-            
+                label = ctk.CTkLabel(
+                    item_frame, text=label_text, font=label_font,
+                    text_color="#212121", height=20
+                )
+
             label.pack(side="left", padx=5, pady=2)
-            # 移除每个 DLC 后面的 "源:" 标签（已由顶部状态显示），并将点击 DLC 名称绑定为输出 URL 映射到操作日志
-            # 添加查看 URL 映射的操作（不弹窗，只写入操作日志）
+
             def _show_urls(key=dlc['key'], d=dlc):
                 try:
-                    # 当前使用单一GitLink源，直接显示URL
                     url = d.get('url', '')
-                    message_lines = []
-                    
-                    if url:
-                        message_lines.append(f"GitLink: {url}")
-                    else:
-                        message_lines.append("未找到下载链接")
-                    
+                    message_lines = [f"GitLink: {url}"] if url else ["未找到下载链接"]
                     checksum = d.get('checksum') or d.get('sha256') or d.get('hash')
                     if checksum:
                         message_lines.insert(0, f"校验哈希: {checksum}\n")
-                    
-                    message = "\n".join(message_lines)
-                    # 记录到操作日志（不弹窗）
-                    self.logger.info(f"DLC {d.get('name')} 的下载信息:\n{message}")
+                    self.logger.info(f"DLC {d.get('name')} 的下载信息:\n" + "\n".join(message_lines))
                 except Exception as e:
                     self.logger.log_exception("显示下载信息失败", e)
 
-            # 将 DLC 名称绑定点击事件，输出 URL 映射到操作日志
             try:
-                # 事件处理器：写入日志
                 def _label_click(event=None, key=dlc['key'], d=dlc):
                     _show_urls(key=key, d=d)
                 label.bind("<Button-1>", _label_click)
             except Exception:
                 pass
-            
+
             self.dlc_vars.append(dlc_info)
-        
-        # 更新状态
+
+        state['row_frame'] = row_frame
+
+        if end_idx < len(self.dlc_list):
+            self.root.after(1, lambda: self._render_dlc_list_batch(end_idx))
+        else:
+            self._finish_dlc_list_display(installed_dlcs)
+
+    def _finish_dlc_list_display(self, installed_dlcs):
+        """DLC 列表渲染完成后的状态更新"""
+        on_complete = None
+        if hasattr(self, '_dlc_display_state') and self._dlc_display_state:
+            on_complete = self._dlc_display_state.get('on_complete')
+
         total = len(self.dlc_list)
         installed_count = len(installed_dlcs)
         available_count = total - installed_count
-        
-        # 更新游戏版本信息
+
         if hasattr(self.dlc_manager, 'game_version') and self.dlc_manager.game_version:
             self.version_label.configure(text=f"当前资源版本:stellaris {self.dlc_manager.game_version}")
-        
+
         self.logger.info(f"DLC列表加载完成: 共{total}个，已安装{installed_count}个，可下载{available_count}个")
-        
-        # 启用执行按钮（下载进行中时不覆盖暂停/继续状态）
+
         if self.is_downloading:
             self._sync_download_button_ui()
         else:
@@ -1416,14 +1449,15 @@ class MainWindowCTk:
             if hasattr(self, "repair_btn"):
                 self._set_repair_btn_enabled(True)
 
-        # 更新补丁按钮状态显示（自动检测）
         self._check_patch_status()
-        
-        # 如果有未安装的DLC被默认选中，更新全选按钮文本
+
         if available_count > 0:
             self.select_all_btn.configure(text="取消全选")
         else:
             self.select_all_btn.configure(text="全选")
+
+        if on_complete:
+            on_complete()
         
     def _format_download_size(self, size_bytes):
         """将字节数格式化为可读下载大小"""
@@ -2479,12 +2513,147 @@ class MainWindowCTk:
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _mark_startup_path_detect_done(self, expects_dlc: bool):
+        """自动路径检测结束，更新启动协调状态"""
+        self._startup_path_detect_done = True
+        if expects_dlc:
+            self._startup_expects_dlc_fetch = True
+        else:
+            self._dlc_fetch_completed = True
+        self._try_show_startup_dialog()
+
+    def _can_show_startup_dialog(self) -> bool:
+        """启动阶段是否满足弹出公告/更新窗口的条件"""
+        if not self._startup_maintenance_done:
+            return False
+        if not self._startup_path_detect_done:
+            return False
+        if self._dlc_fetch_in_progress:
+            return False
+        if self._startup_expects_dlc_fetch and not self._dlc_fetch_completed:
+            return False
+        return True
+
+    def _cancel_startup_dialog_fallback(self):
+        if self._startup_dialog_fallback_id is not None:
+            try:
+                self.root.after_cancel(self._startup_dialog_fallback_id)
+            except Exception:
+                pass
+            self._startup_dialog_fallback_id = None
+
+    def _schedule_startup_dialog_fallback(self):
+        """DLC 长时间未完成时仍允许弹出公告，避免无限等待"""
+        max_wait_ms = self._dlc_fetch_watchdog_ms() + 5000
+
+        def fallback():
+            self._startup_dialog_fallback_id = None
+            if self._startup_dialog_shown:
+                return
+            self._startup_expects_dlc_fetch = False
+            self._dlc_fetch_completed = True
+            self._dlc_fetch_in_progress = False
+            self._try_show_startup_dialog(force=True)
+
+        self._cancel_startup_dialog_fallback()
+        self._startup_dialog_fallback_id = self.root.after(max_wait_ms, fallback)
+
+    def _try_show_startup_dialog(self, force=False):
+        """在启动任务空闲后再弹出公告/更新窗口"""
+        if self._startup_dialog_shown:
+            return
+        if self._pending_startup_dialog is None:
+            return
+        if not force and not self._can_show_startup_dialog():
+            return
+
+        update_info, announcement = self._pending_startup_dialog
+        should_show = UpdateDialog.should_show_announcement() if announcement else True
+        if not (update_info or (announcement and should_show)):
+            self._startup_dialog_shown = True
+            self._cancel_startup_dialog_fallback()
+            return
+
+        self._startup_dialog_shown = True
+        self._cancel_startup_dialog_fallback()
+
+        def show():
+            try:
+                UpdateDialog(self.root, update_info, announcement)
+            except Exception as e:
+                self.logger.log_exception("显示更新/公告对话框失败", e)
+
+        self.root.after(300, show)
+
     def _on_startup_update_flow(self):
-        """更新成功提示与公告检查顺序执行，避免 grab 冲突导致卡死"""
+        """清理完成后启动串行流程，避免更新/路径/DLC 并发请求 GitLink"""
+        self._startup_maintenance_done = True
+        self._flush_gui_logs()
         had_recent_update = self._check_recent_update()
-        # 刚弹完更新成功框时稍等再开公告，避免两个模态窗口争抢
-        delay = 600 if had_recent_update else 0
-        self.root.after(delay, self._auto_check_update)
+        delay = 300 if had_recent_update else 50
+        self.root.after(delay, self._run_startup_pipeline)
+        self._schedule_startup_dialog_fallback()
+
+    def _flush_gui_logs(self):
+        """立即刷新 GUI 日志缓冲，避免卡死时界面看起来「没有任何日志」"""
+        try:
+            from ..utils.unified_logger import get_logger
+            get_logger()._flush_gui_log_buffer()
+        except Exception:
+            pass
+
+    def _fetch_updates_blocking(self, timeout=45):
+        """在后台线程中同步等待检查更新完成，供启动串行流程使用"""
+        result = {"update_info": None, "announcement": ""}
+        done = threading.Event()
+
+        def on_complete(update_info, announcement):
+            result["update_info"] = update_info
+            result["announcement"] = announcement or ""
+            done.set()
+
+        AutoUpdater().check_for_updates(on_complete)
+        if not done.wait(timeout=timeout):
+            logging.getLogger(__name__).warning(f"启动时检查更新超时（>{timeout}s）")
+        return result["update_info"], result["announcement"]
+
+    def _run_startup_pipeline(self):
+        """启动串行流程：检查更新 → 检测路径 → 加载 DLC（单后台线程顺序执行）"""
+        self._check_pending_download_state()
+
+        def pipeline_worker():
+            try:
+                update_info, announcement = self._fetch_updates_blocking()
+
+                def store_update_result():
+                    self._pending_startup_dialog = (update_info, announcement)
+
+                self.root.after(0, store_update_result)
+
+                logging.getLogger(__name__).info("正在自动检测 Stellaris 游戏路径...")
+                game_path = SteamUtils.auto_detect_stellaris()
+
+                def on_path_ready():
+                    if game_path:
+                        self._set_game_path(game_path)
+                        self.logger.success(f"已找到游戏: {game_path}")
+                        self._mark_startup_path_detect_done(True)
+                        self._auto_load_dlc_list()
+                    else:
+                        self.logger.warning(
+                            "未能自动检测到游戏路径\n"
+                            "请点击「浏览」按钮手动选择游戏目录"
+                        )
+                        self._mark_startup_path_detect_done(False)
+                        self._try_show_startup_dialog()
+
+                self.root.after(0, on_path_ready)
+            except Exception as e:
+                self.root.after(0, lambda err=e: self.logger.log_exception("启动流程失败", err))
+                self.root.after(0, lambda: self._mark_startup_path_detect_done(False))
+                self.root.after(0, self._try_show_startup_dialog)
+
+        threading.Thread(target=pipeline_worker, daemon=True, name="StartupPipeline").start()
 
     def _check_recent_update(self) -> bool:
         """检查是否刚刚完成更新，如果是则显示提示。返回是否显示了提示。"""
@@ -2527,23 +2696,11 @@ class MainWindowCTk:
     def _auto_check_update(self):
         """自动检查更新（启动时调用）"""
         def on_update_check_complete(update_info, announcement):
-            # 使用 after 确保在主线程中创建对话框，避免线程安全问题
-            def show_dialog():
-                try:
-                    # 检查是否应该显示公告
-                    should_show = UpdateDialog.should_show_announcement() if announcement else True
-                    
-                    # 如果有更新，始终显示（即使公告被禁用）
-                    # 如果只有公告，检查是否应该显示
-                    if update_info or (announcement and should_show):
-                        UpdateDialog(self.root, update_info, announcement)
-                    # 没有更新且公告被禁用或无公告时静默（不打扰用户）
-                except Exception as e:
-                    # 如果对话框创建失败，记录错误但不影响主程序
-                    self.logger.log_exception("显示更新/公告对话框失败", e)
-            
-            # 在主线程中执行
-            self.root.after(0, show_dialog)
+            def store_result():
+                self._pending_startup_dialog = (update_info, announcement)
+                self._try_show_startup_dialog()
+
+            self.root.after(0, store_result)
 
         updater = AutoUpdater()
         updater.check_for_updates(on_update_check_complete)

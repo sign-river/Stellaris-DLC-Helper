@@ -57,6 +57,14 @@ class UnifiedLogger:
             
             # 标记避免循环日志
             self._in_gui_logging = False
+            # GUI 日志批量刷新：后台线程只追加缓冲，由主线程轮询刷新，
+            # 避免从非主线程调用 Tkinter（after/insert）导致 Tcl 解释器
+            # 状态损坏、主线程 mainloop 偶发性死锁（界面“未响应”）。
+            self._gui_log_buffer = []
+            self._gui_flush_lock = threading.Lock()
+            # 主线程轮询刷新相关
+            self._gui_poller_started = False
+            self._gui_poll_interval_ms = 100
             
             self._initialized = True
     
@@ -146,6 +154,11 @@ class UnifiedLogger:
         """
         self.gui_widget = widget
         self.gui_root = root
+
+        # 启动主线程轮询刷新器（本方法在主线程调用）。
+        # 这样所有 Tkinter 操作（after/insert）都只发生在主线程，
+        # 后台线程仅负责往缓冲区追加，彻底规避 Tkinter 线程安全问题。
+        self._start_gui_poller()
         
         # 如果日志系统已配置，添加GUI处理器
         root_logger = logging.getLogger()
@@ -170,37 +183,60 @@ class UnifiedLogger:
     def _write_to_gui(self, message: str, level: str):
         """
         写入GUI日志（线程安全）
-        
+
+        注意：本方法可能被任意后台线程调用，因此**绝不能**在此直接调用
+        任何 Tkinter 接口（包括 after / insert）。这里只把格式化后的消息
+        追加到缓冲区，真正的 GUI 写入由主线程上的 _poll_gui_log 完成。
+
         参数:
             message: 日志消息
             level: 日志级别
         """
-        if self._in_gui_logging:
-            return  # 防止循环
-            
         if not self.gui_widget or not self.gui_root:
             return
-        
+
+        # 根据级别添加图标
+        if level == 'ERROR':
+            formatted = f"✗ {message}\n"
+        elif level == 'WARNING':
+            formatted = f"⚠ {message}\n"
+        elif level == 'SUCCESS':
+            formatted = f"✓ {message}\n"
+        else:
+            formatted = f"{message}\n"
+
+        with self._gui_flush_lock:
+            self._gui_log_buffer.append(formatted)
+
+    def _start_gui_poller(self):
+        """在主线程启动常驻的 GUI 日志轮询刷新器（只应从主线程调用）"""
+        if self._gui_poller_started or not self.gui_root:
+            return
+        self._gui_poller_started = True
         try:
-            self._in_gui_logging = True
-            
-            # 根据级别添加图标
-            if level == 'ERROR':
-                formatted = f"✗ {message}\n"
-            elif level == 'WARNING':
-                formatted = f"⚠ {message}\n"
-            elif level == 'SUCCESS':
-                formatted = f"✓ {message}\n"
-            else:
-                formatted = f"{message}\n"
-            
-            # 使用after确保在主线程中更新GUI
-            if self.gui_root:
-                self.gui_root.after(0, lambda: self._insert_to_gui(formatted))
-            else:
-                self._insert_to_gui(formatted)
+            self.gui_root.after(self._gui_poll_interval_ms, self._poll_gui_log)
+        except Exception:
+            # 调度失败时回退，允许下次 set_gui_widget 再次尝试启动
+            self._gui_poller_started = False
+
+    def _poll_gui_log(self):
+        """主线程定时轮询：将缓冲区中的日志批量写入 GUI 组件，并重新调度自身"""
+        try:
+            self._flush_gui_log_buffer()
         finally:
-            self._in_gui_logging = False
+            if self.gui_root:
+                try:
+                    self.gui_root.after(self._gui_poll_interval_ms, self._poll_gui_log)
+                except Exception:
+                    self._gui_poller_started = False
+
+    def _flush_gui_log_buffer(self):
+        """批量刷新 GUI 日志（必须在主线程调用），降低主线程事件队列压力"""
+        with self._gui_flush_lock:
+            messages = self._gui_log_buffer
+            self._gui_log_buffer = []
+        if messages:
+            self._insert_to_gui(''.join(messages))
     
     def _insert_to_gui(self, message: str):
         """实际插入到GUI组件"""
