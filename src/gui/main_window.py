@@ -92,9 +92,18 @@ class MainWindowCTk:
         self.dlc_installer = None
         self.patch_manager = None
         self.logger = Logger(root=self.root)
+        # 标记窗口是否正在关闭，供后台线程回调判断，避免向已销毁的窗口投递更新
+        self._closing = False
         
         # 初始化UI
         self.init_ui()
+
+        # 注册窗口关闭处理：下载中给出确认并安全停止，避免残留半截/损坏文件
+        try:
+            self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        except Exception as e:
+            import logging
+            logging.warning(f"注册窗口关闭处理失败: {e}")
         
     def init_ui(self):
         """初始化用户界面"""
@@ -1756,18 +1765,18 @@ class MainWindowCTk:
 
     def start_download(self):
         """开始下载"""
-        # 检查是否已经在下载中，防止重复点击
-        if self.is_downloading:
-            self.logger.warning("下载已在进行中，请等待完成后再操作")
-            return
-            
         selected = [d for d in self.dlc_vars if d["var"].get()]
         if not selected:
             messagebox.showinfo("提示", "请至少选择一个DLC！")
             return
-        
-        # 设置下载状态
-        self.is_downloading = True
+
+        # 原子地“检查 + 置位”下载状态，防止重复点击 / 重入导致并发下载
+        with self._state_lock:
+            if self.is_downloading:
+                self.logger.warning("下载已在进行中，请等待完成后再操作")
+                return
+            self.is_downloading = True
+
         self._sync_download_button_ui()
         if hasattr(self, "repair_btn"):
             self._set_repair_btn_enabled(False)
@@ -2496,6 +2505,41 @@ class MainWindowCTk:
             handle_error("打开设置失败", exc=e)
             messagebox.showerror("错误", f"打开设置失败:\n{str(e)}")
     
+    def _on_close(self):
+        """窗口关闭处理：下载进行中先确认并安全停止下载，避免残留半截文件"""
+        try:
+            if self.is_downloading:
+                confirm = messagebox.askyesno(
+                    "确认退出",
+                    "正在下载 DLC，确定要退出吗？\n\n"
+                    "退出会中断当前下载，未下载完成的不完整文件将被自动清理。"
+                )
+                if not confirm:
+                    return
+
+            # 标记关闭中，后台线程的 UI 回调可据此提前返回
+            self._closing = True
+
+            # 安全停止下载器：stop() 会让下载循环抛出并清理半截文件，close() 释放连接
+            downloader = self.current_downloader
+            if downloader is not None:
+                try:
+                    downloader.stop()
+                except Exception:
+                    pass
+                try:
+                    downloader.close()
+                except Exception:
+                    pass
+        except Exception as e:
+            import logging
+            logging.warning(f"窗口关闭处理异常: {e}")
+        finally:
+            try:
+                self.root.destroy()
+            except Exception:
+                pass
+
     def _run_startup_maintenance(self):
         """后台清理更新残留文件，完成后串联启动提示流程"""
         def worker():
